@@ -108,7 +108,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v4.2 CATALOGO</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v5.0 CATALOGO FOTO</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -118,7 +118,7 @@ def infer_category(code):
 def connect():
     db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row; return db
 
-CATALOG_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'supplier_catalog.csv')
+CATALOG_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'supplier_catalog_enriched.csv')
 
 def catalog_category(brand_code):
     prefix=(brand_code or '').upper().split('-')[0]
@@ -237,6 +237,8 @@ def init_db():
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
         ensure_column(db,"sales","status","TEXT DEFAULT 'Confermata'")
+        for c,d in [("description","TEXT"),("size","TEXT"),("stone_color","TEXT"),("plating_color","TEXT"),("supplier_quantity","TEXT"),("image_file","TEXT"),("pdf_page","INTEGER")]:
+            ensure_column(db,"supplier_catalog",c,d)
         u=os.environ.get("ADMIN_USERNAME","admin"); p=os.environ.get("ADMIN_PASSWORD","cambia-subito")
         db.execute("INSERT OR IGNORE INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(u,generate_password_hash(p),"admin"))
         db.execute("UPDATE users SET role='admin', active=1 WHERE username=?",(u,))
@@ -258,9 +260,18 @@ def init_db():
                 for row in csv.DictReader(fh):
                     brand=row["brand_code"].strip(); supplier=row["supplier_code"].strip()
                     excluded=1 if brand.upper().startswith("TOOL-") else 0
-                    db.execute("""INSERT OR IGNORE INTO supplier_catalog
-                        (supplier_code,brand_code,category,supplier_price_usd,sale_price_eur,excluded)
-                        VALUES(?,?,?,?,?,?)""",(supplier,brand,catalog_category(brand),float(row["supplier_price_usd"]),float(row["sale_price_eur"]),excluded))
+                    db.execute("""INSERT INTO supplier_catalog
+                        (supplier_code,brand_code,category,supplier_price_usd,sale_price_eur,excluded,description,size,stone_color,plating_color,supplier_quantity,image_file,pdf_page)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        ON CONFLICT(supplier_code) DO UPDATE SET
+                          brand_code=excluded.brand_code, category=excluded.category,
+                          supplier_price_usd=excluded.supplier_price_usd, sale_price_eur=excluded.sale_price_eur,
+                          excluded=excluded.excluded, description=excluded.description, size=excluded.size,
+                          stone_color=excluded.stone_color, plating_color=excluded.plating_color,
+                          supplier_quantity=excluded.supplier_quantity, image_file=excluded.image_file, pdf_page=excluded.pdf_page""",
+                        (supplier,brand,row.get("category") or catalog_category(brand),float(row["supplier_price_usd"]),float(row["sale_price_eur"]),excluded,
+                         row.get("description","").strip(),row.get("size","").strip(),row.get("stone_color","").strip(),row.get("plating_color","").strip(),
+                         row.get("supplier_quantity","").strip(),row.get("image_file","").strip(),int(row.get("pdf_page") or 0)))
         db.commit()
 
 def page(title, body, **ctx):
@@ -331,24 +342,43 @@ def public_page(title, body, **ctx):
     return render_template_string(PUBLIC_BASE,title=title,css=PUBLIC_CSS,logo=BRAND_LOGO,cart_count=count,body=render_template_string(body,**ctx))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"4.2-catalogo-ordinabili","database":DB_PATH}
+def health(): return {"status":"ok","version":"5.0-catalogo-foto","database":DB_PATH}
 
 
 @app.get("/")
 def boutique():
     q=request.args.get("q","").strip(); category=request.args.get("category","").strip(); material=request.args.get("material","").strip()
-    sql="SELECT * FROM products WHERE quantity>0 AND active=1"; params=[]
-    if q: sql+=" AND (brand_code LIKE ? OR category LIKE ? OR material LIKE ? OR color LIKE ? OR notes LIKE ?)"; params += [f"%{q}%"]*5
-    if category: sql+=" AND category=?"; params.append(category)
-    if material: sql+=" AND material=?"; params.append(material)
-    sql+=" ORDER BY category,brand_code"
+    like=f"%{q}%"; rows=[]
     with connect() as db:
-        rows=db.execute(sql,params).fetchall()
-        live_categories=[x[0] for x in db.execute("SELECT DISTINCT category FROM products WHERE quantity>0 AND COALESCE(category,'')<>'' ORDER BY category LIMIT 8").fetchall()]
-        live_materials=[x[0] for x in db.execute("SELECT DISTINCT material FROM products WHERE quantity>0 AND COALESCE(material,'')<>'' ORDER BY material").fetchall()]
-        featured=db.execute("SELECT * FROM products WHERE quantity>0 AND active=1 AND COALESCE(photo_data,'')<>'' ORDER BY quantity DESC,id LIMIT 1").fetchone()
-    body="""<section class='hero'>{% if featured %}<div class='hero-art'><img src='{{featured.photo_data}}' alt='Gioiello in evidenza'></div>{% endif %}<div class='hero-copy'><div class='hero-kicker'>Premium piercing jewelry</div><h1>Qualità.<br><span>Design.</span><br>Eccellenza.</h1><p>Gioielli selezionati in titanio ASTM F136 e oro 14K/18K, pensati per chi cerca bellezza, sicurezza e stile senza compromessi.</p><a class='gold-btn' href='#collezione'>Scopri la collezione ›</a></div></section>{% if live_categories %}<div class='category-strip' id='categorie'>{% for x in live_categories %}<a class='category-link' href='{{url_for("boutique",category=x)}}#collezione'>{{x}}</a>{% endfor %}<a class='category-link' href='{{url_for("boutique")}}#collezione'>Tutte</a></div>{% endif %}<div class='collection-head' id='collezione'><div><span class='eyebrow'>Jewelry selection</span><h2 class='section-title'>Collezione</h2><p class='section-copy'>{{rows|length}} gioielli selezionati per te</p></div><button type='button' class='filter-toggle'>Filtri ☷</button></div><section class='filters'><form method='get'><input aria-label='Cerca' name='q' value='{{q}}' placeholder='Cerca gioiello, materiale o colore'><select aria-label='Categoria' name='category'><option value=''>Tutte le categorie</option>{% for x in live_categories %}<option {% if category==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select aria-label='Materiale' name='material'><option value=''>Tutti i materiali</option>{% for x in live_materials %}<option {% if material==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Applica filtri</button></form></section><div class='shop-grid'>{% for p in rows %}<article class='shop-product'><a class='product-image' href='{{url_for("boutique_product",product_id=p.id)}}'>{% if p.photo_data %}<img loading='lazy' src='{{p.photo_data}}' alt='{{p.category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}</a><div class='shop-body'><div class='product-category'>{{p.category}}</div><div class='shop-title'>{{p.category}} · {{p.brand_code}}</div><div class='product-material'>{{p.material or 'Gioiello selezionato'}}</div><div class='shop-price'>€ {{'%.2f'|format(p.price)}}</div><div class='{% if p.quantity>3 %}stock-ok{% else %}stock-low{% endif %}'>{% if p.quantity>3 %}Disponibile{% else %}Ultimi {{p.quantity}} disponibili{% endif %}</div></div><div class='shop-actions'><a class='detail-link' href='{{url_for("boutique_product",product_id=p.id)}}'>Scopri</a><form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'><button class='add'>Aggiungi</button></form></div></article>{% else %}<div class='client-card empty-state'><h2 class='luxury-title'>Nessun gioiello trovato</h2><p>Modifica i filtri per scoprire altre proposte.</p><a class='gold-btn' href='{{url_for("boutique")}}#collezione'>Azzera filtri</a></div>{% endfor %}</div>"""
-    return public_page("Jewelry · Atelier d'eccellenza",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,logo=BRAND_LOGO,featured=featured)
+        products=db.execute("SELECT * FROM products WHERE active=1 ORDER BY category,brand_code").fetchall()
+        catalogs=db.execute("SELECT * FROM supplier_catalog WHERE active=1 AND excluded=0 ORDER BY category,brand_code").fetchall()
+        by_supplier={str(c["supplier_code"]).upper():c for c in catalogs}; by_brand={str(c["brand_code"]).upper():c for c in catalogs}
+        matched=set()
+        for p in products:
+            c=by_supplier.get(str(p["supplier_code"]).upper()) or by_brand.get(str(p["brand_code"]).upper())
+            if c: matched.add(c["id"])
+            status="available" if p["quantity"]>1 else ("last" if p["quantity"]==1 else ("order" if c else "unavailable"))
+            image=p["photo_data"] or (url_for("static",filename="catalog/"+c["image_file"]) if c and c["image_file"] else "")
+            item=dict(p); item.update(kind="product",catalog_id=c["id"] if c else None,status=status,image=image,
+                display_category=p["category"] or (c["category"] if c else "Gioiello"),description=(c["description"] if c else p["notes"] or ""),
+                display_size=p["size"] or (c["size"] if c else ""),display_stone=p["stone"] or (c["stone_color"] if c else ""),
+                display_color=p["color"] or (c["plating_color"] if c else ""),display_price=p["price"])
+            rows.append(item)
+        for c in catalogs:
+            if c["id"] in matched: continue
+            rows.append(dict(c,kind="catalog",catalog_id=c["id"],status="order",image=(url_for("static",filename="catalog/"+c["image_file"]) if c["image_file"] else ""),
+                display_category=c["category"] or "Gioiello",display_size=c["size"] or "",display_stone=c["stone_color"] or "",display_color=c["plating_color"] or "",
+                display_price=c["sale_price_eur"],material="Titanio ASTM F136",quantity=0,price=c["sale_price_eur"]))
+        if q:
+            uq=q.upper(); rows=[r for r in rows if uq in " ".join(str(r.get(k) or "") for k in ("brand_code","supplier_code","display_category","description","display_color","display_stone","display_size")).upper()]
+        if category: rows=[r for r in rows if r.get("display_category")==category]
+        if material: rows=[r for r in rows if material.lower() in str(r.get("material") or "").lower()]
+        live_categories=sorted({r.get("display_category") for r in rows if r.get("display_category")})[:20]
+        live_materials=["Titanio ASTM F136","Oro 14K","Oro 18K"]
+        featured=next((r for r in rows if r.get("image")),None)
+        rows=rows[:350]
+    body="""<section class='hero'>{% if featured %}<div class='hero-art'><img src='{{featured.image}}' alt='Gioiello in evidenza'></div>{% endif %}<div class='hero-copy'><div class='hero-kicker'>Premium piercing jewelry</div><h1>Qualità.<br><span>Design.</span><br>Eccellenza.</h1><p>Gioielli in titanio ASTM F136: disponibili subito oppure ordinabili con consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='#collezione'>Scopri la collezione ›</a></div></section><div class='collection-head' id='collezione'><div><span class='eyebrow'>Jewelry selection</span><h2 class='section-title'>Collezione</h2><p class='section-copy'>{{rows|length}} proposte visualizzate</p></div><button type='button' class='filter-toggle'>Filtri ☷</button></div><section class='filters'><form method='get'><input name='q' value='{{q}}' placeholder='Cerca codice, modello, misura o colore'><select name='category'><option value=''>Tutte le categorie</option>{% for x in live_categories %}<option {% if category==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name='material'><option value=''>Tutti i materiali</option>{% for x in live_materials %}<option {% if material==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Applica filtri</button></form></section><div class='shop-grid'>{% for p in rows %}<article class='shop-product'><div class='product-image'>{% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}</div><div class='shop-body'><div class='product-category'>{{p.display_category}}</div><div class='shop-title'>{{p.description or p.display_category}}</div><div class='product-code'>{{p.brand_code}} · {{p.supplier_code}}</div><div class='product-material'>{{p.material or 'Titanio ASTM F136'}}{% if p.display_size %} · {{p.display_size}}{% endif %}{% if p.display_color %} · {{p.display_color}}{% endif %}{% if p.display_stone %} · {{p.display_stone}}{% endif %}</div><div class='shop-price'>€ {{'%.2f'|format(p.display_price)}}</div>{% if p.status=='available' %}<div class='stock-ok'>🟢 Disponibile</div>{% elif p.status=='last' %}<div class='stock-low'>🟡 Ultimo pezzo disponibile</div>{% elif p.status=='order' %}<div style='color:#74b9ff'>🔵 Ordinabile · consegna 15-20 giorni</div>{% else %}<div style='color:#ef7777'>❌ Non disponibile</div>{% endif %}</div><div class='shop-actions'>{% if p.status in ('available','last') %}<form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'><button class='add'>Aggiungi</button></form>{% elif p.status=='order' %}<a class='add' href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Ordina per il cliente</a>{% else %}<button disabled>Non disponibile</button>{% endif %}</div></article>{% else %}<div class='client-card'>Nessun gioiello trovato.</div>{% endfor %}</div>"""
+    return public_page("Jewelry · Atelier d'eccellenza",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured)
 
 @app.get("/boutique/prodotto/<int:product_id>")
 def boutique_product(product_id):
@@ -705,6 +735,24 @@ def duplicate_product(product_id):
         new_id=cur.lastrowid; np=db.execute("SELECT * FROM products WHERE id=?",(new_id,)).fetchone(); log_action(db,"Prodotto duplicato",np,f"Da {p['brand_code']}"); db.commit()
     flash("Copia creata: completa i codici e la quantità.")
     return redirect(url_for("edit_product",product_id=new_id))
+
+@app.route("/boutique/ordina/<int:catalog_id>",methods=["GET","POST"])
+def public_catalog_order(catalog_id):
+    with connect() as db: c=db.execute("SELECT * FROM supplier_catalog WHERE id=? AND active=1 AND excluded=0",(catalog_id,)).fetchone()
+    if not c: return redirect(url_for("boutique"))
+    if request.method=="POST":
+        name=request.form.get("customer_name","").strip(); phone=request.form.get("customer_phone","").strip(); notes=request.form.get("notes","").strip()
+        try: qty=max(1,int(request.form.get("quantity",1)))
+        except ValueError: qty=1
+        if not name or not phone: flash("Inserisci nome e telefono.")
+        else:
+            with connect() as db:
+                number=f"ORD-CAT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
+                db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,'Da ordinare','Boutique')""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"]))
+                db.commit()
+            return public_page("Richiesta ricevuta","""<div class='client-card'><h1 class='luxury-title'>Richiesta ricevuta</h1><p>Codice <b>{{number}}</b>. Ti contatteremo per conferma. Consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla boutique</a></div>""",number=number)
+    image=url_for("static",filename="catalog/"+c["image_file"]) if c["image_file"] else ""
+    return public_page(c["brand_code"],"""<div class='client-card product-detail'>{% if image %}<img src='{{image}}'>{% endif %}<div><span class='eyebrow'>Ordinabile</span><h1 class='luxury-title'>{{c.description or c.category}}</h1><p>{{c.brand_code}} · {{c.supplier_code}}</p><div class='shop-price'>€ {{'%.2f'|format(c.sale_price_eur)}}</div><p style='color:#74b9ff'>🔵 Consegna indicativa 15-20 giorni</p><p>{{c.size}} {{c.stone_color}} {{c.plating_color}}</p><form method='post'><input required name='customer_name' placeholder='Nome e cognome'><input required name='customer_phone' placeholder='Telefono'><input name='quantity' type='number' min='1' value='1'><textarea name='notes' placeholder='Note'></textarea><button class='gold-btn' style='width:100%'>Invia richiesta</button></form></div></div>""",c=c,image=image)
 
 @app.get("/catalogo-ordinabili")
 @login_required
