@@ -2,9 +2,13 @@ import base64
 import os
 import sqlite3
 from functools import wraps
+from io import BytesIO
+from datetime import datetime
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
@@ -101,7 +105,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS</strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v0.8 Test</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -150,12 +154,35 @@ def init_db():
                 unit_price REAL NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS reorder_pending(
+                product_id INTEGER PRIMARY KEY,
+                quantity INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS supplier_orders(
+                id INTEGER PRIMARY KEY,
+                order_number TEXT UNIQUE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Generato',
+                created_by TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                received_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS supplier_order_items(
+                id INTEGER PRIMARY KEY,
+                order_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                supplier_code TEXT NOT NULL,
+                quantity INTEGER NOT NULL
+            );
         """)
         for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT")]:
             ensure_column(db,"products",c,d)
         ensure_column(db,"users","role","TEXT NOT NULL DEFAULT 'seller'")
         ensure_column(db,"users","active","INTEGER NOT NULL DEFAULT 1")
         ensure_column(db,"users","created_at","TEXT DEFAULT CURRENT_TIMESTAMP")
+        ensure_column(db,"sales","sale_number","TEXT")
+        ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
+        ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
+        ensure_column(db,"sales","status","TEXT DEFAULT 'Confermata'")
         u=os.environ.get("ADMIN_USERNAME","admin"); p=os.environ.get("ADMIN_PASSWORD","cambia-subito")
         db.execute("INSERT OR IGNORE INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(u,generate_password_hash(p),"admin"))
         db.execute("UPDATE users SET role='admin', active=1 WHERE username=?",(u,))
@@ -212,8 +239,21 @@ def values(form):
     brand=form["brand_code"].strip().upper()
     return (form["supplier_code"].strip().upper(),brand,int(form["quantity"]),float(form["price"].replace(",",".")),form.get("category") or infer_category(brand),form.get("material",""),form.get("color",""),form.get("size",""),form.get("stone",""),form.get("thread_type",""),form.get("notes",""))
 
+def next_sale_number(db):
+    prefix=datetime.now().strftime("V%Y%m%d")
+    row=db.execute("SELECT COUNT(DISTINCT sale_number) FROM sales WHERE sale_number LIKE ?",(prefix+"%",)).fetchone()
+    return f"{prefix}-{(row[0] or 0)+1:03d}"
+
+def add_reorder_quantity(db, product_id, quantity):
+    db.execute("INSERT INTO reorder_pending(product_id,quantity) VALUES(?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=quantity+excluded.quantity",(product_id,quantity))
+
+def next_order_number(db):
+    prefix=datetime.now().strftime("OF%Y%m%d")
+    row=db.execute("SELECT COUNT(*) FROM supplier_orders WHERE order_number LIKE ?",(prefix+"%",)).fetchone()
+    return f"{prefix}-{(row[0] or 0)+1:03d}"
+
 @app.get("/health")
-def health(): return {"status":"ok","version":"0.7-persistenza","database":DB_PATH}
+def health(): return {"status":"ok","version":"0.8-vendite-riordini","database":DB_PATH}
 
 @app.route("/login",methods=["GET","POST"])
 def login():
@@ -306,7 +346,7 @@ def cart():
             subtotal=qty*p["price"]
             rows.append({"product":p,"quantity":qty,"subtotal":subtotal})
             total+=subtotal; total_qty+=qty
-    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><button>Conferma vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
+    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><div class="inline"><label>Pagamento<select name="payment_method"><option>Contanti</option><option>POS</option><option>Bonifico</option><option>Altro</option></select></label><label>Canale<select name="channel"><option>Negozio</option><option>Online</option></select></label></div><button>Conferma vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/cart/add/<int:product_id>")
 @login_required
@@ -350,6 +390,10 @@ def checkout_cart():
     raw=dict(session.get("cart",{}))
     if not raw:
         flash("Il carrello è vuoto."); return redirect(url_for("cart"))
+    payment=request.form.get("payment_method","Altro")
+    channel=request.form.get("channel","Negozio")
+    if payment not in ("Contanti","POS","Bonifico","Altro"): payment="Altro"
+    if channel not in ("Negozio","Online"): channel="Negozio"
     with connect() as db:
         items=[]
         for key,requested in raw.items():
@@ -362,15 +406,17 @@ def checkout_cart():
             items.append((p,qty))
         if not items:
             flash("Nessun articolo valido nel carrello."); return redirect(url_for("cart"))
+        sale_number=next_sale_number(db)
         total=0.0; pieces=0
         for p,qty in items:
             db.execute("UPDATE products SET quantity=quantity-? WHERE id=?",(qty,p["id"]))
-            db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price) VALUES(?,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],qty,p["price"]))
-            log_action(db,"Vendita da carrello",p,f"Quantità: {p['quantity']} → {p['quantity']-qty}; pezzi venduti: {qty}")
+            db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price,sale_number,payment_method,channel,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],qty,p["price"],sale_number,payment,channel,"Confermata"))
+            add_reorder_quantity(db,p["id"],qty)
+            log_action(db,"Vendita da carrello",p,f"{sale_number}; {channel}; {payment}; pezzi: {qty}")
             total+=qty*p["price"]; pieces+=qty
         db.commit()
     session.pop("cart",None); session.modified=True
-    flash(f"Vendita confermata: {pieces} articoli · € {total:.2f}.")
+    flash(f"Vendita {sale_number} confermata: {pieces} articoli · € {total:.2f}.")
     return redirect(url_for("dashboard"))
 
 @app.post("/products/<int:product_id>/stock")
@@ -387,9 +433,9 @@ def change_stock(product_id):
             db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(d,product_id))
             action="Vendita registrata" if d==-1 else "Merce caricata"
             if d==-1:
-                db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price) VALUES(?,?,?,?,1,?)",(
-                    session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],p["price"]
-                ))
+                sale_number=next_sale_number(db)
+                db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price,sale_number,payment_method,channel,status) VALUES(?,?,?,?,1,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],p["price"],sale_number,"Altro","Negozio","Confermata"))
+                add_reorder_quantity(db,p["id"],1)
             log_action(db,action,p,f"Quantità: {p['quantity']} → {p['quantity']+d}")
             db.commit(); flash("Vendita registrata." if d==-1 else "Quantità aggiornata.")
         else: flash("Quantità non valida o prodotto esaurito.")
@@ -469,7 +515,61 @@ def sales_log():
         rows=db.execute(sql,params).fetchall()
         total_qty=sum(x["quantity"] for x in rows)
         total_value=sum(x["quantity"]*x["unit_price"] for x in rows)
-    return page("Vendite",'''<h1>Registro vendite</h1><div class="card"><form class="inline" method="get"><input name="user" value="{{user_filter}}" placeholder="Venditore"><input name="code" value="{{code_filter}}" placeholder="Codice prodotto"><button>Filtra</button></form></div><div class="grid"><div class="card"><div class="muted">Pezzi registrati</div><div class="metric">{{total_qty}}</div></div><div class="card"><div class="muted">Valore registrato</div><div class="metric">€ {{'%.2f'|format(total_value)}}</div></div></div><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at}}</b> · {{x.username}} · <b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}} cad.</p><hr>{% endfor %}{% else %}<p>Nessuna vendita registrata.</p>{% endif %}</div>''',rows=rows,user_filter=user_filter,code_filter=code_filter,total_qty=total_qty,total_value=total_value)
+    return page("Vendite",'''<h1>Registro vendite</h1><div class="card"><form class="inline" method="get"><input name="user" value="{{user_filter}}" placeholder="Venditore"><input name="code" value="{{code_filter}}" placeholder="Codice prodotto"><button>Filtra</button></form></div><div class="grid"><div class="card"><div class="muted">Pezzi registrati</div><div class="metric">{{total_qty}}</div></div><div class="card"><div class="muted">Valore registrato</div><div class="metric">€ {{'%.2f'|format(total_value)}}</div></div></div><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.sale_number or '-'}}</b> · {{x.created_at}} · {{x.username}}<br><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}} cad. · {{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</p><hr>{% endfor %}{% else %}<p>Nessuna vendita registrata.</p>{% endif %}</div>''',rows=rows,user_filter=user_filter,code_filter=code_filter,total_qty=total_qty,total_value=total_value)
+
+@app.route("/reorders",methods=["GET","POST"])
+@role_required("admin","manager")
+def reorders():
+    if request.method=="POST":
+        with connect() as db:
+            for key,value in request.form.items():
+                if not key.startswith("qty_"): continue
+                try: product_id=int(key[4:]); qty=max(0,int(value))
+                except ValueError: continue
+                db.execute("INSERT INTO reorder_pending(product_id,quantity) VALUES(?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity",(product_id,qty))
+            log_action(db,"Proposta riordino aggiornata"); db.commit()
+        flash("Quantità di riordino aggiornate."); return redirect(url_for("reorders"))
+    with connect() as db:
+        rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.quantity AS stock,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
+        history=db.execute("SELECT o.*,COUNT(i.id) AS lines,COALESCE(SUM(i.quantity),0) AS pieces FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
+    return page("Riordini",'''<h1>Riordini fornitore</h1><div class="card"><p>Le quantità aumentano automaticamente con ogni vendita. Puoi correggerle prima del PDF.</p>{% if rows %}<form method="post">{% for x in rows %}<div class="inline"><div><b>{{x.supplier_code}}</b><br><span class="muted">{{x.brand_code}} · magazzino {{x.stock}}</span></div><input name="qty_{{x.id}}" type="number" min="0" value="{{x.reorder_qty}}"></div><hr>{% endfor %}<button>Salva quantità</button></form><form method="post" action="{{url_for('generate_reorder_pdf')}}" onsubmit="return confirm('Generare il PDF e archiviare queste quantità?')"><button class="success">Genera PDF ordine</button></form>{% else %}<p>Nessun prodotto da riordinare.</p>{% endif %}</div><div class="card"><h3>Storico ordini</h3>{% if history %}{% for o in history %}<p><b>{{o.order_number}}</b> · {{o.created_at}} · {{o.status}} · {{o.lines}} codici · {{o.pieces}} pezzi{% if o.status != 'Ricevuto' %}<form method="post" action="{{url_for('receive_order',order_id=o.id)}}" onsubmit="return confirm('Confermi la ricezione? Le quantità saranno caricate in magazzino.')"><button class="secondary">Segna ricevuto e carica merce</button></form>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessun ordine generato.</p>{% endif %}</div>''',rows=rows,history=history)
+
+@app.post("/reorders/pdf")
+@role_required("admin","manager")
+def generate_reorder_pdf():
+    with connect() as db:
+        rows=db.execute("SELECT p.id,p.supplier_code,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
+        if not rows:
+            flash("Nessun articolo da inserire nel PDF."); return redirect(url_for("reorders"))
+        order_number=next_order_number(db)
+        cur=db.execute("INSERT INTO supplier_orders(order_number,status,created_by) VALUES(?,'Generato',?)",(order_number,session.get("user","sconosciuto")))
+        for x in rows:
+            db.execute("INSERT INTO supplier_order_items(order_id,product_id,supplier_code,quantity) VALUES(?,?,?,?)",(cur.lastrowid,x["id"],x["supplier_code"],x["reorder_qty"]))
+            db.execute("UPDATE reorder_pending SET quantity=0 WHERE product_id=?",(x["id"],))
+        log_action(db,"PDF ordine fornitore generato",details=order_number); db.commit()
+    buffer=BytesIO(); pdf=canvas.Canvas(buffer,pagesize=A4); width,height=A4; y=height-55
+    pdf.setTitle(order_number); pdf.setFont("Helvetica-Bold",16); pdf.drawString(45,y,"ORDINE FORNITORE"); y-=25
+    pdf.setFont("Helvetica",10); pdf.drawString(45,y,f"Ordine: {order_number}"); pdf.drawRightString(width-45,y,datetime.now().strftime("%d/%m/%Y")); y-=32
+    pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=8; pdf.line(45,y,width-45,y); y-=20
+    pdf.setFont("Helvetica",11); total=0
+    for x in rows:
+        if y<55:
+            pdf.showPage(); y=height-55; pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=25; pdf.setFont("Helvetica",11)
+        pdf.drawString(45,y,str(x["supplier_code"])); pdf.drawRightString(width-45,y,str(x["reorder_qty"])); total+=x["reorder_qty"]; y-=20
+    y-=5; pdf.line(45,y,width-45,y); y-=20; pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"TOTALE PEZZI"); pdf.drawRightString(width-45,y,str(total)); pdf.save(); buffer.seek(0)
+    return send_file(buffer,as_attachment=True,download_name=f"{order_number}.pdf",mimetype="application/pdf")
+
+@app.post("/reorders/<int:order_id>/receive")
+@role_required("admin","manager")
+def receive_order(order_id):
+    with connect() as db:
+        order=db.execute("SELECT * FROM supplier_orders WHERE id=?",(order_id,)).fetchone()
+        if not order: flash("Ordine non trovato."); return redirect(url_for("reorders"))
+        if order["status"]=="Ricevuto": flash("Ordine già ricevuto."); return redirect(url_for("reorders"))
+        items=db.execute("SELECT * FROM supplier_order_items WHERE order_id=?",(order_id,)).fetchall()
+        for item in items: db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(item["quantity"],item["product_id"]))
+        db.execute("UPDATE supplier_orders SET status='Ricevuto',received_at=CURRENT_TIMESTAMP WHERE id=?",(order_id,)); log_action(db,"Ordine fornitore ricevuto",details=order["order_number"]); db.commit()
+    flash("Merce caricata in magazzino."); return redirect(url_for("reorders"))
 
 @app.get("/audit")
 @role_required("admin")
