@@ -90,7 +90,9 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS</strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS</strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+
+ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
 def infer_category(code):
     return {"BEL":"Ombelico","LAB":"Labret","CLK":"Clicker","TOP":"Top","CHM":"Charm","NIP":"Capezzolo","EAR":"Orecchio","CUR":"Curved barbell","TOOL":"Accessori"}.get((code or "").upper().split("-")[0], "Altro")
@@ -98,17 +100,45 @@ def infer_category(code):
 def connect():
     db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row; return db
 
-def ensure_column(db, name, definition):
-    if name not in [r["name"] for r in db.execute("PRAGMA table_info(products)").fetchall()]:
-        db.execute(f"ALTER TABLE products ADD COLUMN {name} {definition}")
+def ensure_column(db, table, name, definition):
+    if name not in [r["name"] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 def init_db():
     with connect() as db:
-        db.executescript("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE,password_hash TEXT); CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY,supplier_code TEXT UNIQUE,brand_code TEXT UNIQUE,quantity INTEGER,price REAL);")
-        for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT")]: ensure_column(db,c,d)
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS users(
+                id INTEGER PRIMARY KEY,
+                username TEXT UNIQUE,
+                password_hash TEXT
+            );
+            CREATE TABLE IF NOT EXISTS products(
+                id INTEGER PRIMARY KEY,
+                supplier_code TEXT UNIQUE,
+                brand_code TEXT UNIQUE,
+                quantity INTEGER,
+                price REAL
+            );
+            CREATE TABLE IF NOT EXISTS audit_log(
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER,
+                username TEXT NOT NULL,
+                action TEXT NOT NULL,
+                product_id INTEGER,
+                product_code TEXT,
+                details TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT")]:
+            ensure_column(db,"products",c,d)
+        ensure_column(db,"users","role","TEXT NOT NULL DEFAULT 'seller'")
+        ensure_column(db,"users","active","INTEGER NOT NULL DEFAULT 1")
+        ensure_column(db,"users","created_at","TEXT DEFAULT CURRENT_TIMESTAMP")
         u=os.environ.get("ADMIN_USERNAME","admin"); p=os.environ.get("ADMIN_PASSWORD","cambia-subito")
-        db.execute("INSERT OR IGNORE INTO users(username,password_hash) VALUES(?,?)",(u,generate_password_hash(p)))
-        # Importa tutte le 56 referenze del PDF. Non sovrascrive quantità o prezzo già modificati dall'utente.
+        db.execute("INSERT OR IGNORE INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(u,generate_password_hash(p),"admin"))
+        db.execute("UPDATE users SET role='admin', active=1 WHERE username=?",(u,))
+        # Conserva i dati esistenti e completa solo foto/campi mancanti.
         for supplier_code,brand_code,quantity,price,category,material,color,photo in SEED_PRODUCTS:
             db.execute("""INSERT OR IGNORE INTO products
                 (supplier_code,brand_code,quantity,price,category,material,color,photo_data)
@@ -123,11 +153,35 @@ def init_db():
                 (photo,category,material,color,supplier_code))
         db.commit()
 
-def page(title, body, **ctx): return render_template_string(BASE,title=title,css=CSS,body=render_template_string(body,**ctx))
+def page(title, body, **ctx):
+    return render_template_string(BASE,title=title,css=CSS,body=render_template_string(body,**ctx))
+
 def login_required(fn):
     @wraps(fn)
-    def wrapped(*a,**k): return redirect(url_for("login")) if not session.get("user") else fn(*a,**k)
+    def wrapped(*a,**k):
+        return redirect(url_for("login")) if not session.get("user_id") else fn(*a,**k)
     return wrapped
+
+def role_required(*roles):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapped(*a,**k):
+            if not session.get("user_id"):
+                return redirect(url_for("login"))
+            if session.get("role") not in roles:
+                flash("Non hai i permessi per questa operazione.")
+                return redirect(url_for("dashboard"))
+            return fn(*a,**k)
+        return wrapped
+    return decorator
+
+def log_action(db, action, product=None, details=""):
+    db.execute("INSERT INTO audit_log(user_id,username,action,product_id,product_code,details) VALUES(?,?,?,?,?,?)",(
+        session.get("user_id"), session.get("user","sconosciuto"), action,
+        product["id"] if product else None,
+        product["brand_code"] if product else None,
+        details
+    ))
 
 def photo_data(upload):
     if not upload or not upload.filename: return None
@@ -138,14 +192,17 @@ def values(form):
     return (form["supplier_code"].strip().upper(),brand,int(form["quantity"]),float(form["price"].replace(",",".")),form.get("category") or infer_category(brand),form.get("material",""),form.get("color",""),form.get("size",""),form.get("stone",""),form.get("thread_type",""),form.get("notes",""))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"0.3-foto-pdf"}
+def health(): return {"status":"ok","version":"0.4-utenti-ruoli"}
 
 @app.route("/login",methods=["GET","POST"])
 def login():
     if request.method=="POST":
-        with connect() as db: user=db.execute("SELECT * FROM users WHERE username=?",(request.form["username"].strip(),)).fetchone()
-        if user and check_password_hash(user["password_hash"],request.form["password"]): session["user"]=user["username"]; return redirect(url_for("dashboard"))
-        flash("Credenziali non corrette.")
+        with connect() as db:
+            user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form["username"].strip(),)).fetchone()
+        if user and check_password_hash(user["password_hash"],request.form["password"]):
+            session.clear(); session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
+            return redirect(url_for("dashboard"))
+        flash("Credenziali non corrette o account disattivato.")
     return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form></div>''')
 
 @app.get("/logout")
@@ -156,15 +213,20 @@ def logout(): session.clear(); return redirect(url_for("login"))
 def dashboard():
     with connect() as db:
         r=db.execute("SELECT COUNT(*) FROM products").fetchone()[0]; p=db.execute("SELECT COALESCE(SUM(quantity),0) FROM products").fetchone()[0]; l=db.execute("SELECT COUNT(*) FROM products WHERE quantity<=1").fetchone()[0]; f=db.execute("SELECT COUNT(*) FROM products WHERE COALESCE(photo_data,'')<>''").fetchone()[0]
-    return page("Dashboard",'''<h1>Dashboard</h1><div class="grid"><div class="card"><div class="muted">Referenze</div><div class="metric">{{r}}</div></div><div class="card"><div class="muted">Pezzi disponibili</div><div class="metric">{{p}}</div></div><div class="card"><div class="muted">Scorte ≤ 1</div><div class="metric">{{l}}</div></div><div class="card"><div class="muted">Prodotti con foto</div><div class="metric">{{f}}</div></div></div>''',r=r,p=p,l=l,f=f)
+        recent=db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 5").fetchall() if session.get("role")=="admin" else []
+    return page("Dashboard",'''<h1>Dashboard</h1><p class="muted">Accesso come <b>{{role_label}}</b>.</p><div class="grid"><div class="card"><div class="muted">Referenze</div><div class="metric">{{r}}</div></div><div class="card"><div class="muted">Pezzi disponibili</div><div class="metric">{{p}}</div></div><div class="card"><div class="muted">Scorte ≤ 1</div><div class="metric">{{l}}</div></div><div class="card"><div class="muted">Prodotti con foto</div><div class="metric">{{f}}</div></div></div>{% if recent %}<div class="card"><h3>Ultime operazioni</h3>{% for x in recent %}<p><b>{{x.username}}</b> · {{x.action}}{% if x.product_code %} · {{x.product_code}}{% endif %}<br><span class="muted">{{x.created_at}} {{x.details or ''}}</span></p>{% endfor %}</div>{% endif %}''',r=r,p=p,l=l,f=f,recent=recent,role_label=ROLE_LABELS.get(session.get("role"),session.get("role")))
 
 @app.route("/products",methods=["GET","POST"])
 @login_required
 def products():
     if request.method=="POST":
+        if session.get("role") not in ("admin","manager"):
+            flash("Solo Admin e Gestore possono aggiungere prodotti."); return redirect(url_for("products"))
         try:
             v=values(request.form); ph=photo_data(request.files.get("photo"))
-            with connect() as db: db.execute("INSERT INTO products(supplier_code,brand_code,quantity,price,category,material,color,size,stone,thread_type,notes,photo_data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",v+(ph,)); db.commit()
+            with connect() as db:
+                cur=db.execute("INSERT INTO products(supplier_code,brand_code,quantity,price,category,material,color,size,stone,thread_type,notes,photo_data) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",v+(ph,))
+                p=db.execute("SELECT * FROM products WHERE id=?",(cur.lastrowid,)).fetchone(); log_action(db,"Prodotto aggiunto",p); db.commit()
             flash("Prodotto aggiunto.")
         except Exception as e: flash(f"Errore: {e}")
     q=request.args.get("q","").strip(); cat=request.args.get("category",""); mat=request.args.get("material",""); col=request.args.get("color",""); av=request.args.get("availability","")
@@ -175,19 +237,21 @@ def products():
     elif av=="low": sql+=" AND quantity<=1"
     sql+=" ORDER BY category,brand_code"
     with connect() as db: rows=db.execute(sql,params).fetchall()
+    can_manage=session.get("role") in ("admin","manager"); is_admin=session.get("role")=="admin"
     return page("Prodotti",'''<h1>Prodotti</h1><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
-<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice brand" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo" required><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>
-<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted">{{p.supplier_code}}</div><span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b></div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a><form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="-1"><button class="secondary">−1</button></form><form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">+1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS)
+{% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice brand" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo" required><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
+<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted">{{p.supplier_code}}</div><span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b></div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a><form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="-1"><button class="danger" {% if p.quantity<=0 %}disabled{% endif %}>Venduto</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">+1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin)
 
 @app.get("/products/<int:product_id>")
 @login_required
 def product_detail(product_id):
     with connect() as db: p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
     if not p: flash("Prodotto non trovato."); return redirect(url_for("products"))
-    return page("Scheda prodotto",'''<p><a href="{{url_for('products')}}">← Torna ai prodotti</a></p><div class="card detail"><div>{% if p.photo_data %}<img class="detail-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo" style="height:350px">Nessuna foto</div>{% endif %}</div><div><h1>{{p.brand_code}}</h1><div class="price">€ {{'%.2f'|format(p.price)}}</div><dl><dt>Codice fornitore</dt><dd>{{p.supplier_code}}</dd><dt>Categoria</dt><dd>{{p.category or '-'}}</dd><dt>Quantità</dt><dd>{{p.quantity}}</dd><dt>Materiale</dt><dd>{{p.material or '-'}}</dd><dt>Colore</dt><dd>{{p.color or '-'}}</dd><dt>Misura</dt><dd>{{p.size or '-'}}</dd><dt>Pietra</dt><dd>{{p.stone or '-'}}</dd><dt>Filettatura</dt><dd>{{p.thread_type or '-'}}</dd><dt>Note</dt><dd>{{p.notes or '-'}}</dd></dl><div class="actions"><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a></div></div></div>''',p=p)
+    can_manage=session.get("role") in ("admin","manager")
+    return page("Scheda prodotto",'''<p><a href="{{url_for('products')}}">← Torna ai prodotti</a></p><div class="card detail"><div>{% if p.photo_data %}<img class="detail-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo" style="height:350px">Nessuna foto</div>{% endif %}</div><div><h1>{{p.brand_code}}</h1><div class="price">€ {{'%.2f'|format(p.price)}}</div><dl><dt>Codice fornitore</dt><dd>{{p.supplier_code}}</dd><dt>Categoria</dt><dd>{{p.category or '-'}}</dd><dt>Quantità</dt><dd>{{p.quantity}}</dd><dt>Materiale</dt><dd>{{p.material or '-'}}</dd><dt>Colore</dt><dd>{{p.color or '-'}}</dd><dt>Misura</dt><dd>{{p.size or '-'}}</dd><dt>Pietra</dt><dd>{{p.stone or '-'}}</dd><dt>Filettatura</dt><dd>{{p.thread_type or '-'}}</dd><dt>Note</dt><dd>{{p.notes or '-'}}</dd></dl><div class="actions"><form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="-1"><button class="danger" {% if p.quantity<=0 %}disabled{% endif %}>Venduto</button></form>{% if can_manage %}<a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a>{% endif %}</div></div></div>''',p=p,can_manage=can_manage)
 
 @app.route("/products/<int:product_id>/edit",methods=["GET","POST"])
-@login_required
+@role_required("admin","manager")
 def edit_product(product_id):
     with connect() as db:
         p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
@@ -196,24 +260,80 @@ def edit_product(product_id):
             v=values(request.form); ph=photo_data(request.files.get("photo"))
             if ph: db.execute("UPDATE products SET supplier_code=?,brand_code=?,quantity=?,price=?,category=?,material=?,color=?,size=?,stone=?,thread_type=?,notes=?,photo_data=? WHERE id=?",v+(ph,product_id))
             else: db.execute("UPDATE products SET supplier_code=?,brand_code=?,quantity=?,price=?,category=?,material=?,color=?,size=?,stone=?,thread_type=?,notes=? WHERE id=?",v+(product_id,))
-            db.commit(); flash("Prodotto aggiornato."); return redirect(url_for("product_detail",product_id=product_id))
+            updated=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone(); log_action(db,"Prodotto modificato",updated); db.commit(); flash("Prodotto aggiornato."); return redirect(url_for("product_detail",product_id=product_id))
     return page("Modifica prodotto",'''<h1>Modifica prodotto</h1><div class="card"><form method="post" enctype="multipart/form-data"><p><input name="supplier_code" value="{{p.supplier_code}}" required></p><p><input name="brand_code" value="{{p.brand_code}}" required></p><p><select name="category">{% for x in categories %}<option {% if x==p.category %}selected{% endif %}>{{x}}</option>{% endfor %}</select></p><p><select name="material"><option value="">Materiale</option>{% for x in materials %}<option {% if x==p.material %}selected{% endif %}>{{x}}</option>{% endfor %}</select></p><p><select name="color"><option value="">Colore</option>{% for x in colors %}<option {% if x==p.color %}selected{% endif %}>{{x}}</option>{% endfor %}</select></p><p><input name="size" value="{{p.size or ''}}" placeholder="Misura"></p><p><input name="stone" value="{{p.stone or ''}}" placeholder="Pietra"></p><p><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option {% if x==p.thread_type %}selected{% endif %}>{{x}}</option>{% endfor %}</select></p><p><input name="quantity" type="number" min="0" value="{{p.quantity}}" required></p><p><input name="price" value="{{p.price}}" required></p><p><input name="photo" type="file" accept="image/*" capture="environment"></p><p><textarea name="notes">{{p.notes or ''}}</textarea></p><button>Salva modifiche</button></form></div>''',p=p,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS)
 
 @app.post("/products/<int:product_id>/stock")
 @login_required
 def change_stock(product_id):
-    d=int(request.form["delta"])
+    try: d=int(request.form["delta"])
+    except (KeyError,ValueError): flash("Operazione non valida."); return redirect(url_for("products"))
+    if d not in (-1,1): flash("Operazione non valida."); return redirect(url_for("products"))
+    if d==1 and session.get("role") not in ("admin","manager"):
+        flash("Solo Admin e Gestore possono caricare merce."); return redirect(request.referrer or url_for("products"))
     with connect() as db:
-        p=db.execute("SELECT quantity FROM products WHERE id=?",(product_id,)).fetchone()
-        if p and p["quantity"]+d>=0: db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(d,product_id)); db.commit(); flash("Quantità aggiornata.")
-        else: flash("Quantità non valida.")
+        p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
+        if p and p["quantity"]+d>=0:
+            db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(d,product_id))
+            action="Vendita registrata" if d==-1 else "Merce caricata"
+            log_action(db,action,p,f"Quantità: {p['quantity']} → {p['quantity']+d}")
+            db.commit(); flash("Vendita registrata." if d==-1 else "Quantità aggiornata.")
+        else: flash("Quantità non valida o prodotto esaurito.")
     return redirect(request.referrer or url_for("products"))
 
 @app.post("/products/<int:product_id>/delete")
-@login_required
+@role_required("admin")
 def delete_product(product_id):
-    with connect() as db: db.execute("DELETE FROM products WHERE id=?",(product_id,)); db.commit()
-    flash("Prodotto eliminato."); return redirect(url_for("products"))
+    with connect() as db:
+        p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
+        if p:
+            log_action(db,"Prodotto eliminato",p); db.execute("DELETE FROM products WHERE id=?",(product_id,)); db.commit(); flash("Prodotto eliminato.")
+        else: flash("Prodotto non trovato.")
+    return redirect(url_for("products"))
+
+@app.route("/users",methods=["GET","POST"])
+@role_required("admin")
+def users():
+    if request.method=="POST":
+        username=request.form.get("username","").strip(); password=request.form.get("password",""); role=request.form.get("role","")
+        if not username or len(password)<6 or role not in ROLE_LABELS:
+            flash("Inserisci username, password di almeno 6 caratteri e ruolo valido.")
+        else:
+            try:
+                with connect() as db:
+                    db.execute("INSERT INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(username,generate_password_hash(password),role)); log_action(db,"Utente creato",details=f"{username} · {ROLE_LABELS[role]}"); db.commit()
+                flash("Utente creato.")
+            except sqlite3.IntegrityError: flash("Username già esistente.")
+    with connect() as db: rows=db.execute("SELECT id,username,role,active,created_at FROM users ORDER BY username").fetchall()
+    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at or '-'}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="6" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+
+@app.post("/users/<int:user_id>/toggle")
+@role_required("admin")
+def toggle_user(user_id):
+    if user_id==session.get("user_id"):
+        flash("Non puoi disattivare il tuo account."); return redirect(url_for("users"))
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+        if u:
+            new_active=0 if u["active"] else 1; db.execute("UPDATE users SET active=? WHERE id=?",(new_active,user_id)); log_action(db,"Account riattivato" if new_active else "Account disattivato",details=u["username"]); db.commit(); flash("Account aggiornato.")
+    return redirect(url_for("users"))
+
+@app.post("/users/<int:user_id>/password")
+@role_required("admin")
+def reset_user_password(user_id):
+    password=request.form.get("password","")
+    if len(password)<6: flash("La password deve avere almeno 6 caratteri."); return redirect(url_for("users"))
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+        if u:
+            db.execute("UPDATE users SET password_hash=? WHERE id=?",(generate_password_hash(password),user_id)); log_action(db,"Password reimpostata",details=u["username"]); db.commit(); flash("Password aggiornata.")
+    return redirect(url_for("users"))
+
+@app.get("/audit")
+@role_required("admin")
+def audit_log():
+    with connect() as db: rows=db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").fetchall()
+    return page("Storico",'''<h1>Storico operazioni</h1><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at}}</b> · {{x.username}} · {{x.action}}{% if x.product_code %} · <b>{{x.product_code}}</b>{% endif %}{% if x.details %}<br><span class="muted">{{x.details}}</span>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessuna operazione registrata.</p>{% endif %}</div>''',rows=rows)
 
 init_db()
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
