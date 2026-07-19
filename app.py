@@ -107,7 +107,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v3.2</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Verifica prezzo</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v3.3</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Verifica prezzo</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -290,7 +290,7 @@ def public_page(title, body, **ctx):
     return render_template_string(PUBLIC_BASE,title=title,css=PUBLIC_CSS,logo=BRAND_LOGO,cart_count=count,body=render_template_string(body,**ctx))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"3.2-verifica-prezzo","database":DB_PATH}
+def health(): return {"status":"ok","version":"3.3-assistente-banco","database":DB_PATH}
 
 
 @app.get("/")
@@ -439,25 +439,32 @@ def dashboard():
 @login_required
 def price_check():
     q=request.args.get("q","").strip()
-    rows=[]
+    rows=[]; recent_rows=[]; similar={}
     if q:
         like=f"%{q}%"
         with connect() as db:
-            rows=db.execute("""
-                SELECT * FROM products
-                WHERE brand_code LIKE ?
-                   OR supplier_code LIKE ?
-                   OR COALESCE(notes,'') LIKE ?
-                   OR COALESCE(category,'') LIKE ?
-                ORDER BY
-                    CASE WHEN UPPER(brand_code)=UPPER(?) THEN 0
-                         WHEN UPPER(supplier_code)=UPPER(?) THEN 1
-                         ELSE 2 END,
-                    brand_code
-                LIMIT 30
-            """,(like,like,like,like,q,q)).fetchall()
+            rows=db.execute("SELECT * FROM products WHERE brand_code LIKE ? OR supplier_code LIKE ? OR COALESCE(notes,'') LIKE ? OR COALESCE(category,'') LIKE ? ORDER BY CASE WHEN UPPER(brand_code)=UPPER(?) THEN 0 WHEN UPPER(supplier_code)=UPPER(?) THEN 1 WHEN brand_code LIKE ? THEN 2 ELSE 3 END, brand_code LIMIT 20",(like,like,like,like,q,q,f"{q}%")).fetchall()
+            for product in rows:
+                if product["quantity"] <= 0:
+                    similar[product["id"]]=db.execute("SELECT * FROM products WHERE id<>? AND quantity>0 AND category=? ORDER BY ABS(price-?), brand_code LIMIT 3",(product["id"],product["category"],product["price"])).fetchall()
+        recent=list(session.get("price_check_recent",[]))
+        for product in rows[:3]:
+            pid=int(product["id"])
+            if pid in recent: recent.remove(pid)
+            recent.insert(0,pid)
+        session["price_check_recent"]=recent[:10]; session.modified=True
+    recent_ids=[]
+    for value in session.get("price_check_recent",[]):
+        try: recent_ids.append(int(value))
+        except (TypeError,ValueError): pass
+    if recent_ids:
+        placeholders=",".join("?" for _ in recent_ids)
+        with connect() as db:
+            found=db.execute(f"SELECT * FROM products WHERE id IN ({placeholders})",recent_ids).fetchall()
+        by_id={x["id"]:x for x in found}
+        recent_rows=[by_id[x] for x in recent_ids if x in by_id]
     is_manager=session.get("role") in ("admin","manager")
-    return page("Verifica prezzo",'''<h1>💰 Verifica prezzo</h1><p class="muted">Ricerca un articolo senza modificare il magazzino e senza creare una vendita.</p><div class="card"><form method="get" class="inline"><input name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autofocus required><button>Cerca prezzo</button></form></div>{% if q and not rows %}<div class="card"><p>Nessun prodotto trovato per <b>{{q}}</b>.</p></div>{% endif %}{% for p in rows %}<div class="card" style="display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:20px;align-items:center">{% if p.photo_data %}<img src="{{p.photo_data}}" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;background:#eef0f3">{% else %}<div class="no-photo" style="height:180px">Nessuna foto</div>{% endif %}<div><h2 style="margin-top:0">{{p.brand_code}}</h2><div class="price" style="font-size:34px">€ {{'%.2f'|format(p.price)}}</div><p>Disponibilità: <b>{{p.quantity}} {% if p.quantity==1 %}pezzo{% else %}pezzi{% endif %}</b></p><span class="badge">{{p.category or 'Altro'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}{% if is_manager %}<hr><p class="muted"><b>Dati interni</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</p>{% endif %}<div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri scheda</a><form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form></div></div></div>{% endfor %}''',q=q,rows=rows,is_manager=is_manager)
+    return page("Verifica prezzo",'<style>.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:16px}.price-search button{font-size:18px;padding:14px 22px}.counter-card{border-left:6px solid #c4932f}.counter-grid{display:grid;grid-template-columns:minmax(150px,240px) 1fr;gap:22px;align-items:center}.counter-photo{width:100%;max-height:260px;object-fit:contain;border-radius:14px;background:#eef0f3}.counter-price{font-size:42px;font-weight:900;margin:8px 0}.stock{display:inline-block;padding:8px 12px;border-radius:999px;font-weight:800}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}.recent-item{min-width:165px;border:1px solid #ddd;border-radius:12px;padding:10px;text-decoration:none;color:inherit;background:white}.recent-item img{width:100%;height:95px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}@media(max-width:650px){.price-search form{grid-template-columns:1fr}.counter-grid{grid-template-columns:1fr}.counter-price{font-size:38px}.price-search{position:static}}</style><h1>💰 Assistente banco</h1><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form></div></div>{% if not q and recent_rows %}<div class="card"><h3>Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card"><p>Nessun prodotto trovato per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo" style="height:200px">Nessuna foto</div>{% endif %}</div><div><h2 style="margin:0">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<p><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</p><p class="muted">Codice interno: <b>{{p.brand_code}}</b></p>{% if is_manager %}<hr><p class="muted"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</p>{% endif %}<div class="actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:18px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),700)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
 
 @app.route("/products",methods=["GET","POST"])
 @login_required
