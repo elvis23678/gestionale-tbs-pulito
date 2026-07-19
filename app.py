@@ -2,14 +2,46 @@ import base64
 import os
 import sqlite3
 import csv
+import zipfile
 from functools import wraps
 from io import BytesIO
+from pathlib import Path
 from datetime import datetime
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+CATALOG_IMAGES_ARCHIVE = os.path.join(APP_DIR, "catalog_images.zip")
+CATALOG_IMAGES_DIR = os.path.join(APP_DIR, "static", "catalog")
+
+def ensure_catalog_images():
+    """Create and extract the bundled supplier-image archive on first startup."""
+    marker = os.path.join(CATALOG_IMAGES_DIR, ".catalog_ready")
+    if os.path.isfile(marker):
+        return
+
+    # v5.1: the image archive is stored as Python data so GitHub mobile
+    # does not need to upload a binary ZIP file.
+    if not os.path.isfile(CATALOG_IMAGES_ARCHIVE):
+        try:
+            from catalog_bundle import write_catalog_archive
+            write_catalog_archive(CATALOG_IMAGES_ARCHIVE)
+        except Exception as exc:
+            print(f"Catalog image bundle unavailable: {exc}")
+            return
+
+    os.makedirs(CATALOG_IMAGES_DIR, exist_ok=True)
+    try:
+        with zipfile.ZipFile(CATALOG_IMAGES_ARCHIVE, "r") as archive:
+            archive.extractall(APP_DIR)
+        Path(marker).touch()
+    except (OSError, zipfile.BadZipFile) as exc:
+        print(f"Unable to extract catalog images: {exc}")
+
+ensure_catalog_images()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
