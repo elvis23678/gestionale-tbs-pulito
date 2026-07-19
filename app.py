@@ -105,7 +105,7 @@ def ensure_column(db, name, definition):
 def init_db():
     with connect() as db:
         db.executescript("CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,username TEXT UNIQUE,password_hash TEXT); CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY,supplier_code TEXT UNIQUE,brand_code TEXT UNIQUE,quantity INTEGER,price REAL);")
-        for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT")]: ensure_column(db,"products",c,d)
+        for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT")]: ensure_column(db,c,d)
         u=os.environ.get("ADMIN_USERNAME","admin"); p=os.environ.get("ADMIN_PASSWORD","cambia-subito")
         db.execute("INSERT OR IGNORE INTO users(username,password_hash) VALUES(?,?)",(u,generate_password_hash(p)))
         # Importa tutte le 56 referenze del PDF. Non sovrascrive quantità o prezzo già modificati dall'utente.
