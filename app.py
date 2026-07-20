@@ -6,7 +6,8 @@ import zipfile
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import shutil
 import tempfile
 
@@ -49,7 +50,31 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-APP_VERSION = "v8.2 ARCHIVIO PERSISTENTE"
+ROME_TZ = ZoneInfo("Europe/Rome")
+
+def now_rome():
+    """Restituisce data e ora correnti nel fuso italiano, con ora legale automatica."""
+    return datetime.now(ROME_TZ)
+
+def format_rome(value, fmt="%d/%m/%Y %H:%M"):
+    """Converte timestamp SQLite (salvati in UTC) nell'ora italiana per la visualizzazione."""
+    if value in (None, ""):
+        return "-"
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value).strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(ROME_TZ).strftime(fmt)
+    except (TypeError, ValueError):
+        return str(value)
+
+app.jinja_env.filters["rome_time"] = format_rome
+
+APP_VERSION = "v8.3 ORARIO ITALIA"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -407,7 +432,7 @@ def variant_conflict(db, product_id, variant_group, color, size, stone):
 
 
 def next_sale_number(db):
-    prefix=datetime.now().strftime("V%Y%m%d")
+    prefix=now_rome().strftime("V%Y%m%d")
     row=db.execute("SELECT COUNT(DISTINCT sale_number) FROM sales WHERE sale_number LIKE ?",(prefix+"%",)).fetchone()
     return f"{prefix}-{(row[0] or 0)+1:03d}"
 
@@ -415,13 +440,13 @@ def add_reorder_quantity(db, product_id, quantity):
     db.execute("INSERT INTO reorder_pending(product_id,quantity) VALUES(?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=quantity+excluded.quantity",(product_id,quantity))
 
 def next_order_number(db):
-    prefix=datetime.now().strftime("OF%Y%m%d")
+    prefix=now_rome().strftime("OF%Y%m%d")
     row=db.execute("SELECT COUNT(*) FROM supplier_orders WHERE order_number LIKE ?",(prefix+"%",)).fetchone()
     return f"{prefix}-{(row[0] or 0)+1:03d}"
 
 
 def next_customer_order_number(db):
-    prefix=datetime.now().strftime("OC%Y%m%d")
+    prefix=now_rome().strftime("OC%Y%m%d")
     row=db.execute("SELECT COUNT(*) FROM customer_orders WHERE order_number LIKE ?",(prefix+"%",)).fetchone()
     return f"{prefix}-{(row[0] or 0)+1:03d}"
 
@@ -576,7 +601,7 @@ def customer_orders():
     with connect() as db:
         rows=db.execute("SELECT * FROM customer_orders ORDER BY id DESC LIMIT 100").fetchall()
         items={o["id"]:db.execute("SELECT * FROM customer_order_items WHERE order_id=? ORDER BY id",(o["id"],)).fetchall() for o in rows}
-    return page("Ordini clienti","""<h1>Ordini clienti</h1><div class='card'>{% for o in rows %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><p><b>{{o.order_number}}</b> · <span class='badge'>{{o.status}}</span><br><span class='muted'>{{o.created_at}}</span><br>{{o.customer_name}} · {{o.customer_phone}}{% if o.customer_email %} · {{o.customer_email}}{% endif %}</p>{% for i in items[o.id] %}<div>{{i.product_code}} · {{i.quantity}} pz · € {{'%.2f'|format(i.unit_price)}}</div>{% endfor %}<p><b>Totale € {{'%.2f'|format(o.total)}}</b>{% if o.notes %}<br><span class='muted'>{{o.notes}}</span>{% endif %}</p>{% if o.status=='Nuovo' %}<div class='actions'><form method='post' action='{{url_for("confirm_customer_order",order_id=o.id)}}' onsubmit='return confirm("Confermare l ordine e scaricare il magazzino?")'><button class='success'>Conferma ordine</button></form><form method='post' action='{{url_for("cancel_customer_order",order_id=o.id)}}' onsubmit='return confirm("Annullare questa richiesta?")'><button class='danger'>Annulla</button></form></div>{% endif %}</div>{% else %}<p>Nessun ordine cliente.</p>{% endfor %}</div>""",rows=rows,items=items)
+    return page("Ordini clienti","""<h1>Ordini clienti</h1><div class='card'>{% for o in rows %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><p><b>{{o.order_number}}</b> · <span class='badge'>{{o.status}}</span><br><span class='muted'>{{o.created_at|rome_time}}</span><br>{{o.customer_name}} · {{o.customer_phone}}{% if o.customer_email %} · {{o.customer_email}}{% endif %}</p>{% for i in items[o.id] %}<div>{{i.product_code}} · {{i.quantity}} pz · € {{'%.2f'|format(i.unit_price)}}</div>{% endfor %}<p><b>Totale € {{'%.2f'|format(o.total)}}</b>{% if o.notes %}<br><span class='muted'>{{o.notes}}</span>{% endif %}</p>{% if o.status=='Nuovo' %}<div class='actions'><form method='post' action='{{url_for("confirm_customer_order",order_id=o.id)}}' onsubmit='return confirm("Confermare l ordine e scaricare il magazzino?")'><button class='success'>Conferma ordine</button></form><form method='post' action='{{url_for("cancel_customer_order",order_id=o.id)}}' onsubmit='return confirm("Annullare questa richiesta?")'><button class='danger'>Annulla</button></form></div>{% endif %}</div>{% else %}<p>Nessun ordine cliente.</p>{% endfor %}</div>""",rows=rows,items=items)
 
 @app.post("/customer-orders/<int:order_id>/confirm")
 @role_required("admin","manager")
@@ -637,14 +662,14 @@ def dashboard():
         today=db.execute("""SELECT COALESCE(SUM(quantity),0) pieces,
             COALESCE(SUM(quantity*unit_price),0) revenue,
             COUNT(DISTINCT COALESCE(sale_number,id)) receipts
-            FROM sales WHERE status='Confermata' AND date(created_at)=date('now')""").fetchone()
+            FROM sales WHERE status='Confermata' AND date(created_at,'localtime')=date('now','localtime')""").fetchone()
         week_revenue=db.execute("""SELECT COALESCE(SUM(quantity*unit_price),0)
-            FROM sales WHERE status='Confermata' AND datetime(created_at)>=datetime('now','-7 days')""").fetchone()[0]
+            FROM sales WHERE status='Confermata' AND datetime(created_at,'localtime')>=datetime('now','localtime','-7 days')""").fetchone()[0]
         low_stock=db.execute("""SELECT * FROM products WHERE active=1 AND quantity<=min_stock
             ORDER BY quantity ASC, brand_code LIMIT 8""").fetchall()
         top_products=db.execute("""SELECT product_code, SUM(quantity) pieces,
             SUM(quantity*unit_price) revenue FROM sales
-            WHERE status='Confermata' AND datetime(created_at)>=datetime('now','-30 days')
+            WHERE status='Confermata' AND datetime(created_at,'localtime')>=datetime('now','localtime','-30 days')
             GROUP BY product_code ORDER BY pieces DESC, revenue DESC LIMIT 5""").fetchall()
         recent_sales=db.execute("""SELECT sale_number,username,created_at,payment_method,channel,
             SUM(quantity) pieces,SUM(quantity*unit_price) total
@@ -654,7 +679,7 @@ def dashboard():
         my_sales=db.execute("SELECT * FROM sales WHERE user_id=? ORDER BY id DESC LIMIT 5",(session.get("user_id"),)).fetchall() if session.get("role")=="seller" else []
     return page("Dashboard",'''<style>
 .dash-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:18px}.dash-head h1{margin:0}.quick-actions{display:flex;gap:9px;flex-wrap:wrap}.quick-actions a{padding:11px 14px;border-radius:10px;color:white;text-decoration:none;font-weight:850}.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.kpi{padding:18px;border-radius:16px;background:white;border:1px solid #e5e7eb;box-shadow:0 8px 26px rgba(17,24,39,.06)}.kpi .metric{font-size:clamp(30px,6vw,48px);line-height:1.05;margin:7px 0}.kpi strong{font-size:14px;color:#4b5563}.dash-two{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}.stock-row,.sale-row,.top-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #edf0f3}.stock-row:last-child,.sale-row:last-child,.top-row:last-child{border-bottom:0}.stock-pill{font-weight:900;padding:6px 10px;border-radius:999px;background:#fff0bf;color:#805b00}.stock-zero{background:#f8d7da;color:#8a1c26}.rank{display:inline-flex;width:28px;height:28px;border-radius:50%;background:#111827;color:white;align-items:center;justify-content:center;font-weight:900;margin-right:8px}.empty-mini{padding:18px;text-align:center;color:#6b7280}@media(max-width:800px){.dash-head{display:block}.quick-actions{margin-top:14px}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-two{grid-template-columns:1fr}}@media(max-width:440px){.kpi-grid{grid-template-columns:1fr 1fr}.kpi{padding:14px}.quick-actions a{flex:1;text-align:center}}
-</style><div class="dash-head"><div><h1>Dashboard</h1><p class="muted">Accesso come <b>{{role_label}}</b> · panoramica operativa aggiornata.</p></div><div class="quick-actions"><a class="success" href="{{url_for('price_check')}}">💰 Assistente banco</a><a class="view" href="{{url_for('cart')}}">🛒 Carrello</a><a class="secondary" href="{{url_for('products')}}">📦 Prodotti</a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite · {{today.pieces}} pezzi</span></div><div class="kpi"><strong>Ultimi 7 giorni</strong><div class="metric">€ {{'%.2f'|format(week_revenue)}}</div><span class="muted">Valore vendite confermate</span></div><div class="kpi"><strong>Pezzi disponibili</strong><div class="metric">{{p}}</div><span class="muted">{{r}} referenze attive</span></div><div class="kpi"><strong>Scorte critiche</strong><div class="metric">{{l}}</div><span class="muted">Quantità ≤ 1</span></div></div><div class="dash-two"><div><div class="card"><h2>⚠️ Da controllare</h2>{% if low_stock %}{% for x in low_stock %}<div class="stock-row"><div><b>{{x.brand_code}}</b><br><small class="muted">{{x.category or 'Altro'}}{% if x.location %} · 📍 {{x.location}}{% endif %}</small></div><span class="stock-pill {% if x.quantity<=0 %}stock-zero{% endif %}">{{x.quantity}} pz</span></div>{% endfor %}<p><a href="{{url_for('products')}}">Apri il magazzino →</a></p>{% else %}<div class="empty-mini">Nessuna scorta critica.</div>{% endif %}</div><div class="card"><h2>🏆 Più venduti · 30 giorni</h2>{% if top_products %}{% for x in top_products %}<div class="top-row"><div><span class="rank">{{loop.index}}</span><b>{{x.product_code}}</b></div><div style="text-align:right"><b>{{x.pieces}} pz</b><br><small class="muted">€ {{'%.2f'|format(x.revenue)}}</small></div></div>{% endfor %}{% else %}<div class="empty-mini">Non ci sono ancora vendite nel periodo.</div>{% endif %}</div></div><div><div class="card"><h2>🧾 Ultime vendite</h2>{% if recent_sales %}{% for x in recent_sales %}<div class="sale-row"><div><b>{{x.sale_number or 'Vendita'}}</b><br><small class="muted">{{x.created_at}} · {{x.username}}<br>{{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</small></div><div style="text-align:right"><b>€ {{'%.2f'|format(x.total)}}</b><br><small>{{x.pieces}} pz</small></div></div>{% endfor %}<p><a href="{{url_for('sales_log')}}">Registro completo →</a></p>{% else %}<div class="empty-mini">Nessuna vendita registrata.</div>{% endif %}</div><div class="card"><h2>📘 Ordinabili</h2><p>Consulta il catalogo fornitore e crea ordini cliente con consegna indicativa 15–20 giorni.</p><a class="view" href="{{url_for('supplier_catalog')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block;font-weight:bold">Apri catalogo</a></div></div></div>{% if role == 'seller' and my_sales %}<div class="card"><h3>Le tue ultime operazioni</h3>{% for x in my_sales %}<p><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}}<br><span class="muted">{{x.created_at}}</span></p>{% endfor %}</div>{% endif %}{% if recent %}<div class="card"><h3>Storico amministrativo recente</h3>{% for x in recent %}<p><b>{{x.username}}</b> · {{x.action}}{% if x.product_code %} · {{x.product_code}}{% endif %}<br><span class="muted">{{x.created_at}} {{x.details or ''}}</span></p>{% endfor %}</div>{% endif %}''',r=r,p=p,l=l,f=f,today=today,week_revenue=week_revenue,low_stock=low_stock,top_products=top_products,recent_sales=recent_sales,recent=recent,my_sales=my_sales,role=session.get("role"),role_label=ROLE_LABELS.get(session.get("role"),session.get("role")))
+</style><div class="dash-head"><div><h1>Dashboard</h1><p class="muted">Accesso come <b>{{role_label}}</b> · panoramica operativa aggiornata.</p></div><div class="quick-actions"><a class="success" href="{{url_for('price_check')}}">💰 Assistente banco</a><a class="view" href="{{url_for('cart')}}">🛒 Carrello</a><a class="secondary" href="{{url_for('products')}}">📦 Prodotti</a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite · {{today.pieces}} pezzi</span></div><div class="kpi"><strong>Ultimi 7 giorni</strong><div class="metric">€ {{'%.2f'|format(week_revenue)}}</div><span class="muted">Valore vendite confermate</span></div><div class="kpi"><strong>Pezzi disponibili</strong><div class="metric">{{p}}</div><span class="muted">{{r}} referenze attive</span></div><div class="kpi"><strong>Scorte critiche</strong><div class="metric">{{l}}</div><span class="muted">Quantità ≤ 1</span></div></div><div class="dash-two"><div><div class="card"><h2>⚠️ Da controllare</h2>{% if low_stock %}{% for x in low_stock %}<div class="stock-row"><div><b>{{x.brand_code}}</b><br><small class="muted">{{x.category or 'Altro'}}{% if x.location %} · 📍 {{x.location}}{% endif %}</small></div><span class="stock-pill {% if x.quantity<=0 %}stock-zero{% endif %}">{{x.quantity}} pz</span></div>{% endfor %}<p><a href="{{url_for('products')}}">Apri il magazzino →</a></p>{% else %}<div class="empty-mini">Nessuna scorta critica.</div>{% endif %}</div><div class="card"><h2>🏆 Più venduti · 30 giorni</h2>{% if top_products %}{% for x in top_products %}<div class="top-row"><div><span class="rank">{{loop.index}}</span><b>{{x.product_code}}</b></div><div style="text-align:right"><b>{{x.pieces}} pz</b><br><small class="muted">€ {{'%.2f'|format(x.revenue)}}</small></div></div>{% endfor %}{% else %}<div class="empty-mini">Non ci sono ancora vendite nel periodo.</div>{% endif %}</div></div><div><div class="card"><h2>🧾 Ultime vendite</h2>{% if recent_sales %}{% for x in recent_sales %}<div class="sale-row"><div><b>{{x.sale_number or 'Vendita'}}</b><br><small class="muted">{{x.created_at|rome_time}} · {{x.username}}<br>{{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</small></div><div style="text-align:right"><b>€ {{'%.2f'|format(x.total)}}</b><br><small>{{x.pieces}} pz</small></div></div>{% endfor %}<p><a href="{{url_for('sales_log')}}">Registro completo →</a></p>{% else %}<div class="empty-mini">Nessuna vendita registrata.</div>{% endif %}</div><div class="card"><h2>📘 Ordinabili</h2><p>Consulta il catalogo fornitore e crea ordini cliente con consegna indicativa 15–20 giorni.</p><a class="view" href="{{url_for('supplier_catalog')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block;font-weight:bold">Apri catalogo</a></div></div></div>{% if role == 'seller' and my_sales %}<div class="card"><h3>Le tue ultime operazioni</h3>{% for x in my_sales %}<p><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}}<br><span class="muted">{{x.created_at|rome_time}}</span></p>{% endfor %}</div>{% endif %}{% if recent %}<div class="card"><h3>Storico amministrativo recente</h3>{% for x in recent %}<p><b>{{x.username}}</b> · {{x.action}}{% if x.product_code %} · {{x.product_code}}{% endif %}<br><span class="muted">{{x.created_at|rome_time}} {{x.details or ''}}</span></p>{% endfor %}</div>{% endif %}''',r=r,p=p,l=l,f=f,today=today,week_revenue=week_revenue,low_stock=low_stock,top_products=top_products,recent_sales=recent_sales,recent=recent,my_sales=my_sales,role=session.get("role"),role_label=ROLE_LABELS.get(session.get("role"),session.get("role")))
 
 @app.get("/price-check")
 @login_required
@@ -945,7 +970,7 @@ def public_catalog_order(catalog_id):
         if not name or not phone: flash("Inserisci nome e telefono.")
         else:
             with connect() as db:
-                number=f"ORD-CAT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
+                number=f"ORD-CAT-{now_rome().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
                 db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,'Da ordinare','Boutique')""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"]))
                 db.commit()
             return public_page("Richiesta ricevuta","""<div class='client-card'><h1 class='luxury-title'>Richiesta ricevuta</h1><p>Codice <b>{{number}}</b>. Ti contatteremo per conferma. Consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla boutique</a></div>""",number=number)
@@ -983,7 +1008,7 @@ def request_catalog_item(catalog_id):
     with connect() as db:
         c=db.execute("SELECT * FROM supplier_catalog WHERE id=? AND active=1 AND excluded=0",(catalog_id,)).fetchone()
         if not c: flash("Articolo non disponibile nel catalogo."); return redirect(url_for("supplier_catalog"))
-        number=f"ORD-CAT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
+        number=f"ORD-CAT-{now_rome().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
         db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,created_by)
                       VALUES(?,?,?,?,?,?,?,?,?,?)""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"],session.get("user","sconosciuto")))
         db.execute("INSERT INTO audit_log(username,action,product_code,details) VALUES(?,?,?,?)",(session.get("user","sconosciuto"),"Ordine articolo da catalogo",c["brand_code"],f"{number}; cliente {name}; quantità {qty}"))
@@ -995,7 +1020,7 @@ def request_catalog_item(catalog_id):
 @role_required("admin","manager")
 def catalog_requests():
     with connect() as db: rows=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY id DESC LIMIT 500").fetchall()
-    return page("Richieste catalogo",'''<h1>📦 Ordini da catalogo</h1><div class="card">{% for x in rows %}<p><b>{{x.request_number}}</b> · {{x.brand_code}} / {{x.supplier_code}} · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price*x.quantity)}}<br>{{x.customer_name}} · {{x.customer_phone}} · <b>{{x.status}}</b><br><span class="muted">{{x.created_at}} · {{x.notes or ''}}</span></p><hr>{% else %}<p>Nessuna richiesta.</p>{% endfor %}</div>''',rows=rows)
+    return page("Richieste catalogo",'''<h1>📦 Ordini da catalogo</h1><div class="card">{% for x in rows %}<p><b>{{x.request_number}}</b> · {{x.brand_code}} / {{x.supplier_code}} · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price*x.quantity)}}<br>{{x.customer_name}} · {{x.customer_phone}} · <b>{{x.status}}</b><br><span class="muted">{{x.created_at|rome_time}} · {{x.notes or ''}}</span></p><hr>{% else %}<p>Nessuna richiesta.</p>{% endfor %}</div>''',rows=rows)
 
 @app.get("/search")
 @login_required
@@ -1008,7 +1033,7 @@ def universal_search():
             if session.get("role") in ("admin","manager"):
                 sales=db.execute("SELECT * FROM sales WHERE product_code LIKE ? OR COALESCE(sale_number,'') LIKE ? OR username LIKE ? ORDER BY id DESC LIMIT 20",(like,like,like)).fetchall()
                 orders=db.execute("SELECT * FROM customer_orders WHERE order_number LIKE ? OR customer_name LIKE ? OR customer_phone LIKE ? OR COALESCE(customer_email,'') LIKE ? ORDER BY id DESC LIMIT 20",(like,like,like,like)).fetchall()
-    return page("Ricerca globale",'''<h1>🔎 Ricerca globale</h1><div class="card"><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Prodotto, codice, cliente, vendita o ordine" autofocus required><button>Cerca ovunque</button></form></div>{% if q %}<div class="card"><h2>Prodotti ({{products|length}})</h2>{% for p in products %}<p><a href="{{url_for('product_detail',product_id=p.id)}}"><b>{{p.brand_code}}</b></a> · {{p.supplier_code}} · € {{'%.2f'|format(p.price)}} · {{p.quantity}} pz {% if not p.active %}<span class="badge">archiviato</span>{% endif %}</p>{% else %}<p class="muted">Nessun prodotto.</p>{% endfor %}</div>{% if role in ('admin','manager') %}<div class="card"><h2>Vendite ({{sales|length}})</h2>{% for x in sales %}<p><b>{{x.sale_number or '-'}}</b> · {{x.product_code}} · {{x.quantity}} pz · {{x.created_at}}</p>{% else %}<p class="muted">Nessuna vendita.</p>{% endfor %}</div><div class="card"><h2>Ordini clienti ({{orders|length}})</h2>{% for x in orders %}<p><b>{{x.order_number}}</b> · {{x.customer_name}} · {{x.status}} · € {{'%.2f'|format(x.total)}}</p>{% else %}<p class="muted">Nessun ordine.</p>{% endfor %}</div>{% endif %}{% endif %}''',q=q,products=products,sales=sales,orders=orders,role=session.get("role"))
+    return page("Ricerca globale",'''<h1>🔎 Ricerca globale</h1><div class="card"><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Prodotto, codice, cliente, vendita o ordine" autofocus required><button>Cerca ovunque</button></form></div>{% if q %}<div class="card"><h2>Prodotti ({{products|length}})</h2>{% for p in products %}<p><a href="{{url_for('product_detail',product_id=p.id)}}"><b>{{p.brand_code}}</b></a> · {{p.supplier_code}} · € {{'%.2f'|format(p.price)}} · {{p.quantity}} pz {% if not p.active %}<span class="badge">archiviato</span>{% endif %}</p>{% else %}<p class="muted">Nessun prodotto.</p>{% endfor %}</div>{% if role in ('admin','manager') %}<div class="card"><h2>Vendite ({{sales|length}})</h2>{% for x in sales %}<p><b>{{x.sale_number or '-'}}</b> · {{x.product_code}} · {{x.quantity}} pz · {{x.created_at|rome_time}}</p>{% else %}<p class="muted">Nessuna vendita.</p>{% endfor %}</div><div class="card"><h2>Ordini clienti ({{orders|length}})</h2>{% for x in orders %}<p><b>{{x.order_number}}</b> · {{x.customer_name}} · {{x.status}} · € {{'%.2f'|format(x.total)}}</p>{% else %}<p class="muted">Nessun ordine.</p>{% endfor %}</div>{% endif %}{% endif %}''',q=q,products=products,sales=sales,orders=orders,role=session.get("role"))
 
 @app.post("/products/<int:product_id>/delete")
 @role_required("admin")
@@ -1034,7 +1059,7 @@ def users():
                 flash("Utente creato.")
             except sqlite3.IntegrityError: flash("Username già esistente.")
     with connect() as db: rows=db.execute("SELECT id,username,role,active,created_at FROM users ORDER BY username").fetchall()
-    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at or '-'}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="6" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at|rome_time}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="6" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
 
 @app.post("/users/<int:user_id>/toggle")
 @role_required("admin")
@@ -1064,7 +1089,7 @@ def backup_database():
     if not os.path.exists(DB_PATH):
         flash("Database non trovato.")
         return redirect(url_for("dashboard"))
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = now_rome().strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(BACKUP_DIR, f"gestionale_tbs_backup_{stamp}.db")
     make_consistent_backup(backup_path)
     with connect() as db:
@@ -1088,7 +1113,7 @@ def system_status():
             if not valid:
                 flash(f"Ripristino annullato: database non valido ({detail}).")
                 return redirect(url_for("system_status"))
-            safety = os.path.join(BACKUP_DIR, f"prima_ripristino_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+            safety = os.path.join(BACKUP_DIR, f"prima_ripristino_{now_rome().strftime('%Y%m%d_%H%M%S')}.db")
             if os.path.exists(DB_PATH):
                 make_consistent_backup(safety)
             os.replace(temp_path, DB_PATH)
@@ -1108,7 +1133,7 @@ def system_status():
             except sqlite3.Error:
                 counts[table] = 0
     backups = sorted(Path(BACKUP_DIR).glob("*.db"), key=lambda x: x.stat().st_mtime, reverse=True)
-    last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime).strftime("%d/%m/%Y %H:%M") if backups else None
+    last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime, tz=ROME_TZ).strftime("%d/%m/%Y %H:%M") if backups else None
     size_mb = os.path.getsize(DB_PATH) / (1024 * 1024) if os.path.exists(DB_PATH) else 0
     storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
     body = '''<h1>Stato del sistema</h1>
@@ -1138,7 +1163,7 @@ def sales_log():
         rows=db.execute(sql,params).fetchall()
         total_qty=sum(x["quantity"] for x in rows)
         total_value=sum(x["quantity"]*x["unit_price"] for x in rows)
-    return page("Vendite",'''<h1>Registro vendite</h1><div class="card"><form class="inline" method="get"><input name="user" value="{{user_filter}}" placeholder="Venditore"><input name="code" value="{{code_filter}}" placeholder="Codice prodotto"><button>Filtra</button></form></div><div class="grid"><div class="card"><div class="muted">Pezzi registrati</div><div class="metric">{{total_qty}}</div></div><div class="card"><div class="muted">Valore registrato</div><div class="metric">€ {{'%.2f'|format(total_value)}}</div></div></div><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.sale_number or '-'}}</b> · {{x.created_at}} · {{x.username}}<br><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}} cad. · {{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</p><hr>{% endfor %}{% else %}<p>Nessuna vendita registrata.</p>{% endif %}</div>''',rows=rows,user_filter=user_filter,code_filter=code_filter,total_qty=total_qty,total_value=total_value)
+    return page("Vendite",'''<h1>Registro vendite</h1><div class="card"><form class="inline" method="get"><input name="user" value="{{user_filter}}" placeholder="Venditore"><input name="code" value="{{code_filter}}" placeholder="Codice prodotto"><button>Filtra</button></form></div><div class="grid"><div class="card"><div class="muted">Pezzi registrati</div><div class="metric">{{total_qty}}</div></div><div class="card"><div class="muted">Valore registrato</div><div class="metric">€ {{'%.2f'|format(total_value)}}</div></div></div><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.sale_number or '-'}}</b> · {{x.created_at|rome_time}} · {{x.username}}<br><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}} cad. · {{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</p><hr>{% endfor %}{% else %}<p>Nessuna vendita registrata.</p>{% endif %}</div>''',rows=rows,user_filter=user_filter,code_filter=code_filter,total_qty=total_qty,total_value=total_value)
 
 @app.route("/reorders",methods=["GET","POST"])
 @role_required("admin","manager")
@@ -1155,7 +1180,7 @@ def reorders():
     with connect() as db:
         rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.quantity AS stock,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
         history=db.execute("SELECT o.*,COUNT(i.id) AS lines,COALESCE(SUM(i.quantity),0) AS pieces FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
-    return page("Riordini",'''<h1>Riordini fornitore</h1><div class="card"><p>Le quantità aumentano automaticamente con ogni vendita. Puoi correggerle prima del PDF.</p>{% if rows %}<form method="post">{% for x in rows %}<div class="inline"><div><b>{{x.supplier_code}}</b><br><span class="muted">{{x.brand_code}} · magazzino {{x.stock}}</span></div><input name="qty_{{x.id}}" type="number" min="0" value="{{x.reorder_qty}}"></div><hr>{% endfor %}<button>Salva quantità</button></form><form method="post" action="{{url_for('generate_reorder_pdf')}}" onsubmit="return confirm('Generare il PDF e archiviare queste quantità?')"><button class="success">Genera PDF ordine</button></form>{% else %}<p>Nessun prodotto da riordinare.</p>{% endif %}</div><div class="card"><h3>Storico ordini</h3>{% if history %}{% for o in history %}<p><b>{{o.order_number}}</b> · {{o.created_at}} · {{o.status}} · {{o.lines}} codici · {{o.pieces}} pezzi{% if o.status != 'Ricevuto' %}<form method="post" action="{{url_for('receive_order',order_id=o.id)}}" onsubmit="return confirm('Confermi la ricezione? Le quantità saranno caricate in magazzino.')"><button class="secondary">Segna ricevuto e carica merce</button></form>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessun ordine generato.</p>{% endif %}</div>''',rows=rows,history=history)
+    return page("Riordini",'''<h1>Riordini fornitore</h1><div class="card"><p>Le quantità aumentano automaticamente con ogni vendita. Puoi correggerle prima del PDF.</p>{% if rows %}<form method="post">{% for x in rows %}<div class="inline"><div><b>{{x.supplier_code}}</b><br><span class="muted">{{x.brand_code}} · magazzino {{x.stock}}</span></div><input name="qty_{{x.id}}" type="number" min="0" value="{{x.reorder_qty}}"></div><hr>{% endfor %}<button>Salva quantità</button></form><form method="post" action="{{url_for('generate_reorder_pdf')}}" onsubmit="return confirm('Generare il PDF e archiviare queste quantità?')"><button class="success">Genera PDF ordine</button></form>{% else %}<p>Nessun prodotto da riordinare.</p>{% endif %}</div><div class="card"><h3>Storico ordini</h3>{% if history %}{% for o in history %}<p><b>{{o.order_number}}</b> · {{o.created_at|rome_time}} · {{o.status}} · {{o.lines}} codici · {{o.pieces}} pezzi{% if o.status != 'Ricevuto' %}<form method="post" action="{{url_for('receive_order',order_id=o.id)}}" onsubmit="return confirm('Confermi la ricezione? Le quantità saranno caricate in magazzino.')"><button class="secondary">Segna ricevuto e carica merce</button></form>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessun ordine generato.</p>{% endif %}</div>''',rows=rows,history=history)
 
 @app.post("/reorders/pdf")
 @role_required("admin","manager")
@@ -1172,7 +1197,7 @@ def generate_reorder_pdf():
         log_action(db,"PDF ordine fornitore generato",details=order_number); db.commit()
     buffer=BytesIO(); pdf=canvas.Canvas(buffer,pagesize=A4); width,height=A4; y=height-55
     pdf.setTitle(order_number); pdf.setFont("Helvetica-Bold",16); pdf.drawString(45,y,"ORDINE FORNITORE"); y-=25
-    pdf.setFont("Helvetica",10); pdf.drawString(45,y,f"Ordine: {order_number}"); pdf.drawRightString(width-45,y,datetime.now().strftime("%d/%m/%Y")); y-=32
+    pdf.setFont("Helvetica",10); pdf.drawString(45,y,f"Ordine: {order_number}"); pdf.drawRightString(width-45,y,now_rome().strftime("%d/%m/%Y")); y-=32
     pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=8; pdf.line(45,y,width-45,y); y-=20
     pdf.setFont("Helvetica",11); total=0
     for x in rows:
@@ -1198,7 +1223,7 @@ def receive_order(order_id):
 @role_required("admin")
 def audit_log():
     with connect() as db: rows=db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").fetchall()
-    return page("Storico",'''<h1>Storico operazioni</h1><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at}}</b> · {{x.username}} · {{x.action}}{% if x.product_code %} · <b>{{x.product_code}}</b>{% endif %}{% if x.details %}<br><span class="muted">{{x.details}}</span>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessuna operazione registrata.</p>{% endif %}</div>''',rows=rows)
+    return page("Storico",'''<h1>Storico operazioni</h1><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at|rome_time}}</b> · {{x.username}} · {{x.action}}{% if x.product_code %} · <b>{{x.product_code}}</b>{% endif %}{% if x.details %}<br><span class="muted">{{x.details}}</span>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessuna operazione registrata.</p>{% endif %}</div>''',rows=rows)
 
 init_db()
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
