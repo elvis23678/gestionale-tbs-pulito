@@ -1,4 +1,6 @@
 import base64
+import hashlib
+import secrets
 import os
 import sqlite3
 import csv
@@ -15,6 +17,9 @@ from flask import Flask, flash, redirect, render_template_string, request, sessi
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code128, qr
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CATALOG_IMAGES_ARCHIVE = os.path.join(APP_DIR, "catalog_images.zip")
@@ -76,7 +81,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v9.1 SICUREZZA E CARRELLI"
+APP_VERSION = "v9.1.1 BADGE LOGIN"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -392,6 +397,9 @@ def init_db():
         ensure_column(db,"users","role","TEXT NOT NULL DEFAULT 'seller'")
         ensure_column(db,"users","active","INTEGER NOT NULL DEFAULT 1")
         ensure_column(db,"users","created_at","TEXT DEFAULT CURRENT_TIMESTAMP")
+        ensure_column(db,"users","badge_token_hash","TEXT")
+        ensure_column(db,"users","badge_created_at","TEXT")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_badge_token_hash ON users(badge_token_hash) WHERE badge_token_hash IS NOT NULL")
         ensure_column(db,"sales","sale_number","TEXT")
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
@@ -463,6 +471,52 @@ def log_action(db, action, product=None, details=""):
         product["brand_code"] if product else None,
         details
     ))
+
+
+BADGE_PREFIX = "TBSLOGIN:"
+
+def badge_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+def normalize_badge_payload(value):
+    value=(value or "").strip()
+    if value.upper().startswith(BADGE_PREFIX):
+        value=value[len(BADGE_PREFIX):]
+    return value.strip()
+
+def find_badge_user(db, payload):
+    token=normalize_badge_payload(payload)
+    if not token:
+        return None
+    return db.execute("SELECT * FROM users WHERE badge_token_hash=? AND active=1",(badge_hash(token),)).fetchone()
+
+def start_user_session(db, user, audit_action="Login badge"):
+    session.clear(); session.permanent=True
+    session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
+    log_action(db,audit_action); db.commit()
+
+def badge_scanner_html(target_url, button_label="Scansiona badge"):
+    return '''<div class="card badge-login"><h3>Accesso rapido con badge</h3><p class="muted">Inquadra il QR con la webcam oppure usa un lettore barcode USB.</p><video id="badgeVideo" playsinline muted style="display:none;width:100%;max-height:300px;border-radius:12px;background:#111"></video><form id="badgeForm" method="post" action="{target}"><input id="badgePayload" name="badge_payload" placeholder="Scansiona o inserisci il codice badge" autocomplete="off"><button type="submit">{label}</button></form><div class="actions"><button type="button" class="view" id="startBadgeCamera">📷 Avvia webcam</button><button type="button" class="secondary" id="stopBadgeCamera" style="display:none">Ferma webcam</button></div><p id="badgeStatus" class="muted"></p></div><script>(function(){{const video=document.getElementById('badgeVideo'),start=document.getElementById('startBadgeCamera'),stop=document.getElementById('stopBadgeCamera'),field=document.getElementById('badgePayload'),form=document.getElementById('badgeForm'),status=document.getElementById('badgeStatus');let stream=null,running=false,detector=null;async function halt(){{running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.style.display='none';stop.style.display='none';start.style.display='inline-block'}}async function scan(){{if(!running||!detector)return;try{{const codes=await detector.detect(video);if(codes.length){{field.value=codes[0].rawValue;status.textContent='Badge letto. Accesso in corso…';await halt();form.submit();return}}}}catch(e){{status.textContent='Lettura non riuscita: '+e.message}}requestAnimationFrame(scan)}}start.addEventListener('click',async()=>{{if(!('BarcodeDetector' in window)){{status.textContent='Browser non compatibile con la scansione nativa. Usa Chrome aggiornato o un lettore USB.';field.focus();return}}try{{detector=new BarcodeDetector({{formats:['qr_code','code_128']}});stream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}}}});video.srcObject=stream;await video.play();running=true;video.style.display='block';start.style.display='none';stop.style.display='inline-block';status.textContent='Inquadra il badge';scan()}}catch(e){{status.textContent='Webcam non disponibile o permesso negato.'}}}});stop.addEventListener('click',halt);field.addEventListener('input',()=>{{if(field.value.trim().length>20){{clearTimeout(field._t);field._t=setTimeout(()=>form.submit(),180)}}}});window.addEventListener('beforeunload',halt);}})();</script>'''.format(target=target_url,label=button_label)
+
+def create_badge_pdf(username, role, token):
+    payload=BADGE_PREFIX+token
+    output=BytesIO()
+    width,height=340,215
+    c=canvas.Canvas(output,pagesize=(width,height))
+    c.setTitle(f"Badge TBS - {username}")
+    c.setFont("Helvetica-Bold",18); c.drawString(18,height-30,"TBS Boutique Management")
+    c.setFont("Helvetica-Bold",22); c.drawString(18,height-62,username)
+    c.setFont("Helvetica",11); c.drawString(18,height-80,ROLE_LABELS.get(role,role))
+    widget=qr.QrCodeWidget(payload)
+    bounds=widget.getBounds(); size=92; scale=size/max(bounds[2]-bounds[0],bounds[3]-bounds[1])
+    drawing=Drawing(size,size,transform=[scale,0,0,scale,0,0]); drawing.add(widget)
+    renderPDF.draw(drawing,c,width-size-16,height-size-16)
+    barcode=code128.Code128(payload,barHeight=34,barWidth=0.62,humanReadable=False)
+    barcode.drawOn(c,18,30)
+    c.setFont("Helvetica",7); c.drawString(18,18,payload)
+    c.setFont("Helvetica-Oblique",7); c.drawString(18,8,"Personale e riservato. In caso di smarrimento revocare il badge.")
+    c.showPage(); c.save(); output.seek(0)
+    return output
 
 def suspend_current_cart(db, reason="Blocco cassa"):
     raw=dict(session.get("cart",{}))
@@ -843,12 +897,21 @@ def treasury_count():
 def login():
     if request.method=="POST":
         with connect() as db:
-            user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form["username"].strip(),)).fetchone()
-            if user and check_password_hash(user["password_hash"],request.form["password"]):
-                session.clear(); session.permanent=True; session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
-                log_action(db,"Login"); db.commit(); return redirect(url_for("dashboard"))
-        flash("Credenziali non corrette o account disattivato.")
-    return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form><p class="muted">Blocco automatico dopo {{minutes}} minuti.</p></div>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60))
+            badge_payload=request.form.get("badge_payload","")
+            if badge_payload:
+                user=find_badge_user(db,badge_payload)
+                if user:
+                    start_user_session(db,user,"Login badge")
+                    return redirect(url_for("dashboard"))
+                flash("Badge non valido, revocato o account disattivato.")
+            else:
+                user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
+                if user and check_password_hash(user["password_hash"],request.form.get("password","")):
+                    start_user_session(db,user,"Login")
+                    return redirect(url_for("dashboard"))
+                flash("Credenziali non corrette o account disattivato.")
+    scanner=badge_scanner_html(url_for("login"),"Accedi con badge")
+    return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form><p class="muted">Blocco automatico dopo {{minutes}} minuti.</p></div>{{scanner|safe}}''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
 
 @app.get("/lock")
 @login_required
@@ -866,18 +929,21 @@ def unlock_register():
     locked_user_id=session.get("locked_user_id"); locked_username=session.get("locked_username"); locked_cart_id=session.get("locked_cart_id")
     if request.method=="POST":
         with connect() as db:
-            user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
-            if user and check_password_hash(user["password_hash"],request.form.get("password","")):
+            badge_payload=request.form.get("badge_payload","")
+            user=find_badge_user(db,badge_payload) if badge_payload else db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
+            valid=bool(user) if badge_payload else bool(user and check_password_hash(user["password_hash"],request.form.get("password","")))
+            if valid:
                 same_user=user["id"]==locked_user_id
                 session.clear(); session.permanent=True; session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
                 if same_user and locked_cart_id:
                     restored=restore_suspended_cart(db,locked_cart_id)
                     if restored: session["cart"]=restored[0]
-                log_action(db,"Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
+                log_action(db,"Sblocco cassa con badge" if badge_payload else "Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
                 return redirect(url_for("cart") if same_user and locked_cart_id else url_for("dashboard"))
-        flash("Credenziali non corrette o account disattivato.")
-    return page("Cassa bloccata",'''<div class="login card" style="text-align:center;max-width:520px"><div style="font-size:54px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}<form method="post"><p><input name="username" value="{{locked_username}}" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></div>''',locked_username=locked_username,has_cart=bool(locked_cart_id))
+        flash("Badge o credenziali non validi; account eventualmente disattivato.")
+    scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge")
+    return page("Cassa bloccata",'''<div class="login card" style="text-align:center;max-width:520px"><div style="font-size:54px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}<form method="post"><p><input name="username" value="{{locked_username}}" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></div>{{scanner|safe}}''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
 
 @app.get("/logout")
 def logout():
@@ -1333,8 +1399,33 @@ def users():
                     db.execute("INSERT INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(username,generate_password_hash(password),role)); log_action(db,"Utente creato",details=f"{username} · {ROLE_LABELS[role]}"); db.commit()
                 flash("Utente creato.")
             except sqlite3.IntegrityError: flash("Username già esistente.")
-    with connect() as db: rows=db.execute("SELECT id,username,role,active,created_at FROM users ORDER BY username").fetchall()
-    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at|rome_time}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+    with connect() as db: rows=db.execute("SELECT id,username,role,active,created_at,badge_token_hash,badge_created_at FROM users ORDER BY username").fetchall()
+    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account e badge</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at|rome_time}} · Badge: {% if u.badge_token_hash %}attivo dal {{u.badge_created_at|rome_time}}{% else %}non generato{% endif %}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('generate_user_badge',user_id=u.id)}}" onsubmit="return confirm('Generare un nuovo badge? Il precedente verrà invalidato.')"><button class="success">{% if u.badge_token_hash %}Rigenera e stampa badge{% else %}Genera e stampa badge{% endif %}</button></form>{% if u.badge_token_hash %}<form method="post" action="{{url_for('revoke_user_badge',user_id=u.id)}}" onsubmit="return confirm('Revocare il badge di {{u.username}}?')"><button class="danger">Revoca badge</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+
+@app.post("/users/<int:user_id>/badge/generate")
+@role_required("admin")
+def generate_user_badge(user_id):
+    token=secrets.token_urlsafe(32)
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+        if not u:
+            flash("Utente non trovato."); return redirect(url_for("users"))
+        db.execute("UPDATE users SET badge_token_hash=?,badge_created_at=CURRENT_TIMESTAMP WHERE id=?",(badge_hash(token),user_id))
+        log_action(db,"Badge utente generato",details=u["username"]); db.commit()
+        pdf=create_badge_pdf(u["username"],u["role"],token)
+    safe_name="".join(ch for ch in u["username"] if ch.isalnum() or ch in "-_ " ).strip().replace(" ","_") or f"utente_{user_id}"
+    return send_file(pdf,as_attachment=True,download_name=f"badge_TBS_{safe_name}.pdf",mimetype="application/pdf")
+
+@app.post("/users/<int:user_id>/badge/revoke")
+@role_required("admin")
+def revoke_user_badge(user_id):
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+        if u:
+            db.execute("UPDATE users SET badge_token_hash=NULL,badge_created_at=NULL WHERE id=?",(user_id,))
+            log_action(db,"Badge utente revocato",details=u["username"]); db.commit(); flash("Badge revocato.")
+        else: flash("Utente non trovato.")
+    return redirect(url_for("users"))
 
 @app.post("/users/<int:user_id>/toggle")
 @role_required("admin")
