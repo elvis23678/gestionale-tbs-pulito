@@ -49,7 +49,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-APP_VERSION = "v8.1 VARIANTI STABILI"
+APP_VERSION = "v8.2 ARCHIVIO PERSISTENTE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -68,9 +68,18 @@ BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def bootstrap_database_file():
-    """Copia il backup iniziale soltanto quando il database non esiste ancora."""
+    """Inizializza il database senza sovrascrivere mai quello persistente."""
     if os.path.exists(DB_PATH):
         return
+
+    # Utile quando si passa al disco persistente senza aver ancora riavviato
+    # il servizio: copia l'eventuale database temporaneo esistente.
+    legacy_tmp = "/tmp/gestionale_tbs.db"
+    if not DB_IS_EPHEMERAL and os.path.isfile(legacy_tmp):
+        shutil.copy2(legacy_tmp, DB_PATH)
+        print(f"Database migrato da {legacy_tmp} a {DB_PATH}")
+        return
+
     if os.path.isfile(SEED_DB_PATH):
         shutil.copy2(SEED_DB_PATH, DB_PATH)
         print(f"Database iniziale ripristinato da {SEED_DB_PATH}")
@@ -433,7 +442,7 @@ def public_page(title, body, **ctx):
     return render_template_string(PUBLIC_BASE,title=title,css=PUBLIC_CSS,logo=BRAND_LOGO,cart_count=count,body=render_template_string(body,**ctx))
 
 @app.get("/health")
-def health(): return {"status":"ok","version":"7.0-boutique-pro","database":DB_PATH}
+def health(): return {"status":"ok","version":APP_VERSION,"database":DB_PATH,"persistent":not DB_IS_EPHEMERAL}
 
 
 @app.get("/")
@@ -1101,7 +1110,7 @@ def system_status():
     backups = sorted(Path(BACKUP_DIR).glob("*.db"), key=lambda x: x.stat().st_mtime, reverse=True)
     last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime).strftime("%d/%m/%Y %H:%M") if backups else None
     size_mb = os.path.getsize(DB_PATH) / (1024 * 1024) if os.path.exists(DB_PATH) else 0
-    storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente/configurato"
+    storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
     body = '''<h1>Stato del sistema</h1>
     <div class="grid">
       <div class="card"><div class="muted">Database</div><div class="metric">{{ "OK" if valid else "ERRORE" }}</div><p>{{ integrity }}</p></div>
@@ -1111,7 +1120,7 @@ def system_status():
     </div>
     <div class="card"><h3>Contenuto</h3><p>Utenti: <b>{{ counts.users }}</b> · Prodotti: <b>{{ counts.products }}</b> · Vendite: <b>{{ counts.sales }}</b> · Ordini clienti: <b>{{ counts.customer_orders }}</b> · Ordini fornitore: <b>{{ counts.supplier_orders }}</b> · Catalogo: <b>{{ counts.supplier_catalog }}</b></p></div>
     {% if ephemeral %}<div class="card" style="border-left:5px solid #b45309"><h3>Intervento necessario</h3><p>Il database si trova in <code>/tmp</code>: Render può cancellarlo durante riavvii o deploy. Prima di usare questa versione in produzione configura un disco persistente montato su <code>/var/data</code>, oppure imposta <code>DATABASE_PATH</code> verso uno spazio persistente.</p></div>{% endif %}
-    <div class="card"><h3>Backup e ripristino</h3><p><a href="{{ url_for('backup_database') }}">Scarica backup verificato</a></p><form method="post" enctype="multipart/form-data" onsubmit="return confirm('Confermi il ripristino? Il database attuale sarà salvato prima della sostituzione.')"><label>Ripristina un backup SQLite</label><input type="file" name="database" accept=".db,.sqlite,.sqlite3" required><button class="secondary">Verifica e ripristina</button></form></div>'''
+    <div class="card"><h3>Backup e ripristino</h3>{% if not ephemeral %}<p><b>Protezione attiva:</b> database e backup locali sono salvati sul disco persistente.</p>{% endif %}<p><a href="{{ url_for('backup_database') }}">Scarica backup verificato</a></p><form method="post" enctype="multipart/form-data" onsubmit="return confirm('Confermi il ripristino? Il database attuale sarà salvato prima della sostituzione.')"><label>Ripristina un backup SQLite</label><input type="file" name="database" accept=".db,.sqlite,.sqlite3" required><button class="secondary">Verifica e ripristina</button></form></div>'''
     return page("Stato sistema", body, valid=valid, integrity=integrity, storage=storage, db_path=DB_PATH, version=APP_VERSION, size_mb=size_mb, last_backup=last_backup, counts=counts, ephemeral=DB_IS_EPHEMERAL)
 
 @app.get("/sales")
