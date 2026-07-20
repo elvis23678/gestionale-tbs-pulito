@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v10.6 FIX DEPLOY HEALTH"
+APP_VERSION = "v11.1 ETICHETTE QR PIEGHEVOLI"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -525,18 +525,18 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     auto_value = "true" if auto_start else "false"
     return r'''<div class="card badge-login" style="max-width:520px;margin:20px auto;text-align:center">
 <h2 style="margin-top:0">📷 Inquadra il badge</h2>
-<p class="muted">Premi “Avvia fotocamera” e mostra il QR nel riquadro.</p>
+<p class="muted">La fotocamera si avvia automaticamente. Inquadra il QR nel riquadro.</p>
 <div style="position:relative;overflow:hidden;border-radius:16px;background:#111;min-height:250px">
   <video id="badgeVideo" playsinline webkit-playsinline muted autoplay style="width:100%;height:300px;object-fit:cover;display:block;background:#111"></video>
   <canvas id="badgeCanvas" style="display:none"></canvas>
   <div id="badgeGuide" style="position:absolute;inset:16%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div>
 </div>
 <form id="badgeForm" method="post" action="{target}" style="margin-top:12px">
-  <input id="badgePayload" name="badge_payload" placeholder="Codice badge o lettore USB" autocomplete="off" inputmode="none">
-  <button type="submit" style="margin-top:8px">{label}</button>
+  <input id="badgePayload" name="badge_payload" placeholder="Codice badge o lettore USB" autocomplete="off">
+  <button type="button" id="badgeMainButton" style="margin-top:8px">{label}</button>
+  <button type="submit" id="badgeManualSubmit" class="secondary" style="margin-top:8px;display:none">Invia codice</button>
 </form>
 <div class="actions" style="justify-content:center">
-  <button type="button" class="view" id="startBadgeCamera">📷 Avvia fotocamera</button>
   <button type="button" class="secondary" id="stopBadgeCamera" style="display:none">Ferma fotocamera</button>
 </div>
 <p id="badgeStatus" class="muted" aria-live="polite">Fotocamera non avviata.</p>
@@ -546,7 +546,8 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
   const video=document.getElementById('badgeVideo');
   const canvas=document.getElementById('badgeCanvas');
   const ctx=canvas.getContext('2d',{{willReadFrequently:true}});
-  const start=document.getElementById('startBadgeCamera');
+  const start=document.getElementById('badgeMainButton');
+  const manualSubmit=document.getElementById('badgeManualSubmit');
   const stop=document.getElementById('stopBadgeCamera');
   const field=document.getElementById('badgePayload');
   const form=document.getElementById('badgeForm');
@@ -571,7 +572,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
   function explainError(err){{
     const name=(err&&err.name)||'';
     if(!window.isSecureContext) return 'Apri il gestionale tramite HTTPS: Safari blocca la fotocamera su connessioni non sicure.';
-    if(name==='NotAllowedError'||name==='PermissionDeniedError') return 'Accesso alla fotocamera negato. In Safari apri le impostazioni del sito, consenti Fotocamera e riprova.';
+    if(name==='NotAllowedError'||name==='PermissionDeniedError') return 'Safari non ha consentito l’avvio automatico. Premi il pulsante principale oppure abilita Fotocamera nelle impostazioni del sito.';
     if(name==='NotFoundError'||name==='DevicesNotFoundError') return 'Nessuna fotocamera disponibile su questo dispositivo.';
     if(name==='NotReadableError'||name==='TrackStartError') return 'La fotocamera è occupata da un’altra applicazione. Chiudila e riprova.';
     if(name==='OverconstrainedError'||name==='ConstraintNotSatisfiedError') return 'La fotocamera non supporta le impostazioni richieste. Riprova.';
@@ -587,6 +588,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     try{{video.pause();video.srcObject=null;}}catch(e){{}}
     stop.style.display='none';
     start.style.display='inline-block';
+    start.disabled=false;
   }}
 
   function submitBadge(value){{
@@ -657,18 +659,37 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     }}
   }}
 
-  start.addEventListener('click',begin);
+  start.addEventListener('click',()=>{{
+    const value=field.value.trim();
+    if(value){{submitBadge(value);return;}}
+    begin();
+  }});
   stop.addEventListener('click',halt);
+  form.addEventListener('submit',(event)=>{{
+    const value=field.value.trim();
+    if(!value){{
+      event.preventDefault();
+      status.textContent='Inquadra il QR oppure inserisci il codice del badge.';
+      begin();
+    }}
+  }});
   field.addEventListener('input',()=>{{
     const v=field.value.trim();
+    manualSubmit.style.display=v?'inline-block':'none';
     if(v.length>20){{clearTimeout(field._t);field._t=setTimeout(()=>submitBadge(v),120);}}
   }});
   window.addEventListener('pagehide',halt);
   window.addEventListener('beforeunload',halt);
   if({auto}){{
-    window.addEventListener('DOMContentLoaded',()=>{{
-      status.textContent='Premi “Avvia fotocamera” per consentire l’accesso su Safari.';
-    }},{{once:true}});
+    const autoBegin=()=>{{
+      status.textContent='Avvio automatico della fotocamera…';
+      begin();
+    }};
+    if(document.readyState==='loading'){{
+      window.addEventListener('DOMContentLoaded',autoBegin,{{once:true}});
+    }}else{{
+      setTimeout(autoBegin,120);
+    }}
   }}
 }})();
 </script>'''.format(target=target_url,label=button_label,auto=auto_value)
@@ -1315,7 +1336,7 @@ def products():
     can_manage=session.get("role") in ("admin","manager"); is_admin=session.get("role")=="admin"
     return page("Prodotti",'''<h1>Prodotti</h1><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
 {% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice brand" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
-<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted">{{p.supplier_code}}</div><span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a><form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form><form method="post" action="{{url_for('change_stock',product_id=p.id)}}" onsubmit="return confirm('Confermi la vendita rapida di 1 pezzo di {{p.brand_code}}?')"><input type="hidden" name="delta" value="-1"><button class="danger" {% if p.quantity<=0 %}disabled{% endif %}>Vendi 1</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status)
+<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted">{{p.supplier_code}}</div><span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a><form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status)
 
 @app.get("/products/<int:product_id>")
 @login_required
@@ -1325,7 +1346,7 @@ def product_detail(product_id):
         variants=db.execute("SELECT * FROM products WHERE UPPER(variant_group)=UPPER(?) ORDER BY active DESC,color,size,stone,brand_code",(p["variant_group"],)).fetchall() if p and p["variant_group"] else []
     if not p: flash("Prodotto non trovato."); return redirect(url_for("products"))
     can_manage=session.get("role") in ("admin","manager")
-    body="""<style>.variant-table{width:100%;border-collapse:collapse}.variant-table th,.variant-table td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left}.variant-table .num{text-align:right}</style><p><a href='{{url_for("products")}}'>← Torna ai prodotti</a></p><div class='card detail'><div>{% if p.photo_data %}<img class='detail-photo' src='{{p.photo_data}}'>{% else %}<div class='no-photo' style='height:350px'>Nessuna foto</div>{% endif %}</div><div><h1>{{p.model_name or p.brand_code}}</h1><div class='price'>€ {{'%.2f'|format(p.price)}}</div><dl><dt>Codice interno</dt><dd>{{p.brand_code}}</dd><dt>Codice fornitore</dt><dd>{{p.supplier_code}}</dd><dt>Gruppo varianti</dt><dd>{{p.variant_group or '-'}}</dd><dt>Quantità</dt><dd>{{p.quantity}}</dd><dt>Materiale</dt><dd>{{p.material or '-'}}</dd><dt>Colore</dt><dd>{{p.color or '-'}}</dd><dt>Misura</dt><dd>{{p.size or '-'}}</dd><dt>Pietra</dt><dd>{{p.stone or '-'}}</dd></dl><div class='actions'>{% if can_manage %}<a class='secondary' href='{{url_for("edit_product",product_id=p.id)}}'>Modifica variante</a>{% if p.variant_group %}<a class='secondary' href='{{url_for("product_variants",product_id=p.id)}}'>Gestisci varianti</a>{% endif %}{% endif %}</div></div></div>{% if variants|length>1 %}<div class='card'><h2>Varianti del modello</h2><div style='overflow:auto'><table class='variant-table'><tr><th>Codice</th><th>Colore</th><th>Misura</th><th>Pietra</th><th class='num'>Prezzo</th><th class='num'>Qtà</th></tr>{% for v in variants %}<tr><td><a href='{{url_for("product_detail",product_id=v.id)}}'><b>{{v.brand_code}}</b></a></td><td>{{v.color or '-'}}</td><td>{{v.size or '-'}}</td><td>{{v.stone or '-'}}</td><td class='num'>€ {{'%.2f'|format(v.price)}}</td><td class='num'>{{v.quantity}}</td></tr>{% endfor %}</table></div></div>{% endif %}"""
+    body="""<style>.variant-table{width:100%;border-collapse:collapse}.variant-table th,.variant-table td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left}.variant-table .num{text-align:right}</style><p><a href='{{url_for("products")}}'>← Torna ai prodotti</a></p><div class='card detail'><div>{% if p.photo_data %}<img class='detail-photo' src='{{p.photo_data}}'>{% else %}<div class='no-photo' style='height:350px'>Nessuna foto</div>{% endif %}</div><div><h1>{{p.model_name or p.brand_code}}</h1><div class='price'>€ {{'%.2f'|format(p.price)}}</div><dl><dt>Codice interno</dt><dd>{{p.brand_code}}</dd><dt>Codice fornitore</dt><dd>{{p.supplier_code}}</dd><dt>Gruppo varianti</dt><dd>{{p.variant_group or '-'}}</dd><dt>Quantità</dt><dd>{{p.quantity}}</dd><dt>Materiale</dt><dd>{{p.material or '-'}}</dd><dt>Colore</dt><dd>{{p.color or '-'}}</dd><dt>Misura</dt><dd>{{p.size or '-'}}</dd><dt>Pietra</dt><dd>{{p.stone or '-'}}</dd></dl><div class='actions'>{% if can_manage %}<a class='secondary' href='{{url_for("edit_product",product_id=p.id)}}'>Modifica variante</a><a class='view' target='_blank' href='{{url_for("product_qr_pdf",product_id=p.id)}}'>Stampa etichette QR</a>{% if p.variant_group %}<a class='secondary' href='{{url_for("product_variants",product_id=p.id)}}'>Gestisci varianti</a>{% endif %}{% endif %}</div></div></div>{% if variants|length>1 %}<div class='card'><h2>Varianti del modello</h2><div style='overflow:auto'><table class='variant-table'><tr><th>Codice</th><th>Colore</th><th>Misura</th><th>Pietra</th><th class='num'>Prezzo</th><th class='num'>Qtà</th></tr>{% for v in variants %}<tr><td><a href='{{url_for("product_detail",product_id=v.id)}}'><b>{{v.brand_code}}</b></a></td><td>{{v.color or '-'}}</td><td>{{v.size or '-'}}</td><td>{{v.stone or '-'}}</td><td class='num'>€ {{'%.2f'|format(v.price)}}</td><td class='num'>{{v.quantity}}</td></tr>{% endfor %}</table></div></div>{% endif %}"""
     return page("Scheda prodotto",body,p=p,variants=variants,can_manage=can_manage)
 
 
@@ -1607,26 +1628,195 @@ def checkout_cart():
     flash(f"Vendita {sale_number} confermata: {pieces} articoli · € {total:.2f}.")
     return redirect(url_for("pos"))
 
+@app.route("/products/<int:product_id>/qr", methods=["GET", "POST"])
+@role_required("admin","manager")
+def product_qr_pdf(product_id):
+    """Configura e genera etichette QR pieghevoli da applicare ai gioielli."""
+    with connect() as db:
+        p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
+        if not p:
+            flash("Prodotto non trovato.")
+            return redirect(url_for("products"))
+
+    payload=(p["brand_code"] or "").strip()
+    if not payload:
+        flash("Il prodotto non ha un codice interno valido.")
+        return redirect(url_for("product_detail",product_id=product_id))
+
+    if request.method == "GET":
+        default_quantity=max(1, int(p["quantity"] or 1))
+        body=r"""
+        <style>
+          .label-config{max-width:760px;margin:auto}
+          .label-preview-wrap{display:grid;grid-template-columns:minmax(280px,1fr) minmax(260px,1fr);gap:24px;align-items:start}
+          .fold-label{width:300px;height:100px;max-width:100%;border:2px dashed #9ca3af;background:#fff;display:grid;grid-template-columns:1fr 1fr;position:relative;margin:18px auto;box-sizing:border-box}
+          .fold-label:after{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:2px dashed #c4932f}
+          .qr-demo{display:flex;align-items:center;justify-content:center;padding:8px}
+          .qr-box{width:72px;height:72px;background:repeating-conic-gradient(#111 0 25%,#fff 0 50%) 50%/14px 14px;border:5px solid #fff;outline:1px solid #111}
+          .tail-demo{display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:13px;text-align:center;padding:8px}
+          .measure{font-size:13px;color:#6b7280;text-align:center}
+          .help-list{line-height:1.7;margin:8px 0 0 18px}
+          .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+          @media(max-width:760px){.label-preview-wrap,.field-grid{grid-template-columns:1fr}.fold-label{width:270px;height:90px}}
+        </style>
+        <p><a href="{{url_for('product_detail',product_id=p.id)}}">← Torna al prodotto</a></p>
+        <div class="card label-config">
+          <h1>Etichette QR pieghevoli</h1>
+          <p class="muted">Etichette sottili da ritagliare, avvolgere intorno al gioiello e richiudere su sé stesse.</p>
+          <div class="label-preview-wrap">
+            <div>
+              <h3>{{p.model_name or p.brand_code}}</h3>
+              <p>
+                <b>Codice interno:</b> {{p.brand_code}}<br>
+                <b>Categoria:</b> {{p.category or '-'}}<br>
+                <b>Materiale:</b> {{p.material or '-'}}<br>
+                <b>Disponibilità:</b> {{p.quantity}}
+              </p>
+              <form method="post">
+                <div class="field-grid">
+                  <label>Numero di etichette
+                    <input type="number" name="quantity" min="1" max="500" value="{{default_quantity}}" required>
+                  </label>
+                  <label>Prima posizione del foglio
+                    <input type="number" name="start_position" min="1" max="54" value="1" required>
+                  </label>
+                </div>
+                <p class="muted">Un foglio contiene 54 posizioni. Usa la posizione iniziale quando il foglio è già parzialmente utilizzato.</p>
+                <button type="submit">Genera PDF etichette</button>
+              </form>
+            </div>
+            <div>
+              <h3>Anteprima reale</h3>
+              <div class="fold-label">
+                <div class="qr-demo"><div class="qr-box" aria-label="Anteprima QR"></div></div>
+                <div class="tail-demo">Parte adesiva<br>da richiudere</div>
+              </div>
+              <div class="measure">30 × 10 mm · piega centrale · QR senza testo</div>
+              <ol class="help-list">
+                <li>Ritaglia lungo il bordo tratteggiato.</li>
+                <li>Avvolgi l'etichetta intorno al gioiello.</li>
+                <li>Piega lungo la linea centrale.</li>
+                <li>Fai aderire le due metà tra loro.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+        """
+        return page("Etichette QR",body,p=p,default_quantity=default_quantity)
+
+    try:
+        quantity=int(request.form.get("quantity","1"))
+        start_position=int(request.form.get("start_position","1"))
+    except (TypeError, ValueError):
+        flash("Quantità o posizione iniziale non valida.")
+        return redirect(url_for("product_qr_pdf",product_id=product_id))
+
+    if quantity < 1 or quantity > 500:
+        flash("Puoi generare da 1 a 500 etichette per volta.")
+        return redirect(url_for("product_qr_pdf",product_id=product_id))
+    if start_position < 1 or start_position > 54:
+        flash("La posizione iniziale deve essere compresa tra 1 e 54.")
+        return redirect(url_for("product_qr_pdf",product_id=product_id))
+
+    buffer=BytesIO()
+    page_w,page_h=A4
+    c=canvas.Canvas(buffer,pagesize=A4)
+
+    columns=6
+    rows=9
+    per_page=columns*rows
+    pitch_x=30*mm
+    pitch_y=30*mm
+    label_w=30*mm
+    label_h=10*mm
+    half_w=label_w/2
+    qr_size=9*mm
+
+    grid_w=columns*pitch_x
+    grid_h=rows*pitch_y
+    origin_x=(page_w-grid_w)/2
+    origin_y=(page_h-grid_h)/2
+
+    def draw_fold_label(slot_index):
+        col=slot_index % columns
+        row=slot_index // columns
+        cell_x=origin_x+col*pitch_x
+        cell_top=page_h-origin_y-row*pitch_y
+        label_x=cell_x+(pitch_x-label_w)/2
+        label_y=cell_top-(pitch_y+label_h)/2
+
+        c.saveState()
+        c.setStrokeColor(colors.HexColor("#9CA3AF"))
+        c.setLineWidth(0.45)
+        c.setDash(1.5,1.2)
+        c.rect(label_x,label_y,label_w,label_h,stroke=1,fill=0)
+
+        c.setStrokeColor(colors.HexColor("#C4932F"))
+        c.setLineWidth(0.55)
+        c.setDash(1.3,1.2)
+        c.line(label_x+half_w,label_y,label_x+half_w,label_y+label_h)
+        c.restoreState()
+
+        qr_widget=qr.QrCodeWidget(payload)
+        qr_widget.barLevel="H"
+        bounds=qr_widget.getBounds()
+        qr_width=bounds[2]-bounds[0]
+        qr_height=bounds[3]-bounds[1]
+        scale=qr_size/max(qr_width,qr_height)
+        drawing=Drawing(qr_size,qr_size,transform=[scale,0,0,scale,0,0])
+        drawing.add(qr_widget)
+
+        qr_x=label_x+(half_w-qr_size)/2
+        qr_y=label_y+(label_h-qr_size)/2
+        renderPDF.draw(drawing,c,qr_x,qr_y)
+
+    remaining=quantity
+    first_page=True
+    position=start_position-1
+
+    while remaining > 0:
+        if not first_page:
+            position=0
+
+        available=per_page-position
+        count=min(remaining,available)
+
+        for offset in range(count):
+            draw_fold_label(position+offset)
+
+        c.setFont("Helvetica",6.5)
+        c.setFillColor(colors.HexColor("#6B7280"))
+        c.drawCentredString(page_w/2,7*mm,"Stampa in dimensione reale / scala 100% · Etichette 30 x 10 mm · passo 30 mm")
+        c.showPage()
+
+        remaining-=count
+        first_page=False
+
+    c.save()
+    buffer.seek(0)
+
+    safe_code="".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in payload)
+    filename=f"Etichette_QR_{safe_code}_{quantity}.pdf"
+    return send_file(buffer,mimetype="application/pdf",as_attachment=False,download_name=filename)
+
 @app.post("/products/<int:product_id>/stock")
 @login_required
 def change_stock(product_id):
     try: d=int(request.form["delta"])
     except (KeyError,ValueError): flash("Operazione non valida."); return redirect(url_for("products"))
-    if d not in (-1,1): flash("Operazione non valida."); return redirect(url_for("products"))
-    if d==1 and session.get("role") not in ("admin","manager"):
+    if d != 1:
+        flash("La vendita diretta è disattivata: aggiungi il prodotto al carrello e completa la vendita dalla Cassa.")
+        return redirect(request.referrer or url_for("products"))
+    if session.get("role") not in ("admin","manager"):
         flash("Solo Admin e Gestore possono caricare merce."); return redirect(request.referrer or url_for("products"))
     with connect() as db:
         p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
-        if p and p["quantity"]+d>=0:
-            db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(d,product_id))
-            action="Vendita registrata" if d==-1 else "Merce caricata"
-            if d==-1:
-                sale_number=next_sale_number(db)
-                db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price,sale_number,payment_method,channel,status) VALUES(?,?,?,?,1,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],p["price"],sale_number,"Altro","Negozio","Confermata"))
-                add_reorder_quantity(db,p["id"],1)
-            log_action(db,action,p,f"Quantità: {p['quantity']} → {p['quantity']+d}")
-            db.commit(); flash("Vendita registrata." if d==-1 else "Quantità aggiornata.")
-        else: flash("Quantità non valida o prodotto esaurito.")
+        if p:
+            db.execute("UPDATE products SET quantity=quantity+1 WHERE id=?",(product_id,))
+            log_action(db,"Merce caricata",p,f"Quantità: {p['quantity']} → {p['quantity']+1}")
+            db.commit(); flash("Quantità aggiornata.")
+        else:
+            flash("Prodotto non trovato.")
     return redirect(request.referrer or url_for("products"))
 
 @app.post("/products/<int:product_id>/toggle-active")
