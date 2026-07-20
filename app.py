@@ -6,7 +6,7 @@ import zipfile
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, time, timedelta
 from zoneinfo import ZoneInfo
 import shutil
 import tempfile
@@ -74,7 +74,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v8.3 ORARIO ITALIA"
+APP_VERSION = "v9.0 TESORERIA"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -192,7 +192,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('change_password') }}">Password</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -329,6 +329,43 @@ def init_db():
                 created_by TEXT NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS treasury_movements(
+                id INTEGER PRIMARY KEY,
+                movement_number TEXT UNIQUE NOT NULL,
+                movement_type TEXT NOT NULL,
+                category TEXT,
+                amount REAL NOT NULL CHECK(amount > 0),
+                actor_user_id INTEGER,
+                actor_username TEXT NOT NULL,
+                responsible_username TEXT,
+                supplier TEXT,
+                invoice_number TEXT,
+                notes TEXT,
+                refundable INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS treasury_cash_counts(
+                id INTEGER PRIMARY KEY,
+                counted_amount REAL NOT NULL CHECK(counted_amount >= 0),
+                theoretical_amount REAL NOT NULL,
+                difference REAL NOT NULL,
+                username TEXT NOT NULL,
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS treasury_daily_closures(
+                id INTEGER PRIMARY KEY,
+                closure_date TEXT UNIQUE NOT NULL,
+                sales_total REAL NOT NULL DEFAULT 0,
+                cash_sales REAL NOT NULL DEFAULT 0,
+                card_sales REAL NOT NULL DEFAULT 0,
+                definitive_outflows REAL NOT NULL DEFAULT 0,
+                refundable_withdrawals REAL NOT NULL DEFAULT 0,
+                returns_total REAL NOT NULL DEFAULT 0,
+                theoretical_cash REAL NOT NULL DEFAULT 0,
+                open_debts REAL NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT"),("active","INTEGER NOT NULL DEFAULT 1"),("min_stock","INTEGER NOT NULL DEFAULT 1"),("location","TEXT"),("cost_price","REAL DEFAULT 0"),("is_new","INTEGER NOT NULL DEFAULT 0"),("is_bestseller","INTEGER NOT NULL DEFAULT 0"),("model_name","TEXT"),("variant_group","TEXT")]:
             ensure_column(db,"products",c,d)
@@ -435,6 +472,61 @@ def next_sale_number(db):
     prefix=now_rome().strftime("V%Y%m%d")
     row=db.execute("SELECT COUNT(DISTINCT sale_number) FROM sales WHERE sale_number LIKE ?",(prefix+"%",)).fetchone()
     return f"{prefix}-{(row[0] or 0)+1:03d}"
+
+
+def next_treasury_number(db):
+    prefix=now_rome().strftime("TS%Y%m%d")
+    row=db.execute("SELECT COUNT(*) FROM treasury_movements WHERE movement_number LIKE ?",(prefix+"%",)).fetchone()
+    return f"{prefix}-{(row[0] or 0)+1:04d}"
+
+def utc_bounds_for_rome_day(day):
+    start=datetime.combine(day,time.min,tzinfo=ROME_TZ)
+    end=start+timedelta(days=1)
+    fmt="%Y-%m-%d %H:%M:%S"
+    return start.astimezone(timezone.utc).strftime(fmt),end.astimezone(timezone.utc).strftime(fmt)
+
+def sales_totals_for_period(db,start_utc,end_utc):
+    return db.execute("""SELECT COALESCE(SUM(quantity*unit_price),0) total,
+      COALESCE(SUM(CASE WHEN payment_method='Contanti' THEN quantity*unit_price ELSE 0 END),0) cash,
+      COALESCE(SUM(CASE WHEN payment_method IN ('POS','Bancomat') THEN quantity*unit_price ELSE 0 END),0) card
+      FROM sales WHERE status='Confermata' AND created_at>=? AND created_at<?""",(start_utc,end_utc)).fetchone()
+
+def treasury_cash_balance(db,until_utc=None):
+    sw=" AND created_at<?" if until_utc else ""; mw=" WHERE created_at<?" if until_utc else ""; args=(until_utc,) if until_utc else ()
+    cash=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) FROM sales WHERE status='Confermata' AND payment_method='Contanti'"+sw,args).fetchone()[0]
+    rows=db.execute("SELECT movement_type,COALESCE(SUM(amount),0) amount FROM treasury_movements"+mw+" GROUP BY movement_type",args).fetchall()
+    t={r['movement_type']:float(r['amount'] or 0) for r in rows}
+    return float(cash or 0)+t.get('return',0)+t.get('deposit',0)-t.get('withdrawal',0)
+
+def treasury_open_debts(db,until_utc=None):
+    where="WHERE COALESCE(responsible_username,'')<>''"
+    params=()
+    if until_utc:
+        where+=" AND created_at<?"; params=(until_utc,)
+    return db.execute("""SELECT responsible_username,
+      COALESCE(SUM(CASE WHEN movement_type='withdrawal' AND refundable=1 THEN amount WHEN movement_type='return' THEN -amount ELSE 0 END),0) amount
+      FROM treasury_movements """+where+""" GROUP BY responsible_username
+      HAVING amount>0.005 ORDER BY amount DESC""",params).fetchall()
+
+def create_daily_closure(db,day):
+    start,end=utc_bounds_for_rome_day(day); sales=sales_totals_for_period(db,start,end)
+    moves=db.execute("""SELECT COALESCE(SUM(CASE WHEN movement_type='withdrawal' AND refundable=0 THEN amount ELSE 0 END),0) definitive,
+      COALESCE(SUM(CASE WHEN movement_type='withdrawal' AND refundable=1 THEN amount ELSE 0 END),0) refundable,
+      COALESCE(SUM(CASE WHEN movement_type='return' THEN amount ELSE 0 END),0) returned
+      FROM treasury_movements WHERE created_at>=? AND created_at<?""",(start,end)).fetchone()
+    cash=treasury_cash_balance(db,end); debts=sum(float(x['amount']) for x in treasury_open_debts(db,end))
+    db.execute("""INSERT OR IGNORE INTO treasury_daily_closures
+      (closure_date,sales_total,cash_sales,card_sales,definitive_outflows,refundable_withdrawals,returns_total,theoretical_cash,open_debts)
+      VALUES(?,?,?,?,?,?,?,?,?)""",(day.isoformat(),sales['total'],sales['cash'],sales['card'],moves['definitive'],moves['refundable'],moves['returned'],cash,debts))
+
+def ensure_daily_closures():
+    yesterday=now_rome().date()-timedelta(days=1)
+    with connect() as db:
+        last=db.execute("SELECT MAX(closure_date) FROM treasury_daily_closures").fetchone()[0]
+        current=date.fromisoformat(last)+timedelta(days=1) if last else yesterday
+        while current<=yesterday:
+            create_daily_closure(db,current); current+=timedelta(days=1)
+        db.commit()
 
 def add_reorder_quantity(db, product_id, quantity):
     db.execute("INSERT INTO reorder_pending(product_id,quantity) VALUES(?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=quantity+excluded.quantity",(product_id,quantity))
@@ -637,6 +729,77 @@ def cancel_customer_order(order_id):
             flash("Richiesta annullata.")
     return redirect(url_for("customer_orders"))
 
+@app.route("/account/password",methods=["GET","POST"])
+@login_required
+def change_password():
+    if request.method=="POST":
+        current=request.form.get("current_password",""); new=request.form.get("new_password",""); confirm=request.form.get("confirm_password","")
+        if len(new)<8: flash("La nuova password deve avere almeno 8 caratteri.")
+        elif new!=confirm: flash("Le due nuove password non coincidono.")
+        else:
+            with connect() as db:
+                user=db.execute("SELECT * FROM users WHERE id=?",(session.get("user_id"),)).fetchone()
+                if not user or not check_password_hash(user["password_hash"],current): flash("La password attuale non è corretta.")
+                else:
+                    db.execute("UPDATE users SET password_hash=? WHERE id=?",(generate_password_hash(new),user["id"])); log_action(db,"Password personale modificata"); db.commit()
+                    flash("Password modificata correttamente."); return redirect(url_for("dashboard"))
+    return page("Cambia password",'''<h1>Cambia password</h1><div class="card" style="max-width:560px"><form method="post"><p><label>Password attuale<input name="current_password" type="password" required></label></p><p><label>Nuova password<input name="new_password" type="password" minlength="8" required></label></p><p><label>Conferma nuova password<input name="confirm_password" type="password" minlength="8" required></label></p><button>Aggiorna password</button></form></div>''')
+
+@app.get("/treasury")
+@role_required("admin","manager")
+def treasury():
+    today=now_rome().date(); start,end=utc_bounds_for_rome_day(today); month_start,_=utc_bounds_for_rome_day(today.replace(day=1))
+    with connect() as db:
+        day_sales=sales_totals_for_period(db,start,end); month_sales=sales_totals_for_period(db,month_start,end)
+        cash=treasury_cash_balance(db); debts=treasury_open_debts(db); debt_total=sum(float(x['amount']) for x in debts)
+        outflows=db.execute("SELECT COALESCE(SUM(amount),0) FROM treasury_movements WHERE movement_type='withdrawal' AND refundable=0").fetchone()[0]
+        recent=db.execute("SELECT * FROM treasury_movements ORDER BY id DESC LIMIT 40").fetchall(); count=db.execute("SELECT * FROM treasury_cash_counts ORDER BY id DESC LIMIT 1").fetchone(); closures=db.execute("SELECT * FROM treasury_daily_closures ORDER BY closure_date DESC LIMIT 14").fetchall()
+    return page("Tesoreria",'''<style>.money{font-size:30px;font-weight:800}.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.debt{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}.plus{color:#047857}.minus{color:#b91c1c}</style><h1>💎 Tesoreria Gioielli</h1><div class="grid"><div class="card"><div class="muted">Incasso oggi</div><div class="money">€ {{'%.2f'|format(day_sales.total)}}</div><p>💵 € {{'%.2f'|format(day_sales.cash)}} · 💳 € {{'%.2f'|format(day_sales.card)}}</p></div><div class="card"><div class="muted">Incasso mese</div><div class="money">€ {{'%.2f'|format(month_sales.total)}}</div><p>Contanti € {{'%.2f'|format(month_sales.cash)}} · Bancomat € {{'%.2f'|format(month_sales.card)}}</p></div><div class="card"><div class="muted">Contanti nel cassetto</div><div class="money">€ {{'%.2f'|format(cash)}}</div></div><div class="card"><div class="muted">Da restituire</div><div class="money">€ {{'%.2f'|format(debt_total)}}</div><p>Uscite definitive € {{'%.2f'|format(outflows)}}</p></div></div><div class="card buttons"><a class="danger" href="{{url_for('treasury_withdrawal')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➖ Prelievo</a><a class="success" href="{{url_for('treasury_return')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➕ Restituzione</a><a class="view" href="{{url_for('treasury_count')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">🧮 Conta cassetto</a></div><div class="grid"><div class="card"><h2>Chi deve rimettere denaro</h2>{% for d in debts %}<div class="debt"><b>{{d.responsible_username}}</b><b class="minus">€ {{'%.2f'|format(d.amount)}}</b></div>{% else %}<p class="muted">Nessun importo aperto.</p>{% endfor %}</div><div class="card"><h2>Ultimo conteggio</h2>{% if count %}<p>{{count.created_at|rome_time}} · {{count.username}}</p><p>Teorico € {{'%.2f'|format(count.theoretical_amount)}}<br>Contati € {{'%.2f'|format(count.counted_amount)}}<br>Differenza <b>€ {{'%.2f'|format(count.difference)}}</b></p>{% else %}<p class="muted">Nessun conteggio.</p>{% endif %}</div></div><div class="card"><h2>Ultimi movimenti</h2>{% for x in recent %}<p><b>{{x.movement_number}}</b> · {{x.created_at|rome_time}} · {{x.actor_username}}<br>{{x.category}}{% if x.responsible_username %} · Prelevato/restituito da <b>{{x.responsible_username}}</b>{% endif %}{% if x.supplier %} · Fornitore {{x.supplier}}{% endif %}<br><b class="{{'plus' if x.movement_type=='return' else 'minus'}}">{{'+' if x.movement_type=='return' else '-'}} € {{'%.2f'|format(x.amount)}}</b>{% if x.notes %}<br><span class="muted">{{x.notes}}</span>{% endif %}</p><hr>{% else %}<p class="muted">Nessun movimento.</p>{% endfor %}</div><div class="card"><h2>Chiusure giornaliere automatiche</h2><p class="muted">Create dopo mezzanotte; eventuali chiusure mancanti vengono recuperate alla prima apertura.</p>{% for c in closures %}<p><b>{{c.closure_date}}</b> · Totale € {{'%.2f'|format(c.sales_total)}} · Contanti € {{'%.2f'|format(c.cash_sales)}} · Bancomat € {{'%.2f'|format(c.card_sales)}}<br>Cassetto € {{'%.2f'|format(c.theoretical_cash)}} · Da restituire € {{'%.2f'|format(c.open_debts)}}</p><hr>{% else %}<p class="muted">La prima chiusura comparirà dopo mezzanotte.</p>{% endfor %}</div>''',day_sales=day_sales,month_sales=month_sales,cash=cash,debts=debts,debt_total=debt_total,outflows=outflows,recent=recent,count=count,closures=closures)
+
+@app.route("/treasury/withdrawal",methods=["GET","POST"])
+@role_required("admin","manager")
+def treasury_withdrawal():
+    with connect() as db:
+        people=db.execute("SELECT username,role FROM users WHERE active=1 AND role IN ('admin','manager') ORDER BY username").fetchall()
+        if request.method=="POST":
+            try: amount=float(request.form.get("amount","0").replace(",","."))
+            except ValueError: amount=0
+            category=request.form.get("category",""); responsible=request.form.get("responsible_username",session.get("user")); refundable=1 if category=="Prestito / Anticipo" else 0
+            allowed={"Acquisto fornitura","Acquisto materiale","Versamento banca","Spese negozio","Prestito / Anticipo","Altro"}
+            if amount<=0 or category not in allowed: flash("Inserisci importo e causale validi.")
+            elif amount>treasury_cash_balance(db)+0.005: flash("Il prelievo supera il contante disponibile.")
+            elif responsible not in {x['username'] for x in people}: flash("Seleziona Admin o Gestore.")
+            else:
+                number=next_treasury_number(db); db.execute("""INSERT INTO treasury_movements(movement_number,movement_type,category,amount,actor_user_id,actor_username,responsible_username,supplier,invoice_number,notes,refundable) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(number,"withdrawal",category,amount,session.get("user_id"),session.get("user"),responsible,request.form.get("supplier","").strip(),request.form.get("invoice_number","").strip(),request.form.get("notes","").strip(),refundable)); log_action(db,"Prelievo tesoreria",details=f"{number}; {category}; € {amount:.2f}; {responsible}"); db.commit(); flash("Prelievo registrato."); return redirect(url_for("treasury"))
+    return page("Prelievo",'''<h1>Nuovo prelievo</h1><div class="card"><form method="post"><p><label>Importo<input name="amount" inputmode="decimal" required></label></p><p><label>Causale<select name="category" id="cat" required><option value="">Seleziona</option><option>Acquisto fornitura</option><option>Acquisto materiale</option><option>Versamento banca</option><option>Spese negozio</option><option>Prestito / Anticipo</option><option>Altro</option></select></label></p><p><label>Chi ha prelevato<select name="responsible_username">{% for p in people %}<option value="{{p.username}}">{{p.username}} · {{roles.get(p.role,p.role)}}</option>{% endfor %}</select></label></p><div id="supplier"><p><label>Fornitore<input name="supplier"></label></p><p><label>Fattura/riferimento<input name="invoice_number"></label></p></div><p><label>Note<textarea name="notes"></textarea></label></p><button>Registra</button></form><p class="muted">Solo Prestito / Anticipo crea un importo da restituire. Le altre causali sono uscite definitive.</p></div><script>const c=document.getElementById('cat'),s=document.getElementById('supplier');function u(){s.style.display=c.value==='Acquisto fornitura'?'block':'none'}c.onchange=u;u()</script>''',people=people,roles=ROLE_LABELS)
+
+@app.route("/treasury/return",methods=["GET","POST"])
+@role_required("admin","manager")
+def treasury_return():
+    with connect() as db:
+        debts=treasury_open_debts(db)
+        if request.method=="POST":
+            who=request.form.get("responsible_username",""); debt=next((float(x['amount']) for x in debts if x['responsible_username']==who),0)
+            try: amount=float(request.form.get("amount","0").replace(",","."))
+            except ValueError: amount=0
+            if amount<=0 or amount>debt+0.005: flash("Importo non valido o superiore al debito.")
+            else:
+                number=next_treasury_number(db); db.execute("INSERT INTO treasury_movements(movement_number,movement_type,category,amount,actor_user_id,actor_username,responsible_username,notes) VALUES(?,?,?,?,?,?,?,?)",(number,"return","Restituzione",amount,session.get("user_id"),session.get("user"),who,request.form.get("notes","").strip())); log_action(db,"Restituzione tesoreria",details=f"{number}; {who}; € {amount:.2f}"); db.commit(); flash("Restituzione registrata."); return redirect(url_for("treasury"))
+    return page("Restituzione",'''<h1>Restituzione</h1><div class="card">{% if debts %}<form method="post"><p><label>Chi restituisce<select name="responsible_username">{% for d in debts %}<option value="{{d.responsible_username}}">{{d.responsible_username}} · € {{'%.2f'|format(d.amount)}}</option>{% endfor %}</select></label></p><p><label>Importo<input name="amount" inputmode="decimal" required></label></p><p><label>Note<textarea name="notes"></textarea></label></p><button>Registra</button></form>{% else %}<p>Nessun importo da restituire.</p>{% endif %}</div>''',debts=debts)
+
+@app.route("/treasury/count",methods=["GET","POST"])
+@role_required("admin","manager")
+def treasury_count():
+    with connect() as db:
+        theoretical=treasury_cash_balance(db)
+        if request.method=="POST":
+            try: counted=float(request.form.get("counted_amount","0").replace(",","."))
+            except ValueError: counted=-1
+            if counted<0: flash("Importo non valido.")
+            else:
+                diff=counted-theoretical; db.execute("INSERT INTO treasury_cash_counts(counted_amount,theoretical_amount,difference,username,notes) VALUES(?,?,?,?,?)",(counted,theoretical,diff,session.get("user"),request.form.get("notes","").strip())); log_action(db,"Conteggio cassetto",details=f"Teorico € {theoretical:.2f}; contato € {counted:.2f}; differenza € {diff:.2f}"); db.commit(); flash("Conteggio registrato."); return redirect(url_for("treasury"))
+    return page("Conta cassetto",'''<h1>Conta il cassetto</h1><div class="card"><p>Saldo teorico: <b class="metric">€ {{'%.2f'|format(theoretical)}}</b></p><form method="post"><p><label>Contanti realmente presenti<input name="counted_amount" inputmode="decimal" required></label></p><p><label>Note<textarea name="notes"></textarea></label></p><button>Registra conteggio</button></form><p class="muted">Il conteggio non modifica il saldo teorico.</p></div>''',theoretical=theoretical)
+
 @app.route("/login",methods=["GET","POST"])
 def login():
     if request.method=="POST":
@@ -837,7 +1000,7 @@ def cart():
             subtotal=qty*p["price"]
             rows.append({"product":p,"quantity":qty,"subtotal":subtotal})
             total+=subtotal; total_qty+=qty
-    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><div class="inline"><label>Pagamento<select name="payment_method"><option>Contanti</option><option>POS</option><option>Bonifico</option><option>Altro</option></select></label><label>Canale<select name="channel"><option>Negozio</option><option>Online</option></select></label></div><button>Conferma vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
+    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><div class="inline"><label>Pagamento<select name="payment_method"><option>Contanti</option><option>Bancomat</option><option>Bonifico</option><option>Altro</option></select></label><label>Canale<select name="channel"><option>Negozio</option><option>Online</option></select></label></div><button>Conferma vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/cart/add/<int:product_id>")
 @login_required
@@ -883,7 +1046,7 @@ def checkout_cart():
         flash("Il carrello è vuoto."); return redirect(url_for("cart"))
     payment=request.form.get("payment_method","Altro")
     channel=request.form.get("channel","Negozio")
-    if payment not in ("Contanti","POS","Bonifico","Altro"): payment="Altro"
+    if payment not in ("Contanti","Bancomat","POS","Bonifico","Altro"): payment="Altro"
     if channel not in ("Negozio","Online"): channel="Negozio"
     with connect() as db:
         items=[]
@@ -1059,7 +1222,7 @@ def users():
                 flash("Utente creato.")
             except sqlite3.IntegrityError: flash("Username già esistente.")
     with connect() as db: rows=db.execute("SELECT id,username,role,active,created_at FROM users ORDER BY username").fetchall()
-    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at|rome_time}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="6" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+    return page("Utenti",'''<h1>Gestione utenti</h1><div class="card"><h3>Crea dipendente</h3><form class="inline" method="post"><input name="username" placeholder="Username" required><input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required><select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select><button>Crea utente</button></form></div><div class="card"><h3>Account</h3>{% for u in rows %}<p><b>{{u.username}}</b> · {{roles.get(u.role,u.role)}} · {% if u.active %}Attivo{% else %}Disattivato{% endif %}<br><span class="muted">Creato: {{u.created_at|rome_time}}</span></p><div class="actions">{% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form></div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
 
 @app.post("/users/<int:user_id>/toggle")
 @role_required("admin")
@@ -1076,7 +1239,7 @@ def toggle_user(user_id):
 @role_required("admin")
 def reset_user_password(user_id):
     password=request.form.get("password","")
-    if len(password)<6: flash("La password deve avere almeno 6 caratteri."); return redirect(url_for("users"))
+    if len(password)<8: flash("La password deve avere almeno 8 caratteri."); return redirect(url_for("users"))
     with connect() as db:
         u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
         if u:
@@ -1226,4 +1389,11 @@ def audit_log():
     return page("Storico",'''<h1>Storico operazioni</h1><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at|rome_time}}</b> · {{x.username}} · {{x.action}}{% if x.product_code %} · <b>{{x.product_code}}</b>{% endif %}{% if x.details %}<br><span class="muted">{{x.details}}</span>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessuna operazione registrata.</p>{% endif %}</div>''',rows=rows)
 
 init_db()
+
+@app.before_request
+def automatic_daily_closure():
+    if request.endpoint and request.endpoint != "static":
+        try: ensure_daily_closures()
+        except sqlite3.Error as exc: app.logger.warning("Chiusura tesoreria non eseguita: %s",exc)
+
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
