@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v11.1 ETICHETTE QR PIEGHEVOLI"
+APP_VERSION = "v11.2 SCANNER QR PRODOTTI"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -693,6 +693,23 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
   }}
 }})();
 </script>'''.format(target=target_url,label=button_label,auto=auto_value)
+
+def product_scanner_html(target_url):
+    """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
+    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
+    replacements={
+        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
+        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
+        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
+        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
+        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
+        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
+        "Badge camera error":"Product QR camera error",
+        "Fotocamera non avviata.":"Fotocamera pronta.",
+    }
+    for old,new in replacements.items():
+        html=html.replace(old,new)
+    return html
 
 def create_badge_pdf(badge_name, token):
     """Crea un A4 con fronte e retro 78 x 48 mm affiancati, pronto da tagliare e piegare."""
@@ -1310,6 +1327,44 @@ def price_check():
     is_manager=session.get("role") in ("admin","manager")
     return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
 
+@app.route("/products/scan",methods=["GET","POST"])
+@login_required
+def scan_product():
+    if request.method=="POST":
+        scanned=(request.form.get("badge_payload") or "").strip()
+        # Alcuni lettori aggiungono spazi o ritorni a capo.
+        scanned="".join(scanned.split())
+        if not scanned:
+            flash("Nessun codice QR rilevato.")
+            return redirect(url_for("scan_product"))
+
+        with connect() as db:
+            # Prima cerca il codice interno esatto; come aiuto accetta anche
+            # il codice fornitore esatto, senza distinzione tra maiuscole/minuscole.
+            product=db.execute(
+                """SELECT * FROM products
+                   WHERE UPPER(TRIM(brand_code))=UPPER(?)
+                      OR UPPER(TRIM(supplier_code))=UPPER(?)
+                   ORDER BY CASE WHEN UPPER(TRIM(brand_code))=UPPER(?) THEN 0 ELSE 1 END
+                   LIMIT 1""",
+                (scanned,scanned,scanned)
+            ).fetchone()
+
+        if product:
+            return redirect(url_for("product_detail",product_id=product["id"]))
+
+        flash(f"Nessun prodotto trovato per il codice: {scanned}")
+        return redirect(url_for("scan_product"))
+
+    scanner=product_scanner_html(url_for("scan_product"))
+    return page(
+        "Scansiona prodotto",
+        """<p><a href="{{url_for('products')}}">← Torna ai prodotti</a></p>
+        <h1>Scansiona QR prodotto</h1>
+        <p class="muted">Inquadra l'etichetta del gioiello: la scheda prodotto si aprirà automaticamente.</p>
+        """+scanner
+    )
+
 @app.route("/products",methods=["GET","POST"])
 @login_required
 def products():
@@ -1334,7 +1389,11 @@ def products():
     sql+=" ORDER BY category,brand_code"
     with connect() as db: rows=db.execute(sql,params).fetchall()
     can_manage=session.get("role") in ("admin","manager"); is_admin=session.get("role")=="admin"
-    return page("Prodotti",'''<h1>Prodotti</h1><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
+    return page("Prodotti",'''<style>
+.products-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.scan-product-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:11px;background:#111827;color:#fff;text-decoration:none;font-weight:900}
+.scan-product-btn:hover{opacity:.9}
+</style><div class="products-heading"><h1>Prodotti</h1><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
 {% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice brand" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
 <div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted">{{p.supplier_code}}</div><span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a><form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status)
 
