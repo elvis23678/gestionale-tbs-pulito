@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v11.3 ORDINI STORNI QR 15MM"
+APP_VERSION = "v12 GESTIONE ORDINI INTELLIGENTE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -432,6 +432,15 @@ def init_db():
         ensure_column(db,"supplier_catalog_requests","accepted_at","TEXT")
         ensure_column(db,"supplier_catalog_requests","accepted_by","TEXT")
         ensure_column(db,"supplier_catalog_requests","in_catalog","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db,"supplier_catalog_requests","supplier_order_id","INTEGER")
+        ensure_column(db,"supplier_catalog_requests","ordered_at","TEXT")
+        ensure_column(db,"supplier_catalog_requests","received_quantity","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db,"supplier_catalog_requests","notified_at","TEXT")
+        ensure_column(db,"supplier_catalog_requests","delivered_at","TEXT")
+        ensure_column(db,"supplier_catalog_requests","deposit_amount","REAL NOT NULL DEFAULT 0")
+        ensure_column(db,"supplier_catalog_requests","priority","TEXT NOT NULL DEFAULT 'Normale'")
+        ensure_column(db,"supplier_order_items","catalog_request_id","INTEGER")
+        ensure_column(db,"supplier_order_items","received_quantity","INTEGER NOT NULL DEFAULT 0")
         for c,d in [("description","TEXT"),("size","TEXT"),("stone_color","TEXT"),("plating_color","TEXT"),("supplier_quantity","TEXT"),("image_file","TEXT"),("pdf_page","INTEGER")]:
             ensure_column(db,"supplier_catalog",c,d)
         u=os.environ.get("ADMIN_USERNAME","admin").strip() or "admin"
@@ -2027,8 +2036,10 @@ def request_catalog_item(catalog_id):
 @role_required("admin","manager")
 def catalog_requests():
     with connect() as db:
-        rows=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY CASE WHEN status IN ('Da ordinare','Nuovo') THEN 0 WHEN status='Accettato' THEN 1 ELSE 2 END,id DESC LIMIT 500").fetchall()
-    return page("Richieste catalogo",'''<h1>Ordini da catalogo</h1><div class="card">{% for x in rows %}<div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap"><p><b>{{x.request_number}}</b> · <b>{{x.brand_code}}</b> / {{x.supplier_code}} · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price*x.quantity)}}<br><b>{{x.customer_name}}</b> · <a href="tel:{{x.customer_phone}}">{{x.customer_phone}}</a> · <b>{{x.status}}</b><br><span class="muted">{{x.created_at|rome_time}} · {{x.notes or ''}}</span>{% if x.status=='Accettato' %}<br><span class="badge">Nel riordino</span>{% if x.in_catalog %}<span class="badge">Già nel catalogo</span>{% endif %}{% endif %}</p>{% if x.status in ('Da ordinare','Nuovo') %}<div class="inline"><form method="post" action="{{url_for('accept_catalog_request',request_id=x.id)}}"><label style="display:block;margin-bottom:8px"><input type="checkbox" name="in_catalog" value="1"> Già inserito nel catalogo</label><button class="success">Accetta</button></form><form method="post" action="{{url_for('reject_catalog_request',request_id=x.id)}}" onsubmit="return confirm('Rifiutare e cancellare questa richiesta?')"><button class="danger">Rifiuta</button></form></div>{% endif %}</div><hr>{% else %}<p>Nessuna richiesta.</p>{% endfor %}</div>''',rows=rows)
+        rows=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY CASE WHEN status IN ('Da ordinare','Nuovo') THEN 0 WHEN status='Accettato' THEN 1 WHEN status='Ordinato' THEN 2 WHEN status='Arrivato parzialmente' THEN 3 WHEN status='Arrivato' THEN 4 WHEN status='Cliente avvisato' THEN 5 WHEN status='Consegnato' THEN 6 ELSE 7 END,id DESC LIMIT 500").fetchall()
+        counts={r['status']:r['n'] for r in db.execute("SELECT status,COUNT(*) n FROM supplier_catalog_requests GROUP BY status").fetchall()}
+    body="""<style>.order-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:15px 0}.order-kpi{background:#fff;border:1px solid #ddd;border-radius:12px;padding:14px}.status-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#eee;font-weight:800}.order-card{border-left:6px solid #d2aa3e}.progress{height:9px;background:#eee;border-radius:99px;overflow:hidden}.progress span{display:block;height:100%;background:#16a34a}</style><h1>📦 Gestione ordini clienti</h1><div class='order-kpis'><div class='order-kpi'><b>Da approvare</b><div class='metric'>{{counts.get('Da ordinare',0)+counts.get('Nuovo',0)}}</div></div><div class='order-kpi'><b>Da inviare</b><div class='metric'>{{counts.get('Accettato',0)}}</div></div><div class='order-kpi'><b>In arrivo</b><div class='metric'>{{counts.get('Ordinato',0)+counts.get('Arrivato parzialmente',0)}}</div></div><div class='order-kpi'><b>Da avvisare</b><div class='metric'>{{counts.get('Arrivato',0)}}</div></div></div>{% for x in rows %}<div class='card order-card'><div style='display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap'><div><p><b>{{x.request_number}}</b> · <b>{{x.brand_code}}</b> / {{x.supplier_code}} · {{x.quantity}} pz<br><b>{{x.customer_name}}</b> · <a href='tel:{{x.customer_phone}}'>{{x.customer_phone}}</a><br><span class='status-pill'>{{x.status}}</span></p><div class='progress'><span style='width:{{(100*x.received_quantity/x.quantity) if x.quantity else 0}}%'></span></div><small class='muted'>Ricevuti {{x.received_quantity}} / {{x.quantity}} · {{x.created_at|rome_time}}{% if x.notes %} · {{x.notes}}{% endif %}</small></div><div class='actions'>{% if x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("accept_catalog_request",request_id=x.id)}}'><label><input type='checkbox' name='in_catalog' value='1'> Già nel catalogo</label><button class='success'>Accetta</button></form><form method='post' action='{{url_for("reject_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Rifiutare questa richiesta?")'><button class='danger'>Rifiuta</button></form>{% elif x.status=='Arrivato' %}<form method='post' action='{{url_for("notify_catalog_request",request_id=x.id)}}'><button class='success'>📞 Segna cliente avvisato</button></form><button type='button' class='secondary' onclick="navigator.clipboard.writeText('Ciao {{x.customer_name}}, il gioiello {{x.brand_code}} che avevi ordinato è arrivato presso Tattoo Beauty Saloon. Puoi contattarci per il ritiro.')">Copia WhatsApp</button>{% elif x.status=='Cliente avvisato' %}<form method='post' action='{{url_for("deliver_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Confermi la consegna al cliente?")'><button class='success'>✅ Consegnato</button></form>{% endif %}</div></div></div>{% else %}<div class='card'>Nessun ordine cliente.</div>{% endfor %}"""
+    return page("Gestione ordini clienti",body,rows=rows,counts=counts)
 
 @app.post("/catalogo-ordinabili/richieste/<int:request_id>/accetta")
 @role_required("admin","manager")
@@ -2036,13 +2047,13 @@ def accept_catalog_request(request_id):
     with connect() as db:
         row=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=?",(request_id,)).fetchone()
         if not row: flash("Richiesta non trovata.")
-        elif row["status"]=="Accettato": flash("Richiesta già accettata.")
+        elif row["status"] not in ("Da ordinare","Nuovo"): flash("Richiesta già lavorata.")
         else:
             in_catalog=1 if request.form.get("in_catalog")=="1" else 0
             db.execute("UPDATE supplier_catalog_requests SET status='Accettato',accepted_at=CURRENT_TIMESTAMP,accepted_by=?,in_catalog=? WHERE id=?",(session.get("user","sconosciuto"),in_catalog,request_id))
             db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(request_id,"Accettato",session.get("user","sconosciuto"),f"{row['supplier_code']}; quantità {row['quantity']}"))
             log_action(db,"Ordine cliente accettato",details=f"{row['request_number']}; {row['supplier_code']}; {row['customer_name']}; {row['customer_phone']}")
-            db.commit(); flash("Ordine accettato e aggiunto ai riordini.")
+            db.commit(); flash("Ordine accettato e inserito nel prossimo PDF fornitore.")
     return redirect(url_for("catalog_requests"))
 
 @app.post("/catalogo-ordinabili/richieste/<int:request_id>/rifiuta")
@@ -2050,9 +2061,33 @@ def accept_catalog_request(request_id):
 def reject_catalog_request(request_id):
     with connect() as db:
         row=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=?",(request_id,)).fetchone()
-        if row:
-            log_action(db,"Ordine cliente rifiutato",details=f"{row['request_number']}; {row['supplier_code']}; {row['customer_name']}; {row['customer_phone']}")
-            db.execute("DELETE FROM supplier_catalog_requests WHERE id=?",(request_id,)); db.commit(); flash("Richiesta rifiutata e cancellata.")
+        if row and row['status'] in ('Da ordinare','Nuovo'):
+            db.execute("UPDATE supplier_catalog_requests SET status='Rifiutato' WHERE id=?",(request_id,))
+            db.execute("INSERT INTO catalog_request_events(request_id,event_type,username) VALUES(?,?,?)",(request_id,"Rifiutato",session.get("user","sconosciuto")))
+            db.commit(); flash("Richiesta rifiutata e conservata nello storico.")
+    return redirect(url_for("catalog_requests"))
+
+@app.post("/catalogo-ordinabili/richieste/<int:request_id>/avvisa")
+@role_required("admin","manager")
+def notify_catalog_request(request_id):
+    with connect() as db:
+        row=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=?",(request_id,)).fetchone()
+        if row and row['status']=='Arrivato':
+            db.execute("UPDATE supplier_catalog_requests SET status='Cliente avvisato',notified_at=CURRENT_TIMESTAMP WHERE id=?",(request_id,))
+            db.execute("INSERT INTO catalog_request_events(request_id,event_type,username) VALUES(?,?,?)",(request_id,"Cliente avvisato",session.get("user","sconosciuto")))
+            db.commit(); flash("Cliente segnato come avvisato.")
+    return redirect(url_for("catalog_requests"))
+
+@app.post("/catalogo-ordinabili/richieste/<int:request_id>/consegna")
+@role_required("admin","manager")
+def deliver_catalog_request(request_id):
+    with connect() as db:
+        row=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=?",(request_id,)).fetchone()
+        if row and row['status']=='Cliente avvisato':
+            db.execute("UPDATE supplier_catalog_requests SET status='Consegnato',delivered_at=CURRENT_TIMESTAMP WHERE id=?",(request_id,))
+            db.execute("INSERT INTO catalog_request_events(request_id,event_type,username) VALUES(?,?,?)",(request_id,"Consegnato",session.get("user","sconosciuto")))
+            log_action(db,"Ordine cliente consegnato",details=f"{row['request_number']}; {row['customer_name']}; {row['supplier_code']}")
+            db.commit(); flash("Ordine consegnato e archiviato.")
     return redirect(url_for("catalog_requests"))
 
 @app.get("/search")
@@ -2343,52 +2378,81 @@ def reorders():
                 except ValueError: continue
                 db.execute("INSERT INTO reorder_pending(product_id,quantity) VALUES(?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity",(product_id,qty))
             log_action(db,"Proposta riordino aggiornata"); db.commit()
-        flash("Quantità di riordino aggiornate."); return redirect(url_for("reorders"))
+        flash("Quantità aggiornate."); return redirect(url_for("reorders"))
     with connect() as db:
         rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.quantity AS stock,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
-        history=db.execute("SELECT o.*,COUNT(i.id) AS lines,COALESCE(SUM(i.quantity),0) AS pieces FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
-        catalog_reorders=db.execute("SELECT supplier_code,brand_code,SUM(quantity) AS reorder_qty,MAX(in_catalog) AS in_catalog FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
-        waiting=db.execute("SELECT supplier_code,brand_code,customer_name,customer_phone,quantity FROM supplier_catalog_requests WHERE status='Accettato' ORDER BY supplier_code,id").fetchall()
-        waiting_by_code={}
-        for w in waiting: waiting_by_code.setdefault(w['supplier_code'],[]).append(w)
-    return page("Riordini",'''<h1>Riordini fornitore</h1><div class="card"><p>Le quantità aumentano automaticamente con ogni vendita. Puoi correggerle prima del PDF.</p>{% if rows %}<form method="post">{% for x in rows %}<div class="inline"><div><b>{{x.supplier_code}}</b><br><span class="muted">{{x.brand_code}} · magazzino {{x.stock}}</span></div><input name="qty_{{x.id}}" type="number" min="0" value="{{x.reorder_qty}}"></div><hr>{% endfor %}<button>Salva quantità</button></form><form method="post" action="{{url_for('generate_reorder_pdf')}}" onsubmit="return confirm('Generare il PDF e archiviare queste quantità?')"><button class="success">Genera PDF ordine</button></form>{% else %}<p>Nessun prodotto di magazzino da riordinare.</p>{% endif %}</div><div class="card"><h2>Ordini clienti accettati</h2>{% for x in catalog_reorders %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · <b>{{x.reorder_qty}} pz</b>{% if x.in_catalog %} · <span class="badge">Già nel catalogo</span>{% endif %}</p><div style="margin-left:18px">{% for c in waiting_by_code.get(x.supplier_code,[]) %}<p><b>{{c.customer_name}}</b> · <a href="tel:{{c.customer_phone}}">{{c.customer_phone}}</a> · codice {{c.brand_code}} / {{c.supplier_code}} · {{c.quantity}} pz</p>{% endfor %}</div><hr>{% else %}<p>Nessun ordine cliente accettato.</p>{% endfor %}</div><div class="card"><h3>Storico ordini</h3>{% if history %}{% for o in history %}<p><b>{{o.order_number}}</b> · {{o.created_at|rome_time}} · {{o.status}} · {{o.lines}} codici · {{o.pieces}} pezzi{% if o.status != 'Ricevuto' %}<form method="post" action="{{url_for('receive_order',order_id=o.id)}}" onsubmit="return confirm('Confermi la ricezione? Le quantità saranno caricate in magazzino.')"><button class="secondary">Segna ricevuto e carica merce</button></form>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessun ordine generato.</p>{% endif %}</div>''',rows=rows,history=history,catalog_reorders=catalog_reorders,waiting_by_code=waiting_by_code)
+        customer_rows=db.execute("SELECT supplier_code,brand_code,SUM(quantity) reorder_qty,COUNT(*) customers FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
+        history=db.execute("SELECT o.*,COUNT(i.id) lines,COALESCE(SUM(i.quantity),0) pieces,COALESCE(SUM(i.received_quantity),0) received FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
+    body="""<h1>🚚 Riordini fornitore</h1><div class='card'><h2>Prossimo PDF</h2><p class='muted'>Comprende scorte da reintegrare e ordini cliente accettati. Dopo la generazione, gli ordini cliente passano a “Ordinato” e non saranno duplicati.</p>{% for x in rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · magazzino {{x.stock}} · <b>{{x.reorder_qty}} pz</b></p>{% endfor %}{% for x in customer_rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · <b>{{x.reorder_qty}} pz clienti</b> · {{x.customers}} richieste</p>{% endfor %}{% if rows or customer_rows %}<form method='post' action='{{url_for("generate_reorder_pdf")}}' onsubmit='return confirm("Generare e archiviare il PDF?")'><button class='success'>📄 Genera PDF e segna ordinato</button></form>{% else %}<p>Nessun articolo da ordinare.</p>{% endif %}</div><div class='card'><h2>Storico fornitori e ricezioni</h2>{% for o in history %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><b>{{o.order_number}}</b> · {{o.status}} · {{o.received}}/{{o.pieces}} pezzi · {{o.created_at|rome_time}}{% if o.status!='Ricevuto' %}<p><a class='secondary' style='display:inline-block;text-decoration:none;padding:9px 12px;border-radius:8px' href='{{url_for("receive_order_detail",order_id=o.id)}}'>Spunta merce arrivata</a></p>{% endif %}</div>{% else %}<p>Nessun ordine generato.</p>{% endfor %}</div>"""
+    return page("Riordini",body,rows=rows,customer_rows=customer_rows,history=history)
 
 @app.post("/reorders/pdf")
 @role_required("admin","manager")
 def generate_reorder_pdf():
     with connect() as db:
-        rows=db.execute("SELECT p.id,p.supplier_code,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
-        if not rows:
+        stock=db.execute("SELECT p.id,p.supplier_code,COALESCE(r.quantity,0) reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0").fetchall()
+        customers=db.execute("SELECT * FROM supplier_catalog_requests WHERE status='Accettato' ORDER BY supplier_code,id").fetchall()
+        if not stock and not customers:
             flash("Nessun articolo da inserire nel PDF."); return redirect(url_for("reorders"))
+        totals={}
+        for x in stock: totals[x['supplier_code']]=totals.get(x['supplier_code'],0)+x['reorder_qty']
+        for x in customers: totals[x['supplier_code']]=totals.get(x['supplier_code'],0)+x['quantity']
         order_number=next_order_number(db)
-        cur=db.execute("INSERT INTO supplier_orders(order_number,status,created_by) VALUES(?,'Generato',?)",(order_number,session.get("user","sconosciuto")))
-        for x in rows:
-            db.execute("INSERT INTO supplier_order_items(order_id,product_id,supplier_code,quantity) VALUES(?,?,?,?)",(cur.lastrowid,x["id"],x["supplier_code"],x["reorder_qty"]))
-            db.execute("UPDATE reorder_pending SET quantity=0 WHERE product_id=?",(x["id"],))
-        log_action(db,"PDF ordine fornitore generato",details=order_number); db.commit()
+        cur=db.execute("INSERT INTO supplier_orders(order_number,status,created_by) VALUES(?,'Ordinato',?)",(order_number,session.get("user","sconosciuto")))
+        oid=cur.lastrowid
+        for x in stock:
+            db.execute("INSERT INTO supplier_order_items(order_id,product_id,supplier_code,quantity) VALUES(?,?,?,?)",(oid,x['id'],x['supplier_code'],x['reorder_qty']))
+            db.execute("UPDATE reorder_pending SET quantity=0 WHERE product_id=?",(x['id'],))
+        for x in customers:
+            db.execute("INSERT INTO supplier_order_items(order_id,product_id,supplier_code,quantity,catalog_request_id) VALUES(?,0,?,?,?)",(oid,x['supplier_code'],x['quantity'],x['id']))
+            db.execute("UPDATE supplier_catalog_requests SET status='Ordinato',supplier_order_id=?,ordered_at=CURRENT_TIMESTAMP WHERE id=?",(oid,x['id']))
+            db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(x['id'],'Ordinato',session.get('user','sconosciuto'),order_number))
+        log_action(db,"PDF ordine fornitore generato",details=f"{order_number}; {sum(totals.values())} pezzi"); db.commit()
     buffer=BytesIO(); pdf=canvas.Canvas(buffer,pagesize=A4); width,height=A4; y=height-55
     pdf.setTitle(order_number); pdf.setFont("Helvetica-Bold",16); pdf.drawString(45,y,"ORDINE FORNITORE"); y-=25
     pdf.setFont("Helvetica",10); pdf.drawString(45,y,f"Ordine: {order_number}"); pdf.drawRightString(width-45,y,now_rome().strftime("%d/%m/%Y")); y-=32
-    pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=8; pdf.line(45,y,width-45,y); y-=20
-    pdf.setFont("Helvetica",11); total=0
-    for x in rows:
+    pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=10; pdf.line(45,y,width-45,y); y-=20
+    pdf.setFont("Helvetica",11)
+    for code,qty in sorted(totals.items()):
         if y<55:
-            pdf.showPage(); y=height-55; pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"CODICE FORNITORE"); pdf.drawRightString(width-45,y,"QUANTITA"); y-=25; pdf.setFont("Helvetica",11)
-        pdf.drawString(45,y,str(x["supplier_code"])); pdf.drawRightString(width-45,y,str(x["reorder_qty"])); total+=x["reorder_qty"]; y-=20
-    y-=5; pdf.line(45,y,width-45,y); y-=20; pdf.setFont("Helvetica-Bold",11); pdf.drawString(45,y,"TOTALE PEZZI"); pdf.drawRightString(width-45,y,str(total)); pdf.save(); buffer.seek(0)
+            pdf.showPage(); y=height-55; pdf.setFont("Helvetica",11)
+        pdf.drawString(45,y,str(code)); pdf.drawRightString(width-45,y,str(qty)); y-=20
+    pdf.save(); buffer.seek(0)
     return send_file(buffer,as_attachment=True,download_name=f"{order_number}.pdf",mimetype="application/pdf")
 
-@app.post("/reorders/<int:order_id>/receive")
+@app.route("/reorders/<int:order_id>/receive",methods=["GET","POST"])
 @role_required("admin","manager")
-def receive_order(order_id):
+def receive_order_detail(order_id):
     with connect() as db:
         order=db.execute("SELECT * FROM supplier_orders WHERE id=?",(order_id,)).fetchone()
-        if not order: flash("Ordine non trovato."); return redirect(url_for("reorders"))
-        if order["status"]=="Ricevuto": flash("Ordine già ricevuto."); return redirect(url_for("reorders"))
-        items=db.execute("SELECT * FROM supplier_order_items WHERE order_id=?",(order_id,)).fetchall()
-        for item in items: db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(item["quantity"],item["product_id"]))
-        db.execute("UPDATE supplier_orders SET status='Ricevuto',received_at=CURRENT_TIMESTAMP WHERE id=?",(order_id,)); log_action(db,"Ordine fornitore ricevuto",details=order["order_number"]); db.commit()
-    flash("Merce caricata in magazzino."); return redirect(url_for("reorders"))
+        if not order:
+            flash("Ordine non trovato."); return redirect(url_for("reorders"))
+        if request.method=='POST':
+            for key,value in request.form.items():
+                if not key.startswith('arrived_'): continue
+                try: item_id=int(key[8:]); arrived=max(0,int(value))
+                except ValueError: continue
+                item=db.execute("SELECT * FROM supplier_order_items WHERE id=? AND order_id=?",(item_id,order_id)).fetchone()
+                if not item: continue
+                new=min(item['quantity'],item['received_quantity']+arrived)
+                delta=new-item['received_quantity']
+                if delta<=0: continue
+                db.execute("UPDATE supplier_order_items SET received_quantity=? WHERE id=?",(new,item_id))
+                if item['catalog_request_id']:
+                    req=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=?",(item['catalog_request_id'],)).fetchone()
+                    rq=min(req['quantity'],req['received_quantity']+delta)
+                    status='Arrivato' if rq>=req['quantity'] else 'Arrivato parzialmente'
+                    db.execute("UPDATE supplier_catalog_requests SET received_quantity=?,status=? WHERE id=?",(rq,status,req['id']))
+                    db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(req['id'],status,session.get('user','sconosciuto'),f"Ricevuti {rq}/{req['quantity']}"))
+                elif item['product_id']:
+                    db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(delta,item['product_id']))
+            remaining=db.execute("SELECT COUNT(*) FROM supplier_order_items WHERE order_id=? AND received_quantity<quantity",(order_id,)).fetchone()[0]
+            db.execute("UPDATE supplier_orders SET status=?,received_at=CASE WHEN ?=0 THEN CURRENT_TIMESTAMP ELSE received_at END WHERE id=?",('Ricevuto' if remaining==0 else 'Ricevuto parzialmente',remaining,order_id))
+            log_action(db,"Ricezione ordine fornitore",details=order['order_number']); db.commit(); flash("Ricezione aggiornata.")
+            return redirect(url_for('receive_order_detail',order_id=order_id))
+        items=db.execute("SELECT i.*,r.customer_name,r.customer_phone,r.brand_code FROM supplier_order_items i LEFT JOIN supplier_catalog_requests r ON r.id=i.catalog_request_id WHERE i.order_id=? ORDER BY i.supplier_code,i.id",(order_id,)).fetchall()
+    body="""<h1>📥 Ricezione {{order.order_number}}</h1><p class='muted'>Inserisci solo i pezzi arrivati adesso. Puoi tornare più volte finché l’ordine è completo.</p><div class='card'><form method='post'>{% for i in items %}<div style='display:grid;grid-template-columns:1fr 110px;gap:12px;align-items:center;border-bottom:1px solid #ddd;padding:12px 0'><div><b>{{i.supplier_code}}</b> · {{i.received_quantity}}/{{i.quantity}} ricevuti{% if i.customer_name %}<br><span class='muted'>Cliente: {{i.customer_name}} · {{i.customer_phone}} · {{i.brand_code}}</span>{% else %}<br><span class='muted'>Ripristino magazzino</span>{% endif %}</div><input name='arrived_{{i.id}}' type='number' min='0' max='{{i.quantity-i.received_quantity}}' value='0'></div>{% endfor %}<button class='success' style='margin-top:15px'>Salva pezzi arrivati</button></form></div>"""
+    return page("Ricezione merce",body,order=order,items=items)
 
 @app.get("/audit")
 @role_required("admin")
