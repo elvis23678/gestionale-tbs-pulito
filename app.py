@@ -7,6 +7,8 @@ from functools import wraps
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime
+import shutil
+import tempfile
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -45,12 +47,15 @@ ensure_catalog_images()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+
+APP_VERSION = "v6.0 STABILITÀ"
+SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
-    configured = os.environ.get("DATABASE_PATH")
+    configured = os.environ.get("DATABASE_PATH", "").strip()
     if configured:
-        return configured
+        return os.path.abspath(configured)
     persistent_dir = "/var/data"
     if os.path.isdir(persistent_dir) and os.access(persistent_dir, os.W_OK):
         return os.path.join(persistent_dir, "gestionale_tbs.db")
@@ -58,6 +63,19 @@ def choose_db_path():
 
 DB_PATH = choose_db_path()
 os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+DB_IS_EPHEMERAL = os.path.abspath(DB_PATH).startswith("/tmp/")
+BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+def bootstrap_database_file():
+    """Copia il backup iniziale soltanto quando il database non esiste ancora."""
+    if os.path.exists(DB_PATH):
+        return
+    if os.path.isfile(SEED_DB_PATH):
+        shutil.copy2(SEED_DB_PATH, DB_PATH)
+        print(f"Database iniziale ripristinato da {SEED_DB_PATH}")
+
+bootstrap_database_file()
 
 CATEGORIES = ["Ombelico", "Labret", "Clicker", "Top", "Charm", "Capezzolo", "Orecchio", "Curved barbell", "Nostril", "Septum", "Helix", "Tragus", "Daith", "Conch", "Rook", "Industrial", "Lobo", "Accessori", "Altro"]
 MATERIALS = ["Titanio ASTM F136", "Oro 14K", "Oro 18K", "Acciaio", "Niobio", "Altro"]
@@ -140,15 +158,33 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">v5.2 FOTO GRANDI</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
 def infer_category(code):
     return {"BEL":"Ombelico","LAB":"Labret","CLK":"Clicker","TOP":"Top","CHM":"Charm","NIP":"Capezzolo","EAR":"Orecchio","CUR":"Curved barbell","TOOL":"Accessori"}.get((code or "").upper().split("-")[0], "Altro")
 
-def connect():
-    db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row; return db
+def connect(path=None):
+    db = sqlite3.connect(path or DB_PATH, timeout=30)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys=ON")
+    db.execute("PRAGMA busy_timeout=30000")
+    return db
+
+def database_integrity(path):
+    try:
+        with connect(path) as db:
+            result = db.execute("PRAGMA integrity_check").fetchone()[0]
+            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        required = {"users", "products", "sales", "audit_log"}
+        return result == "ok" and required.issubset(tables), result
+    except Exception as exc:
+        return False, str(exc)
+
+def make_consistent_backup(destination):
+    with connect() as source, sqlite3.connect(destination) as target:
+        source.backup(target)
 
 CATALOG_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'supplier_catalog_enriched.csv')
 
@@ -307,7 +343,8 @@ def init_db():
         db.commit()
 
 def page(title, body, **ctx):
-    return render_template_string(BASE,title=title,css=CSS,body=render_template_string(body,**ctx))
+    inner = render_template_string(body, **ctx)
+    return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL)
 
 def login_required(fn):
     @wraps(fn)
@@ -898,10 +935,64 @@ def backup_database():
     if not os.path.exists(DB_PATH):
         flash("Database non trovato.")
         return redirect(url_for("dashboard"))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(BACKUP_DIR, f"gestionale_tbs_backup_{stamp}.db")
+    make_consistent_backup(backup_path)
     with connect() as db:
-        log_action(db, "Backup database", details=os.path.basename(DB_PATH))
+        log_action(db, "Backup database", details=os.path.basename(backup_path))
         db.commit()
-    return send_file(DB_PATH, as_attachment=True, download_name="gestionale_tbs_backup.db", mimetype="application/octet-stream")
+    return send_file(backup_path, as_attachment=True, download_name=os.path.basename(backup_path), mimetype="application/octet-stream")
+
+@app.route("/admin/system-status", methods=["GET", "POST"])
+@role_required("admin")
+def system_status():
+    if request.method == "POST":
+        upload = request.files.get("database")
+        if not upload or not upload.filename:
+            flash("Seleziona un file .db da ripristinare.")
+            return redirect(url_for("system_status"))
+        temp_fd, temp_path = tempfile.mkstemp(prefix="tbs_restore_", suffix=".db")
+        os.close(temp_fd)
+        try:
+            upload.save(temp_path)
+            valid, detail = database_integrity(temp_path)
+            if not valid:
+                flash(f"Ripristino annullato: database non valido ({detail}).")
+                return redirect(url_for("system_status"))
+            safety = os.path.join(BACKUP_DIR, f"prima_ripristino_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+            if os.path.exists(DB_PATH):
+                make_consistent_backup(safety)
+            os.replace(temp_path, DB_PATH)
+            init_db()
+            flash("Database ripristinato correttamente. È stato creato anche un backup di sicurezza.")
+            return redirect(url_for("system_status"))
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    valid, integrity = database_integrity(DB_PATH)
+    with connect() as db:
+        counts = {}
+        for table in ("users", "products", "sales", "customer_orders", "supplier_orders", "supplier_catalog"):
+            try:
+                counts[table] = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            except sqlite3.Error:
+                counts[table] = 0
+    backups = sorted(Path(BACKUP_DIR).glob("*.db"), key=lambda x: x.stat().st_mtime, reverse=True)
+    last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime).strftime("%d/%m/%Y %H:%M") if backups else None
+    size_mb = os.path.getsize(DB_PATH) / (1024 * 1024) if os.path.exists(DB_PATH) else 0
+    storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente/configurato"
+    body = '''<h1>Stato del sistema</h1>
+    <div class="grid">
+      <div class="card"><div class="muted">Database</div><div class="metric">{{ "OK" if valid else "ERRORE" }}</div><p>{{ integrity }}</p></div>
+      <div class="card"><div class="muted">Archiviazione</div><div class="metric" style="font-size:22px">{{ storage }}</div><p class="muted">{{ db_path }}</p></div>
+      <div class="card"><div class="muted">Versione</div><div class="metric" style="font-size:22px">{{ version }}</div><p>{{ "%.2f"|format(size_mb) }} MB</p></div>
+      <div class="card"><div class="muted">Ultimo backup locale</div><div class="metric" style="font-size:22px">{{ last_backup or "Non presente" }}</div></div>
+    </div>
+    <div class="card"><h3>Contenuto</h3><p>Utenti: <b>{{ counts.users }}</b> · Prodotti: <b>{{ counts.products }}</b> · Vendite: <b>{{ counts.sales }}</b> · Ordini clienti: <b>{{ counts.customer_orders }}</b> · Ordini fornitore: <b>{{ counts.supplier_orders }}</b> · Catalogo: <b>{{ counts.supplier_catalog }}</b></p></div>
+    {% if ephemeral %}<div class="card" style="border-left:5px solid #b45309"><h3>Intervento necessario</h3><p>Il database si trova in <code>/tmp</code>: Render può cancellarlo durante riavvii o deploy. Prima di usare questa versione in produzione configura un disco persistente montato su <code>/var/data</code>, oppure imposta <code>DATABASE_PATH</code> verso uno spazio persistente.</p></div>{% endif %}
+    <div class="card"><h3>Backup e ripristino</h3><p><a href="{{ url_for('backup_database') }}">Scarica backup verificato</a></p><form method="post" enctype="multipart/form-data" onsubmit="return confirm('Confermi il ripristino? Il database attuale sarà salvato prima della sostituzione.')"><label>Ripristina un backup SQLite</label><input type="file" name="database" accept=".db,.sqlite,.sqlite3" required><button class="secondary">Verifica e ripristina</button></form></div>'''
+    return page("Stato sistema", body, valid=valid, integrity=integrity, storage=storage, db_path=DB_PATH, version=APP_VERSION, size_mb=size_mb, last_backup=last_backup, counts=counts, ephemeral=DB_IS_EPHEMERAL)
 
 @app.get("/sales")
 @role_required("admin","manager")
