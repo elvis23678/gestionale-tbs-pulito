@@ -49,6 +49,8 @@ ensure_catalog_images()
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+LOCK_TIMEOUT_SECONDS = max(60, int(os.environ.get("LOCK_TIMEOUT_SECONDS", "300")))
 
 ROME_TZ = ZoneInfo("Europe/Rome")
 
@@ -74,7 +76,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v9.0 TESORERIA"
+APP_VERSION = "v9.1 SICUREZZA E CARRELLI"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -192,7 +194,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('change_password') }}">Password</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main></body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Sospesi</a><a href="{{ url_for('change_password') }}">Password</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('lock_register') }}">🔒 Blocca</a><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();})();</script>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -366,6 +368,24 @@ def init_db():
                 open_debts REAL NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS suspended_carts(
+                id INTEGER PRIMARY KEY,
+                owner_user_id INTEGER NOT NULL,
+                owner_username TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Sospeso',
+                reason TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                resumed_by_user_id INTEGER,
+                resumed_by_username TEXT
+            );
+            CREATE TABLE IF NOT EXISTS suspended_cart_items(
+                id INTEGER PRIMARY KEY,
+                cart_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(cart_id, product_id)
+            );
         """)
         for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT"),("active","INTEGER NOT NULL DEFAULT 1"),("min_stock","INTEGER NOT NULL DEFAULT 1"),("location","TEXT"),("cost_price","REAL DEFAULT 0"),("is_new","INTEGER NOT NULL DEFAULT 0"),("is_bestseller","INTEGER NOT NULL DEFAULT 0"),("model_name","TEXT"),("variant_group","TEXT")]:
             ensure_column(db,"products",c,d)
@@ -415,7 +435,7 @@ def init_db():
 
 def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
-    return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL)
+    return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
 
 def login_required(fn):
     @wraps(fn)
@@ -443,6 +463,25 @@ def log_action(db, action, product=None, details=""):
         product["brand_code"] if product else None,
         details
     ))
+
+def suspend_current_cart(db, reason="Blocco cassa"):
+    raw=dict(session.get("cart",{}))
+    if not raw: return None
+    cur=db.execute("INSERT INTO suspended_carts(owner_user_id,owner_username,status,reason) VALUES(?,?,'Sospeso',?)",(session.get("user_id"),session.get("user","sconosciuto"),reason))
+    cart_id=cur.lastrowid
+    for key,value in raw.items():
+        try: product_id=int(key); quantity=max(1,int(value))
+        except (TypeError,ValueError): continue
+        db.execute("INSERT OR REPLACE INTO suspended_cart_items(cart_id,product_id,quantity) VALUES(?,?,?)",(cart_id,product_id,quantity))
+    return cart_id
+
+def restore_suspended_cart(db, cart_id):
+    cart=db.execute("SELECT * FROM suspended_carts WHERE id=? AND status='Sospeso'",(cart_id,)).fetchone()
+    if not cart: return None
+    rows=db.execute("SELECT product_id,quantity FROM suspended_cart_items WHERE cart_id=?",(cart_id,)).fetchall()
+    restored={str(r["product_id"]):int(r["quantity"]) for r in rows}
+    db.execute("UPDATE suspended_carts SET status='Ripreso',updated_at=CURRENT_TIMESTAMP,resumed_by_user_id=?,resumed_by_username=? WHERE id=?",(session.get("user_id"),session.get("user"),cart_id))
+    return restored,cart
 
 def photo_data(upload):
     if not upload or not upload.filename: return None
@@ -805,14 +844,46 @@ def login():
     if request.method=="POST":
         with connect() as db:
             user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form["username"].strip(),)).fetchone()
-        if user and check_password_hash(user["password_hash"],request.form["password"]):
-            session.clear(); session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
-            return redirect(url_for("dashboard"))
+            if user and check_password_hash(user["password_hash"],request.form["password"]):
+                session.clear(); session.permanent=True; session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
+                log_action(db,"Login"); db.commit(); return redirect(url_for("dashboard"))
         flash("Credenziali non corrette o account disattivato.")
-    return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form></div>''')
+    return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form><p class="muted">Blocco automatico dopo {{minutes}} minuti.</p></div>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60))
+
+@app.get("/lock")
+@login_required
+def lock_register():
+    automatic=request.args.get("auto")=="1"; username=session.get("user"); user_id=session.get("user_id"); role=session.get("role")
+    with connect() as db:
+        cart_id=suspend_current_cart(db,"Blocco automatico" if automatic else "Blocco manuale")
+        log_action(db,"Blocco automatico" if automatic else "Blocco manuale",details=f"Carrello sospeso: {cart_id}" if cart_id else "Nessun carrello"); db.commit()
+    session.clear(); session["locked"]=True; session["locked_user_id"]=user_id; session["locked_username"]=username; session["locked_role"]=role; session["locked_cart_id"]=cart_id
+    return redirect(url_for("unlock_register"))
+
+@app.route("/unlock",methods=["GET","POST"])
+def unlock_register():
+    if not session.get("locked"): return redirect(url_for("login"))
+    locked_user_id=session.get("locked_user_id"); locked_username=session.get("locked_username"); locked_cart_id=session.get("locked_cart_id")
+    if request.method=="POST":
+        with connect() as db:
+            user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
+            if user and check_password_hash(user["password_hash"],request.form.get("password","")):
+                same_user=user["id"]==locked_user_id
+                session.clear(); session.permanent=True; session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
+                if same_user and locked_cart_id:
+                    restored=restore_suspended_cart(db,locked_cart_id)
+                    if restored: session["cart"]=restored[0]
+                log_action(db,"Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
+                if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
+                return redirect(url_for("cart") if same_user and locked_cart_id else url_for("dashboard"))
+        flash("Credenziali non corrette o account disattivato.")
+    return page("Cassa bloccata",'''<div class="login card" style="text-align:center;max-width:520px"><div style="font-size:54px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}<form method="post"><p><input name="username" value="{{locked_username}}" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></div>''',locked_username=locked_username,has_cart=bool(locked_cart_id))
 
 @app.get("/logout")
-def logout(): session.clear(); return redirect(url_for("login"))
+def logout():
+    if session.get("user_id"):
+        with connect() as db: log_action(db,"Logout"); db.commit()
+    session.clear(); return redirect(url_for("login"))
 
 @app.get("/admin")
 @login_required
@@ -979,6 +1050,47 @@ def edit_product(product_id):
 <section class="edit-section"><h2>🛍 Boutique</h2><div class="checks"><label><input name="is_new" type="checkbox" {% if p.is_new %}checked{% endif %}> Novità</label><label><input name="is_bestseller" type="checkbox" {% if p.is_bestseller %}checked{% endif %}> Best seller</label></div><div class="field-grid"><div class="field full"><label>Foto prodotto</label>{% if p.photo_data %}<img class="current-photo" src="{{p.photo_data}}" alt="Foto attuale"><small>Lascia vuoto per mantenere la foto attuale.</small>{% endif %}<input name="photo" type="file" accept="image/*" capture="environment"></div><div class="field full"><label>Descrizione e note</label><textarea name="notes" rows="6" placeholder="Descrizione, dettagli tecnici e informazioni utili">{{p.notes or ''}}</textarea></div></div></section>
 <div class="edit-actions"><button>💾 Salva modifiche</button><a class="secondary" href="{{url_for('product_detail',product_id=p.id)}}">Annulla</a></div></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}" onsubmit="return confirm('Creare una copia di questo prodotto?')"><button class="duplicate-btn" style="margin-top:12px">📋 Duplica prodotto</button></form></div>''',p=p,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS)
 
+@app.get("/carts/suspended")
+@login_required
+def suspended_carts():
+    with connect() as db:
+        sql="SELECT c.*,COUNT(i.id) items,COALESCE(SUM(i.quantity*p.price),0) total FROM suspended_carts c LEFT JOIN suspended_cart_items i ON i.cart_id=c.id LEFT JOIN products p ON p.id=i.product_id WHERE c.status='Sospeso'"
+        if session.get("role") in ("admin","manager"): rows=db.execute(sql+" GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC").fetchall()
+        else: rows=db.execute(sql+" AND c.owner_user_id=? GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC",(session.get("user_id"),)).fetchall()
+    return page("Carrelli sospesi",'''<h1>Carrelli sospesi</h1><div class="card"><p class="muted">Restano salvati nel database.</p>{% if rows %}{% for x in rows %}<p><b>Carrello #{{x.id}}</b> · {{x.owner_username}} · {{x.items}} righe · € {{'%0.2f'|format(x.total)}}<br><span class="muted">{{x.created_at|rome_time}} · {{x.reason or ''}}</span></p><form class="inline" method="post" action="{{url_for('resume_suspended_cart',cart_id=x.id)}}"><button>Continua</button></form><form class="inline" method="post" action="{{url_for('cancel_suspended_cart',cart_id=x.id)}}"><button class="danger">Annulla</button></form><hr>{% endfor %}{% else %}<p>Nessun carrello sospeso.</p>{% endif %}</div>''',rows=rows)
+
+@app.post("/carts/suspended/<int:cart_id>/resume")
+@login_required
+def resume_suspended_cart(cart_id):
+    if session.get("cart"): flash("Svuota o sospendi prima il carrello attivo."); return redirect(url_for("suspended_carts"))
+    with connect() as db:
+        cart=db.execute("SELECT * FROM suspended_carts WHERE id=? AND status='Sospeso'",(cart_id,)).fetchone()
+        if not cart: flash("Carrello non disponibile."); return redirect(url_for("suspended_carts"))
+        if session.get("role") not in ("admin","manager") and cart["owner_user_id"]!=session.get("user_id"): flash("Non hai i permessi."); return redirect(url_for("suspended_carts"))
+        restored=restore_suspended_cart(db,cart_id)
+        if restored:
+            session["cart"]=restored[0]; session.modified=True; log_action(db,"Carrello sospeso ripreso",details=f"Carrello #{cart_id}; proprietario {cart['owner_username']}"); db.commit(); flash(f"Carrello #{cart_id} ripreso.")
+    return redirect(url_for("cart"))
+
+@app.post("/carts/suspended/<int:cart_id>/cancel")
+@login_required
+def cancel_suspended_cart(cart_id):
+    with connect() as db:
+        cart=db.execute("SELECT * FROM suspended_carts WHERE id=? AND status='Sospeso'",(cart_id,)).fetchone()
+        if not cart: flash("Carrello non disponibile."); return redirect(url_for("suspended_carts"))
+        if session.get("role") not in ("admin","manager") and cart["owner_user_id"]!=session.get("user_id"): flash("Non hai i permessi."); return redirect(url_for("suspended_carts"))
+        db.execute("UPDATE suspended_carts SET status='Annullato',updated_at=CURRENT_TIMESTAMP,resumed_by_user_id=?,resumed_by_username=? WHERE id=?",(session.get("user_id"),session.get("user"),cart_id)); log_action(db,"Carrello sospeso annullato",details=f"Carrello #{cart_id}"); db.commit()
+    flash("Carrello sospeso annullato."); return redirect(url_for("suspended_carts"))
+
+@app.post("/cart/suspend")
+@login_required
+def suspend_cart():
+    with connect() as db:
+        cart_id=suspend_current_cart(db,"Sospensione manuale")
+        if not cart_id: flash("Il carrello è vuoto."); return redirect(url_for("cart"))
+        log_action(db,"Carrello sospeso",details=f"Carrello #{cart_id}"); db.commit()
+    session.pop("cart",None); session.modified=True; flash(f"Carrello #{cart_id} salvato tra i sospesi."); return redirect(url_for("suspended_carts"))
+
 @app.get("/cart")
 @login_required
 def cart():
@@ -1000,7 +1112,7 @@ def cart():
             subtotal=qty*p["price"]
             rows.append({"product":p,"quantity":qty,"subtotal":subtotal})
             total+=subtotal; total_qty+=qty
-    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><div class="inline"><label>Pagamento<select name="payment_method"><option>Contanti</option><option>Bancomat</option><option>Bonifico</option><option>Altro</option></select></label><label>Canale<select name="channel"><option>Negozio</option><option>Online</option></select></label></div><button>Conferma vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
+    return page("Carrello",'''<h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><br>€ {{'%.2f'|format(x.product.price)}} cad.<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita di {{total_qty}} articoli per € {{'%.2f'|format(total)}}?')"><div class="inline"><label>Pagamento<select name="payment_method"><option>Contanti</option><option>Bancomat</option><option>Bonifico</option><option>Altro</option></select></label><label>Canale<select name="channel"><option>Negozio</option><option>Online</option></select></label></div><button>Conferma vendita</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="secondary">Sospendi vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/cart/add/<int:product_id>")
 @login_required
