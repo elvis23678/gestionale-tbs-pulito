@@ -16,6 +16,7 @@ import tempfile
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128, qr
 from reportlab.graphics.shapes import Drawing
@@ -81,7 +82,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v9.1.1 BADGE LOGIN"
+APP_VERSION = "v9.1.2 BADGE RAPIDO"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -495,28 +496,32 @@ def start_user_session(db, user, audit_action="Login badge"):
     session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
     log_action(db,audit_action); db.commit()
 
-def badge_scanner_html(target_url, button_label="Scansiona badge"):
-    return '''<div class="card badge-login"><h3>Accesso rapido con badge</h3><p class="muted">Inquadra il QR con la webcam oppure usa un lettore barcode USB.</p><video id="badgeVideo" playsinline muted style="display:none;width:100%;max-height:300px;border-radius:12px;background:#111"></video><form id="badgeForm" method="post" action="{target}"><input id="badgePayload" name="badge_payload" placeholder="Scansiona o inserisci il codice badge" autocomplete="off"><button type="submit">{label}</button></form><div class="actions"><button type="button" class="view" id="startBadgeCamera">📷 Avvia webcam</button><button type="button" class="secondary" id="stopBadgeCamera" style="display:none">Ferma webcam</button></div><p id="badgeStatus" class="muted"></p></div><script>(function(){{const video=document.getElementById('badgeVideo'),start=document.getElementById('startBadgeCamera'),stop=document.getElementById('stopBadgeCamera'),field=document.getElementById('badgePayload'),form=document.getElementById('badgeForm'),status=document.getElementById('badgeStatus');let stream=null,running=false,detector=null;async function halt(){{running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;video.style.display='none';stop.style.display='none';start.style.display='inline-block'}}async function scan(){{if(!running||!detector)return;try{{const codes=await detector.detect(video);if(codes.length){{field.value=codes[0].rawValue;status.textContent='Badge letto. Accesso in corso…';await halt();form.submit();return}}}}catch(e){{status.textContent='Lettura non riuscita: '+e.message}}requestAnimationFrame(scan)}}start.addEventListener('click',async()=>{{if(!('BarcodeDetector' in window)){{status.textContent='Browser non compatibile con la scansione nativa. Usa Chrome aggiornato o un lettore USB.';field.focus();return}}try{{detector=new BarcodeDetector({{formats:['qr_code','code_128']}});stream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}}}});video.srcObject=stream;await video.play();running=true;video.style.display='block';start.style.display='none';stop.style.display='inline-block';status.textContent='Inquadra il badge';scan()}}catch(e){{status.textContent='Webcam non disponibile o permesso negato.'}}}});stop.addEventListener('click',halt);field.addEventListener('input',()=>{{if(field.value.trim().length>20){{clearTimeout(field._t);field._t=setTimeout(()=>form.submit(),180)}}}});window.addEventListener('beforeunload',halt);}})();</script>'''.format(target=target_url,label=button_label)
+def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=True):
+    """Scanner badge che avvia automaticamente la webcam su login e blocco cassa."""
+    auto_value = "true" if auto_start else "false"
+    return r'''<div class="card badge-login" style="max-width:520px;margin:20px auto;text-align:center">
+<h2 style="margin-top:0">📷 Inquadra il badge</h2>
+<p class="muted">La fotocamera si avvia automaticamente. Il login parte appena il QR viene riconosciuto.</p>
+<div style="position:relative;overflow:hidden;border-radius:16px;background:#111;min-height:250px"><video id="badgeVideo" playsinline muted style="width:100%;height:300px;object-fit:cover;display:block"></video><div id="badgeGuide" style="position:absolute;inset:16%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div></div>
+<form id="badgeForm" method="post" action="{target}" style="margin-top:12px"><input id="badgePayload" name="badge_payload" placeholder="Codice badge o lettore USB" autocomplete="off" inputmode="none"><button type="submit" style="margin-top:8px">{label}</button></form>
+<div class="actions" style="justify-content:center"><button type="button" class="view" id="startBadgeCamera" style="display:none">📷 Riavvia webcam</button><button type="button" class="secondary" id="stopBadgeCamera">Ferma webcam</button></div><p id="badgeStatus" class="muted" aria-live="polite">Avvio fotocamera…</p></div>
+<script>(function(){{const video=document.getElementById('badgeVideo'),start=document.getElementById('startBadgeCamera'),stop=document.getElementById('stopBadgeCamera'),field=document.getElementById('badgePayload'),form=document.getElementById('badgeForm'),status=document.getElementById('badgeStatus'),guide=document.getElementById('badgeGuide');let stream=null,running=false,detector=null,submitted=false;async function halt(){{running=false;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;stop.style.display='none';start.style.display='inline-block'}}function submitBadge(value){{if(submitted)return;const clean=(value||'').trim();if(!clean)return;submitted=true;field.value=clean;status.textContent='✓ Badge letto. Accesso in corso…';guide.style.borderColor='#34d399';halt().finally(()=>form.submit())}}async function scan(){{if(!running||!detector||submitted)return;try{{const codes=await detector.detect(video);if(codes.length){{submitBadge(codes[0].rawValue);return}}}}catch(e){{status.textContent='Lettura temporaneamente non disponibile.'}}requestAnimationFrame(scan)}}async function begin(){{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){{status.textContent='Webcam non disponibile. Usa password o lettore USB.';start.style.display='inline-block';stop.style.display='none';return}}if(!('BarcodeDetector' in window)){{status.textContent='Questo browser non supporta la lettura QR automatica. Usa Chrome aggiornato, password o lettore USB.';start.style.display='inline-block';stop.style.display='none';return}}try{{status.textContent='Richiesta accesso alla fotocamera…';detector=new BarcodeDetector({{formats:['qr_code','code_128']}});stream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:{{ideal:'environment'}},width:{{ideal:1280}},height:{{ideal:720}}}},audio:false}});video.srcObject=stream;await video.play();running=true;start.style.display='none';stop.style.display='inline-block';status.textContent='Inquadra il QR dentro il riquadro';requestAnimationFrame(scan)}}catch(e){{status.textContent='Permesso fotocamera negato o webcam occupata. Puoi usare la password.';start.style.display='inline-block';stop.style.display='none'}}}}start.addEventListener('click',begin);stop.addEventListener('click',halt);field.addEventListener('input',()=>{{const v=field.value.trim();if(v.length>20){{clearTimeout(field._t);field._t=setTimeout(()=>submitBadge(v),120)}}}});window.addEventListener('beforeunload',halt);if({auto}){{window.addEventListener('DOMContentLoaded',()=>setTimeout(begin,180),{{once:true}})}}}})();</script>'''.format(target=target_url,label=button_label,auto=auto_value)
 
 def create_badge_pdf(username, role, token):
-    payload=BADGE_PREFIX+token
-    output=BytesIO()
-    width,height=340,215
-    c=canvas.Canvas(output,pagesize=(width,height))
-    c.setTitle(f"Badge TBS - {username}")
-    c.setFont("Helvetica-Bold",18); c.drawString(18,height-30,"TBS Boutique Management")
-    c.setFont("Helvetica-Bold",22); c.drawString(18,height-62,username)
-    c.setFont("Helvetica",11); c.drawString(18,height-80,ROLE_LABELS.get(role,role))
-    widget=qr.QrCodeWidget(payload)
-    bounds=widget.getBounds(); size=92; scale=size/max(bounds[2]-bounds[0],bounds[3]-bounds[1])
-    drawing=Drawing(size,size,transform=[scale,0,0,scale,0,0]); drawing.add(widget)
-    renderPDF.draw(drawing,c,width-size-16,height-size-16)
-    barcode=code128.Code128(payload,barHeight=34,barWidth=0.62,humanReadable=False)
-    barcode.drawOn(c,18,30)
-    c.setFont("Helvetica",7); c.drawString(18,18,payload)
-    c.setFont("Helvetica-Oblique",7); c.drawString(18,8,"Personale e riservato. In caso di smarrimento revocare il badge.")
-    c.showPage(); c.save(); output.seek(0)
-    return output
+    """Genera una vera tessera CR80 (85,60 × 53,98 mm), pronta da stampare al 100%."""
+    qr_payload=BADGE_PREFIX+token; barcode_payload=token; output=BytesIO()
+    width,height=85.60*mm,53.98*mm
+    c=canvas.Canvas(output,pagesize=(width,height)); c.setTitle(f"Badge TBS - {username}")
+    c.setFillColorRGB(0.97,0.97,0.98); c.rect(0,0,width,height,fill=1,stroke=0)
+    c.setStrokeColorRGB(0.08,0.11,0.18); c.setLineWidth(1.2); c.roundRect(2*mm,2*mm,width-4*mm,height-4*mm,3*mm,fill=0,stroke=1)
+    c.setFillColorRGB(0.08,0.11,0.18); c.roundRect(2*mm,height-14*mm,width-4*mm,12*mm,3*mm,fill=1,stroke=0)
+    c.setFillColorRGB(1,1,1); c.setFont("Helvetica-Bold",11); c.drawString(6*mm,height-9.2*mm,"TBS BOUTIQUE"); c.setFont("Helvetica",5.5); c.drawRightString(width-6*mm,height-9*mm,"BADGE PERSONALE")
+    c.setFillColorRGB(0.08,0.11,0.18); c.setFont("Helvetica-Bold",14); c.drawString(6*mm,height-22*mm,username[:24]); c.setFont("Helvetica",7.5); c.drawString(6*mm,height-27*mm,ROLE_LABELS.get(role,role).upper())
+    serial=badge_hash(token)[:10].upper(); c.setFont("Helvetica",5.5); c.setFillColorRGB(.35,.38,.43); c.drawString(6*mm,height-31*mm,"ID "+serial)
+    qr_size=25*mm; widget=qr.QrCodeWidget(qr_payload); bounds=widget.getBounds(); scale=qr_size/max(bounds[2]-bounds[0],bounds[3]-bounds[1]); drawing=Drawing(qr_size,qr_size,transform=[scale,0,0,scale,0,0]); drawing.add(widget); renderPDF.draw(drawing,c,width-31*mm,17*mm)
+    barcode=code128.Code128(barcode_payload,barHeight=8*mm,barWidth=0.22*mm,humanReadable=False); available=48*mm; scale_x=min(1.0,available/max(barcode.width,1)); c.saveState(); c.translate(6*mm,7*mm); c.scale(scale_x,1); barcode.drawOn(c,0,0); c.restoreState()
+    c.setFillColorRGB(.35,.38,.43); c.setFont("Helvetica",4.8); c.drawString(6*mm,4.2*mm,"Stampare a dimensione reale 100% · 85,60 × 53,98 mm")
+    c.showPage(); c.save(); output.seek(0); return output
 
 def suspend_current_cart(db, reason="Blocco cassa"):
     raw=dict(session.get("cart",{}))
@@ -910,8 +915,8 @@ def login():
                     start_user_session(db,user,"Login")
                     return redirect(url_for("dashboard"))
                 flash("Credenziali non corrette o account disattivato.")
-    scanner=badge_scanner_html(url_for("login"),"Accedi con badge")
-    return page("Login",'''<div class="login card"><h1>Gestionale TBS</h1><p class="muted">Accesso riservato</p><form method="post"><p><input name="username" placeholder="Utente" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form><p class="muted">Blocco automatico dopo {{minutes}} minuti.</p></div>{{scanner|safe}}''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
+    scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
+    return page("Login",'''<div style="max-width:560px;margin:24px auto;text-align:center"><h1>Gestionale TBS</h1><p class="muted">Mostra il badge alla webcam per entrare subito.</p></div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Accedi con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" placeholder="Utente" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Accedi</button></form><p class="muted">Blocco automatico dopo {{minutes}} minuti.</p></details>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
 
 @app.get("/lock")
 @login_required
@@ -942,8 +947,8 @@ def unlock_register():
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
                 return redirect(url_for("cart") if same_user and locked_cart_id else url_for("dashboard"))
         flash("Badge o credenziali non validi; account eventualmente disattivato.")
-    scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge")
-    return page("Cassa bloccata",'''<div class="login card" style="text-align:center;max-width:520px"><div style="font-size:54px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}<form method="post"><p><input name="username" value="{{locked_username}}" required autofocus></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></div>{{scanner|safe}}''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
+    scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True)
+    return page("Cassa bloccata",'''<div style="max-width:560px;margin:22px auto;text-align:center"><div style="font-size:48px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Mostra il badge alla webcam.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
 
 @app.get("/logout")
 def logout():
