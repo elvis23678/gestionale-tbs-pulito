@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v9.2 SAFARI QR"
+APP_VERSION = "v10.0 SMART POS"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -203,7 +203,7 @@ textarea{min-height:90px;resize:vertical}button{background:#111827;color:white;f
 dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;color:#4b5563}dd{margin:0}@media(max-width:760px){header{font-size:14px}.detail{grid-template-columns:1fr}dl{grid-template-columns:115px 1fr}.product-photo,.no-photo{height:210px}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Sospesi</a><a href="{{ url_for('change_password') }}">Password</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('lock_register') }}">🔒 Blocca</a><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();})();</script>{% endif %}</body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header><strong>Gestionale TBS <span style="font-size:11px;opacity:.75">{{ app_version }}</span></strong><a href="{{ url_for('dashboard') }}">Dashboard</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('universal_search') }}">Ricerca globale</a><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Ordinabili</a><a href="{{ url_for('pos') }}">✨ Cassa</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Sospesi</a><a href="{{ url_for('change_password') }}">Password</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('sales_log') }}">Vendite</a><a href="{{ url_for('reorders') }}">Riordini</a><a href="{{ url_for('customer_orders') }}">Ordini clienti</a><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a>{% endif %}{% if session.get('role') == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup</a>{% endif %}<span style="margin-left:auto">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('lock_register') }}">🔒 Blocca</a><a href="{{ url_for('logout') }}">Esci</a></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();})();</script>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -409,6 +409,10 @@ def init_db():
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
         ensure_column(db,"sales","status","TEXT DEFAULT 'Confermata'")
+        ensure_column(db,"sales","original_unit_price","REAL")
+        ensure_column(db,"sales","discount_reason","TEXT")
+        ensure_column(db,"sales","authorized_by_user_id","INTEGER")
+        ensure_column(db,"sales","authorized_by_username","TEXT")
         for c,d in [("description","TEXT"),("size","TEXT"),("stone_color","TEXT"),("plating_color","TEXT"),("supplier_quantity","TEXT"),("image_file","TEXT"),("pdf_page","INTEGER")]:
             ensure_column(db,"supplier_catalog",c,d)
         u=os.environ.get("ADMIN_USERNAME","admin"); p=os.environ.get("ADMIN_PASSWORD","cambia-subito")
@@ -1386,6 +1390,79 @@ def suspend_cart():
         log_action(db,"Carrello sospeso",details=f"Carrello #{cart_id}"); db.commit()
     session.pop("cart",None); session.modified=True; flash(f"Carrello #{cart_id} salvato tra i sospesi."); return redirect(url_for("suspended_carts"))
 
+def _cart_price_data(product_id, default_price):
+    data=dict(session.get("cart_prices",{})).get(str(product_id),{})
+    try: price=float(data.get("price",default_price))
+    except (TypeError,ValueError): price=float(default_price)
+    return {"price":max(0,price),"reason":data.get("reason"),"authorized_by_user_id":data.get("authorized_by_user_id"),"authorized_by_username":data.get("authorized_by_username")}
+
+def _find_product_by_scan(db, value):
+    code=(value or "").strip()
+    for candidate in [code,code.rstrip('/').split('/')[-1]]:
+        row=db.execute("SELECT * FROM products WHERE active=1 AND (UPPER(brand_code)=UPPER(?) OR UPPER(supplier_code)=UPPER(?)) LIMIT 1",(candidate,candidate)).fetchone()
+        if row:return row
+    return None
+
+@app.get("/pos")
+@login_required
+def pos():
+    raw=session.get("cart",{}); ids=[]
+    for key in raw:
+        try: ids.append(int(key))
+        except: pass
+    rows=[]; total=0.0; total_qty=0
+    if ids:
+        with connect() as db:
+            products=db.execute(f"SELECT * FROM products WHERE id IN ({','.join('?' for _ in ids)})",ids).fetchall()
+        by_id={x['id']:x for x in products}
+        for pid in ids:
+            p=by_id.get(pid)
+            if not p: continue
+            qty=max(1,int(raw.get(str(pid),1))); pd=_cart_price_data(pid,p['price']); subtotal=qty*pd['price']
+            rows.append({'product':p,'quantity':qty,'unit_price':pd['price'],'original_price':p['price'],'reason':pd['reason'],'authorized_by':pd['authorized_by_username'],'subtotal':subtotal})
+            total+=subtotal; total_qty+=qty
+    return page("Cassa Smart POS",'''<style>
+body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 100%);color:#f7f2e8}.pos{max-width:1450px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center}.brand{font-size:29px;letter-spacing:.08em}.gold{color:#d7b36a}.layout{display:grid;grid-template-columns:1.55fr .75fr;gap:18px}.panel{background:rgba(25,25,27,.9);border:1px solid rgba(215,179,106,.3);border-radius:22px;padding:18px;box-shadow:0 24px 70px #0008}.scan{display:grid;grid-template-columns:1fr auto;gap:10px}.scan input,.modal input,.modal select{background:#0d0e10;color:#fff;border:1px solid #5d5038;padding:15px;font-size:18px}.goldbtn{background:linear-gradient(135deg,#efd28f,#b88a38);color:#17120a;border:0;border-radius:14px;padding:15px;font-weight:900}.row{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #343438}.row img,.ph{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff}.ph{display:grid;place-items:center;color:#777}.actions{display:flex;gap:8px;flex-wrap:wrap}.mini{padding:8px 12px;border-radius:10px;border:1px solid #66583f;background:#191a1d;color:#fff}.price{color:#d7b36a}.notice{padding:9px;border-radius:10px;background:#2e281d;color:#f3dca6;margin-top:8px}.total{text-align:center;background:#0d0d0e;border:1px solid #5e4c2d;border-radius:18px;padding:16px}.amount{font-size:48px;font-weight:900;color:#efd28f}.display{background:#090a0b;border:1px solid #50452f;border-radius:13px;padding:13px;text-align:right;font-size:25px;margin-top:12px}.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}.key{min-height:64px;background:#222327;color:#fff;border:1px solid #444;border-radius:14px;font-size:24px}.payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pay{padding:18px 6px;border:0;border-radius:14px;color:#fff;font-weight:900;width:100%}.cash{background:#177148}.cardpay{background:#24599b}.suspend{background:#6b4f9b}.cancel{background:#8f3030}.modalwrap{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:1000}.modalwrap.open{display:flex}.modal{width:min(480px,92vw);background:#17181b;border:1px solid #806a42;border-radius:22px;padding:22px}.camera{display:none;margin-top:12px}.camera video{width:100%;max-height:280px;background:#000;border-radius:15px}@media(max-width:900px){.layout{grid-template-columns:1fr}.brand{font-size:22px}.amount{font-size:40px}}
+</style><div class="pos"><div class="head"><div><div class="brand"><span class="gold">JEWELRY</span> · Tattoo Beauty Saloon</div><div style="color:#aaa">Smart POS · {{session.get('user')}}</div></div><a class="mini" href="{{url_for('dashboard')}}">← Dashboard</a></div><div class="layout"><section class="panel"><h2>Scansiona gioiello</h2><form class="scan" method="post" action="{{url_for('pos_add_code')}}"><input id="scanCode" name="code" placeholder="QR o codice articolo" autocomplete="off" autofocus required><button class="goldbtn">AGGIUNGI</button></form><button type="button" class="mini" style="margin-top:10px" onclick="toggleCam()">📷 Fotocamera QR</button><div id="camera" class="camera"><video id="video" playsinline></video><div class="notice" id="camStatus">Autorizza la fotocamera.</div></div><h2>Carrello <span class="gold">{{total_qty}} articoli</span></h2>{% for x in rows %}<div class="row">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}">{% else %}<div class="ph">◇</div>{% endif %}<div><b>{{x.product.brand_code}}</b><div style="color:#aaa">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</div><div class="actions"><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity-1}}"><button class="mini">−</button></form><b>{{x.quantity}}</b><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity+1}}"><button class="mini">+</button></form><button class="mini price" type="button" onclick="openPrice({{x.product.id}},'{{x.product.brand_code}}',{{x.original_price}},{{x.unit_price}})">✎ Prezzo</button><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="mini">Rimuovi</button></form></div>{% if x.unit_price != x.original_price %}<div class="notice">Listino € {{'%.2f'|format(x.original_price)}} → <b>€ {{'%.2f'|format(x.unit_price)}}</b><br>{{x.reason}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}</div><div><b>€ {{'%.2f'|format(x.subtotal)}}</b><div style="color:#aaa">€ {{'%.2f'|format(x.unit_price)}} cad.</div></div></div>{% else %}<div class="notice">Carrello vuoto. Scansiona il QR o inserisci il codice.</div>{% endfor %}</section><aside class="panel"><div class="total"><div>TOTALE</div><div class="amount">€ {{'%.2f'|format(total)}}</div></div><div id="display" class="display">0</div><div class="keys">{% for k in ['7','8','9','4','5','6','1','2','3','+','0','−'] %}<button class="key" type="button" onclick="press('{{k}}')">{{k}}</button>{% endfor %}</div><div class="payments"><button class="pay cash" onclick="openCash()">CONTANTI</button><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Bancomat"><input type="hidden" name="channel" value="Negozio"><button class="pay cardpay">BANCOMAT</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="pay suspend">SOSPENDI</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="pay cancel" onclick="return confirm('Svuotare il carrello?')">ANNULLA</button></form></div></aside></div></div>
+<div id="priceModal" class="modalwrap"><div class="modal"><h2>Modifica prezzo</h2><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="pid" name="product_id"><p id="ptitle"></p><label>Prezzo listino<input id="original" readonly></label><label>Nuovo prezzo<input id="newprice" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label><button class="goldbtn">CONFERMA</button><button type="button" class="mini" onclick="closeM('priceModal')">ANNULLA</button></form></div></div>
+<div id="cashModal" class="modalwrap"><div class="modal"><h2>Pagamento contanti</h2><p>Totale <b>€ {{'%.2f'|format(total)}}</b></p><label>Importo ricevuto<input id="received" type="number" step="0.01" oninput="changeCalc()"></label><p>Resto: <b id="change">€ 0,00</b></p><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Contanti"><input type="hidden" name="channel" value="Negozio"><button class="goldbtn" style="width:100%">CONFERMA VENDITA</button></form><button class="mini" style="width:100%;margin-top:8px" onclick="closeM('cashModal')">ANNULLA</button></div></div>
+<script>let d='';function press(k){d+=k==='−'?'-':k;display.textContent=d||'0'}function openPrice(id,n,o,c){pid.value=id;ptitle.textContent=n;original.value='€ '+o.toFixed(2);newprice.value=c.toFixed(2);priceModal.classList.add('open')}function closeM(id){document.getElementById(id).classList.remove('open')}function openCash(){cashModal.classList.add('open');received.focus()}function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}let stream,running=false;async function toggleCam(){camera.style.display='block';if(running){stream.getTracks().forEach(t=>t.stop());running=false;return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;await video.play();running=true;camStatus.textContent='Inquadra il QR.';scan()}catch(e){camStatus.textContent='Fotocamera non disponibile: '+e.message}}async function scan(){if(!running)return;if('BarcodeDetector'in window){try{let r=await new BarcodeDetector({formats:['qr_code']}).detect(video);if(r.length){scanCode.value=r[0].rawValue;stream.getTracks().forEach(t=>t.stop());document.querySelector('.scan').submit();return}}catch(e){}}requestAnimationFrame(scan)}</script>''',rows=rows,total=total,total_qty=total_qty)
+
+@app.post("/pos/add-code")
+@login_required
+def pos_add_code():
+    with connect() as db:p=_find_product_by_scan(db,request.form.get("code"))
+    if not p or p['quantity']<=0:flash("Codice non trovato o prodotto non disponibile.");return redirect(url_for("pos"))
+    cart=dict(session.get("cart",{}));cart[str(p['id'])]=min(int(cart.get(str(p['id']),0))+1,p['quantity']);session['cart']=cart;session.modified=True
+    flash(f"{p['brand_code']} aggiunto al carrello.");return redirect(url_for("pos"))
+
+@app.post("/pos/set-price")
+@login_required
+def pos_set_price():
+    try:pid=int(request.form.get('product_id'));price=round(float(request.form.get('new_price')),2)
+    except:flash("Prezzo non valido.");return redirect(url_for('pos'))
+    reason=request.form.get('reason') or 'Altro'
+    with connect() as db:p=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
+    if not p or str(pid) not in session.get('cart',{}):flash("Articolo non presente nel carrello.");return redirect(url_for('pos'))
+    if price<0 or price>float(p['price']):flash("Il prezzo deve essere tra zero e il listino.");return redirect(url_for('pos'))
+    if session.get('role') in ('admin','manager'):
+        cp=dict(session.get('cart_prices',{}));cp[str(pid)]={'price':price,'reason':reason,'authorized_by_user_id':session.get('user_id'),'authorized_by_username':session.get('user')};session['cart_prices']=cp;session.modified=True;flash("Prezzo modificato.");return redirect(url_for('pos'))
+    session['pending_price_override']={'product_id':pid,'new_price':price,'reason':reason};session.modified=True;return redirect(url_for('pos_authorize_price'))
+
+@app.route("/pos/authorize-price",methods=['GET','POST'])
+@login_required
+def pos_authorize_price():
+    pending=session.get('pending_price_override')
+    if not pending:return redirect(url_for('pos'))
+    if request.method=='POST':
+        with connect() as db:u=find_user_by_badge(db,(request.form.get('badge_token') or '').strip())
+        if not u or u['role'] not in ('admin','manager'):flash("Serve il badge QR di un Gestore o Admin.");return redirect(url_for('pos_authorize_price'))
+        cp=dict(session.get('cart_prices',{}));cp[str(pending['product_id'])]={'price':pending['new_price'],'reason':pending['reason'],'authorized_by_user_id':u['id'],'authorized_by_username':u['username']};session['cart_prices']=cp;session.pop('pending_price_override',None);session.modified=True
+        with connect() as db:log_action(db,"Sconto autorizzato con badge",details=f"Prodotto #{pending['product_id']}; autorizzato da {u['username']}; prezzo € {pending['new_price']:.2f}; motivo {pending['reason']}");db.commit()
+        flash(f"Prezzo autorizzato da {u['username']}.");return redirect(url_for('pos'))
+    scanner=badge_scanner_html(url_for('pos_authorize_price'),"Autorizza con badge QR",auto_start=True)
+    return page("Autorizzazione prezzo",'''<div style="max-width:600px;margin:auto;text-align:center"><h1>Autorizzazione sconto</h1><p>Mostra il badge QR di un <b>Gestore</b> o <b>Admin</b>.</p><div class="card">Nuovo prezzo <b>€ {{'%.2f'|format(pending.new_price)}}</b><br>{{pending.reason}}</div>{{scanner|safe}}<a href="{{url_for('pos')}}">Annulla</a></div>''',pending=pending,scanner=scanner)
+
 @app.get("/cart")
 @login_required
 def cart():
@@ -1470,15 +1547,16 @@ def checkout_cart():
         sale_number=next_sale_number(db)
         total=0.0; pieces=0
         for p,qty in items:
+            pd=_cart_price_data(p["id"],p["price"]); unit_price=pd["price"]
             db.execute("UPDATE products SET quantity=quantity-? WHERE id=?",(qty,p["id"]))
-            db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price,sale_number,payment_method,channel,status) VALUES(?,?,?,?,?,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],qty,p["price"],sale_number,payment,channel,"Confermata"))
+            db.execute("INSERT INTO sales(user_id,username,product_id,product_code,quantity,unit_price,sale_number,payment_method,channel,status,original_unit_price,discount_reason,authorized_by_user_id,authorized_by_username) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(session.get("user_id"),session.get("user","sconosciuto"),p["id"],p["brand_code"],qty,unit_price,sale_number,payment,channel,"Confermata",p["price"],pd["reason"],pd["authorized_by_user_id"],pd["authorized_by_username"]))
             add_reorder_quantity(db,p["id"],qty)
-            log_action(db,"Vendita da carrello",p,f"{sale_number}; {channel}; {payment}; pezzi: {qty}")
-            total+=qty*p["price"]; pieces+=qty
+            log_action(db,"Vendita da carrello",p,f"{sale_number}; {channel}; {payment}; pezzi: {qty}; listino € {p['price']:.2f}; venduto € {unit_price:.2f}; autorizzato da {pd['authorized_by_username'] or '-'}")
+            total+=qty*unit_price; pieces+=qty
         db.commit()
-    session.pop("cart",None); session.modified=True
+    session.pop("cart",None); session.pop("cart_prices",None); session.modified=True
     flash(f"Vendita {sale_number} confermata: {pieces} articoli · € {total:.2f}.")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("pos"))
 
 @app.post("/products/<int:product_id>/stock")
 @login_required
