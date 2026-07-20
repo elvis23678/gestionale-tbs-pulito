@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v11.2 SCANNER QR PRODOTTI"
+APP_VERSION = "v11.3 QR PRODOTTI E ASSISTENTE BANCO"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -695,21 +695,295 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
 </script>'''.format(target=target_url,label=button_label,auto=auto_value)
 
 def product_scanner_html(target_url):
-    """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
-    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
-    replacements={
-        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
-        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
-        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
-        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
-        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
-        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
-        "Badge camera error":"Product QR camera error",
-        "Fotocamera non avviata.":"Fotocamera pronta.",
+    """Scanner QR dedicato ai prodotti, compatibile con Android, iPhone e lettori USB."""
+    return r"""<div class="card" style="max-width:560px;margin:18px auto;text-align:center">
+<h2 style="margin-top:0">📷 Scansiona QR prodotto</h2>
+<p class="muted">Porta il QR al centro e mantieni il telefono fermo per un istante.</p>
+
+<div style="position:relative;overflow:hidden;border-radius:16px;background:#111;min-height:300px">
+  <video id="productQrVideo" playsinline webkit-playsinline muted autoplay
+         style="width:100%;height:350px;object-fit:cover;display:block;background:#111"></video>
+  <canvas id="productQrCanvas" style="display:none"></canvas>
+  <div id="productQrGuide"
+       style="position:absolute;left:20%;right:20%;top:17%;bottom:17%;border:3px solid white;border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div>
+</div>
+
+<form id="productQrForm" method="post" action="__TARGET__" style="margin-top:14px">
+  <input id="productQrPayload" name="badge_payload"
+         placeholder="Codice prodotto o lettore QR USB"
+         autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div style="display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+    <button type="button" id="productQrStart">Avvia fotocamera</button>
+    <button type="submit" class="secondary">Cerca codice</button>
+    <button type="button" class="secondary" id="productQrStop" style="display:none">Ferma</button>
+  </div>
+</form>
+<p id="productQrStatus" class="muted" aria-live="polite">Preparazione fotocamera…</p>
+</div>
+
+<script>
+(function(){
+  const video=document.getElementById('productQrVideo');
+  const canvas=document.getElementById('productQrCanvas');
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const form=document.getElementById('productQrForm');
+  const field=document.getElementById('productQrPayload');
+  const startBtn=document.getElementById('productQrStart');
+  const stopBtn=document.getElementById('productQrStop');
+  const status=document.getElementById('productQrStatus');
+  const guide=document.getElementById('productQrGuide');
+
+  let stream=null;
+  let running=false;
+  let submitted=false;
+  let animationId=null;
+  let detector=null;
+  let jsQrLoading=null;
+  let lastNativeCheck=0;
+
+  function loadJsQR(){
+    if(window.jsQR) return Promise.resolve(window.jsQR);
+    if(jsQrLoading) return jsQrLoading;
+
+    jsQrLoading=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+      script.async=true;
+      script.onload=()=>window.jsQR ? resolve(window.jsQR) : reject(new Error('jsQR non disponibile'));
+      script.onerror=()=>reject(new Error('Impossibile caricare il lettore QR'));
+      document.head.appendChild(script);
+    });
+    return jsQrLoading;
+  }
+
+  function cameraError(error){
+    const name=(error&&error.name)||'';
+    if(!window.isSecureContext) return 'La fotocamera richiede una connessione HTTPS.';
+    if(name==='NotAllowedError'||name==='PermissionDeniedError')
+      return 'Permesso fotocamera negato. Abilitalo nelle impostazioni del browser.';
+    if(name==='NotFoundError'||name==='DevicesNotFoundError')
+      return 'Nessuna fotocamera disponibile.';
+    if(name==='NotReadableError'||name==='TrackStartError')
+      return 'La fotocamera è già utilizzata da un’altra applicazione.';
+    return 'Fotocamera non disponibile. Puoi inserire il codice manualmente.';
+  }
+
+  async function stopCamera(){
+    running=false;
+    if(animationId){
+      cancelAnimationFrame(animationId);
+      animationId=null;
     }
-    for old,new in replacements.items():
-        html=html.replace(old,new)
-    return html
+    if(stream){
+      stream.getTracks().forEach(track=>track.stop());
+      stream=null;
+    }
+    try{
+      video.pause();
+      video.srcObject=null;
+    }catch(e){}
+    startBtn.style.display='inline-block';
+    stopBtn.style.display='none';
+  }
+
+  function sendCode(value){
+    if(submitted) return;
+    const code=(value||'').trim();
+    if(!code) return;
+
+    submitted=true;
+    field.value=code;
+    guide.style.borderColor='#34d399';
+    status.textContent='✓ QR letto. Ricerca prodotto…';
+    if(navigator.vibrate) navigator.vibrate(100);
+
+    stopCamera().finally(()=>form.submit());
+  }
+
+  async function nativeScan(now){
+    if(!detector || now-lastNativeCheck<180) return false;
+    lastNativeCheck=now;
+    try{
+      const results=await detector.detect(video);
+      if(results && results.length && results[0].rawValue){
+        sendCode(results[0].rawValue);
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
+  function fallbackScan(){
+    if(!window.jsQR || video.readyState<2 || !video.videoWidth) return false;
+
+    const maximumWidth=1600;
+    const scale=Math.min(1,maximumWidth/video.videoWidth);
+    canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+    canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+    try{
+      const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const result=window.jsQR(
+        image.data,
+        image.width,
+        image.height,
+        {inversionAttempts:'attemptBoth'}
+      );
+      if(result && result.data){
+        sendCode(result.data);
+        return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
+  async function scanFrame(now){
+    if(!running || submitted) return;
+    if(await nativeScan(now)) return;
+    if(fallbackScan()) return;
+    animationId=requestAnimationFrame(scanFrame);
+  }
+
+  async function startCamera(){
+    if(running) return;
+    submitted=false;
+    guide.style.borderColor='white';
+
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      status.textContent='Il browser non supporta la fotocamera. Inserisci il codice manualmente.';
+      return;
+    }
+
+    startBtn.disabled=true;
+    try{
+      status.textContent='Avvio lettore QR…';
+
+      if('BarcodeDetector' in window){
+        try{
+          const formats=await BarcodeDetector.getSupportedFormats();
+          if(formats.includes('qr_code')){
+            detector=new BarcodeDetector({formats:['qr_code']});
+          }
+        }catch(e){
+          detector=null;
+        }
+      }
+
+      // Il fallback serve soprattutto su Safari e browser senza BarcodeDetector.
+      await loadJsQR();
+
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({
+          audio:false,
+          video:{
+            facingMode:{ideal:'environment'},
+            width:{ideal:1920},
+            height:{ideal:1080}
+          }
+        });
+      }catch(firstError){
+        stream=await navigator.mediaDevices.getUserMedia({
+          audio:false,
+          video:{facingMode:{ideal:'environment'}}
+        });
+      }
+
+      video.srcObject=stream;
+      await video.play();
+
+      const track=stream.getVideoTracks()[0];
+      if(track && track.getCapabilities && track.applyConstraints){
+        try{
+          const capabilities=track.getCapabilities();
+          const advanced=[];
+          if(capabilities.focusMode && capabilities.focusMode.includes('continuous')){
+            advanced.push({focusMode:'continuous'});
+          }
+          if(capabilities.zoom && capabilities.zoom.max>1){
+            advanced.push({zoom:Math.min(2,capabilities.zoom.max)});
+          }
+          if(advanced.length){
+            await track.applyConstraints({advanced:advanced});
+          }
+        }catch(e){}
+      }
+
+      running=true;
+      startBtn.style.display='none';
+      stopBtn.style.display='inline-block';
+      status.textContent='Fotocamera attiva. Avvicina lentamente il QR.';
+      animationId=requestAnimationFrame(scanFrame);
+    }catch(error){
+      await stopCamera();
+      status.textContent=cameraError(error);
+      console.error('Product QR camera error',error);
+    }finally{
+      startBtn.disabled=false;
+    }
+  }
+
+  startBtn.addEventListener('click',startCamera);
+  stopBtn.addEventListener('click',stopCamera);
+
+  form.addEventListener('submit',(event)=>{
+    if(!field.value.trim()){
+      event.preventDefault();
+      status.textContent='Inquadra il QR oppure inserisci il codice prodotto.';
+      startCamera();
+    }
+  });
+
+  // Supporto per lettori QR USB/Bluetooth che scrivono nel campo.
+  field.addEventListener('input',()=>{
+    const value=field.value.trim();
+    if(value.length>=2){
+      clearTimeout(field._submitTimer);
+      field._submitTimer=setTimeout(()=>sendCode(value),250);
+    }
+  });
+
+  window.addEventListener('pagehide',stopCamera);
+  window.addEventListener('beforeunload',stopCamera);
+
+  const automaticStart=()=>setTimeout(startCamera,150);
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',automaticStart,{once:true});
+  }else{
+    automaticStart();
+  }
+})();
+</script>""".replace("__TARGET__", target_url)
+
+
+def normalize_product_qr(value):
+    """Pulisce il contenuto del QR senza eliminare spazi interni validi."""
+    from urllib.parse import urlparse, parse_qs, unquote
+
+    value=(value or "").strip()
+    if not value:
+        return ""
+
+    for prefix in ("TBS_PRODUCT:", "TBSPRODUCT:", "PRODUCT:"):
+        if value.upper().startswith(prefix):
+            value=value[len(prefix):].strip()
+            break
+
+    if value.lower().startswith(("http://","https://")):
+        try:
+            parsed=urlparse(value)
+            query=parse_qs(parsed.query)
+            for key in ("code","q","product","sku"):
+                if query.get(key):
+                    return unquote(query[key][0]).strip()
+            last_part=parsed.path.rstrip("/").split("/")[-1]
+            if last_part:
+                value=unquote(last_part)
+        except Exception:
+            pass
+
+    return value.strip()
+
 
 def create_badge_pdf(badge_name, token):
     """Crea un A4 con fronte e retro 78 x 48 mm affiancati, pronto da tagliare e piegare."""
@@ -1325,45 +1599,80 @@ def price_check():
         by_id={x["id"]:x for x in found}
         recent_rows=[by_id[x] for x in recent_ids if x in by_id]
     is_manager=session.get("role") in ("admin","manager")
-    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
+    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><a class="recent-link" style="background:#111827;color:white;border-color:#111827" href="{{url_for(\'scan_product\',next=\'assistant\')}}">📷 Scansiona QR</a>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div></div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
 
 @app.route("/products/scan",methods=["GET","POST"])
 @login_required
 def scan_product():
+    destination=(request.args.get("next") or request.form.get("next") or "detail").strip().lower()
+    if destination not in ("detail","assistant","cart","pos"):
+        destination="detail"
+
     if request.method=="POST":
-        scanned=(request.form.get("badge_payload") or "").strip()
-        # Alcuni lettori aggiungono spazi o ritorni a capo.
-        scanned="".join(scanned.split())
+        scanned=normalize_product_qr(request.form.get("badge_payload"))
         if not scanned:
             flash("Nessun codice QR rilevato.")
-            return redirect(url_for("scan_product"))
+            return redirect(url_for("scan_product",next=destination))
 
         with connect() as db:
-            # Prima cerca il codice interno esatto; come aiuto accetta anche
-            # il codice fornitore esatto, senza distinzione tra maiuscole/minuscole.
             product=db.execute(
                 """SELECT * FROM products
-                   WHERE UPPER(TRIM(brand_code))=UPPER(?)
-                      OR UPPER(TRIM(supplier_code))=UPPER(?)
-                   ORDER BY CASE WHEN UPPER(TRIM(brand_code))=UPPER(?) THEN 0 ELSE 1 END
+                   WHERE UPPER(TRIM(brand_code))=UPPER(TRIM(?))
+                      OR UPPER(TRIM(supplier_code))=UPPER(TRIM(?))
+                   ORDER BY
+                     CASE WHEN UPPER(TRIM(brand_code))=UPPER(TRIM(?)) THEN 0 ELSE 1 END,
+                     active DESC
                    LIMIT 1""",
                 (scanned,scanned,scanned)
             ).fetchone()
 
-        if product:
-            return redirect(url_for("product_detail",product_id=product["id"]))
+        if not product:
+            flash(f"Nessun prodotto trovato per il codice: {scanned}")
+            return redirect(url_for("scan_product",next=destination))
 
-        flash(f"Nessun prodotto trovato per il codice: {scanned}")
-        return redirect(url_for("scan_product"))
+        if destination=="assistant":
+            return redirect(url_for("price_check",q=product["brand_code"]))
 
-    scanner=product_scanner_html(url_for("scan_product"))
+        if destination in ("cart","pos"):
+            if not product["active"] or product["quantity"]<=0:
+                flash(f"{product['brand_code']} non è disponibile.")
+                return redirect(url_for(destination))
+
+            cart=dict(session.get("cart",{}))
+            current=int(cart.get(str(product["id"]),0))
+            cart[str(product["id"])]=min(current+1,int(product["quantity"]))
+            session["cart"]=cart
+            session.modified=True
+            flash(f"{product['brand_code']} aggiunto al carrello.")
+            return redirect(url_for(destination))
+
+        return redirect(url_for("product_detail",product_id=product["id"]))
+
+    scanner=product_scanner_html(url_for("scan_product",next=destination))
+    if destination=="assistant":
+        back_url=url_for("price_check")
+        title="Scansiona per Assistente banco"
+        description="Inquadra il QR per visualizzare subito prezzo e disponibilità."
+    elif destination in ("cart","pos"):
+        back_url=url_for(destination)
+        title="Scansiona e aggiungi"
+        description="Inquadra il QR per aggiungere il prodotto al carrello."
+    else:
+        back_url=url_for("products")
+        title="Scansiona QR prodotto"
+        description="Inquadra il QR per aprire direttamente la scheda prodotto."
+
     return page(
-        "Scansiona prodotto",
-        """<p><a href="{{url_for('products')}}">← Torna ai prodotti</a></p>
-        <h1>Scansiona QR prodotto</h1>
-        <p class="muted">Inquadra l'etichetta del gioiello: la scheda prodotto si aprirà automaticamente.</p>
-        """+scanner
+        title,
+        """<p><a href="{{back_url}}">← Torna indietro</a></p>
+        <h1>{{title}}</h1>
+        <p class="muted">{{description}}</p>
+        """+scanner,
+        back_url=back_url,
+        title=title,
+        description=description
     )
+
 
 @app.route("/products",methods=["GET","POST"])
 @login_required
@@ -1547,7 +1856,7 @@ def pos():
             total+=subtotal; total_qty+=qty
     return page("Cassa Smart POS",'''<style>
 body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 100%);color:#f7f2e8}.pos{max-width:1450px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center}.brand{font-size:29px;letter-spacing:.08em}.gold{color:#d7b36a}.layout{display:grid;grid-template-columns:1.55fr .75fr;gap:18px}.panel{background:rgba(25,25,27,.9);border:1px solid rgba(215,179,106,.3);border-radius:22px;padding:18px;box-shadow:0 24px 70px #0008}.scan{display:grid;grid-template-columns:1fr auto;gap:10px}.scan input,.modal input,.modal select{background:#0d0e10;color:#fff;border:1px solid #5d5038;padding:15px;font-size:18px}.goldbtn{background:linear-gradient(135deg,#efd28f,#b88a38);color:#17120a;border:0;border-radius:14px;padding:15px;font-weight:900}.add-product-launch{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:72px;margin-bottom:20px;background:linear-gradient(135deg,#f0d795,#b98a39);color:#17120a;border:1px solid #f6e5b8;border-radius:18px;font-size:20px;font-weight:950;letter-spacing:.4px;box-shadow:0 14px 34px rgba(185,138,57,.22);cursor:pointer}.add-product-launch:hover{transform:translateY(-1px);filter:brightness(1.04)}.add-product-launch .plus{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#17120a;color:#efd28f;font-size:27px;line-height:1}.add-modal-title{text-align:center;margin-bottom:5px}.add-modal-sub{text-align:center;color:#aaa;margin-top:0}.scan-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.scan-choice button{min-height:56px}.scan-divider{display:flex;align-items:center;gap:10px;color:#8e8e94;margin:18px 0}.scan-divider:before,.scan-divider:after{content:"";height:1px;background:#3a3a3f;flex:1}.row{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #343438}.row img,.ph{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff}.ph{display:grid;place-items:center;color:#777}.actions{display:flex;gap:8px;flex-wrap:wrap}.mini{padding:8px 12px;border-radius:10px;border:1px solid #66583f;background:#191a1d;color:#fff}.price{color:#d7b36a}.notice{padding:9px;border-radius:10px;background:#2e281d;color:#f3dca6;margin-top:8px}.total{text-align:center;background:#0d0d0e;border:1px solid #5e4c2d;border-radius:18px;padding:16px}.amount{font-size:48px;font-weight:900;color:#efd28f}.display{background:#090a0b;border:1px solid #50452f;border-radius:13px;padding:13px;text-align:right;font-size:25px;margin-top:12px}.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}.key{min-height:64px;background:#222327;color:#fff;border:1px solid #444;border-radius:14px;font-size:24px}.payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pay{padding:18px 6px;border:0;border-radius:14px;color:#fff;font-weight:900;width:100%}.cash{background:#177148}.cardpay{background:#24599b}.suspend{background:#6b4f9b}.cancel{background:#8f3030}.modalwrap{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:1000}.modalwrap.open{display:flex}.modal{width:min(480px,92vw);background:#17181b;border:1px solid #806a42;border-radius:22px;padding:22px}.camera{display:none;margin-top:12px}.camera video{width:100%;max-height:280px;background:#000;border-radius:15px}@media(max-width:900px){.layout{grid-template-columns:1fr}.brand{font-size:22px}.amount{font-size:40px}}
-</style><div class="pos"><div class="head"><div><div class="brand"><span class="gold">JEWELRY</span> · Tattoo Beauty Saloon</div><div style="color:#aaa">Smart POS · {{session.get('user')}}</div></div><a class="mini" href="{{url_for('dashboard')}}">← Dashboard</a></div><div class="layout"><section class="panel"><button type="button" class="add-product-launch" onclick="openAddProduct()"><span class="plus">+</span><span>AGGIUNGI ARTICOLO</span></button><h2>Carrello <span class="gold">{{total_qty}} articoli</span></h2>{% for x in rows %}<div class="row">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}">{% else %}<div class="ph">◇</div>{% endif %}<div><b>{{x.product.brand_code}}</b><div style="color:#aaa">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</div><div class="actions"><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity-1}}"><button class="mini">−</button></form><b>{{x.quantity}}</b><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity+1}}"><button class="mini">+</button></form><button class="mini price" type="button" onclick="openPrice({{x.product.id}},'{{x.product.brand_code}}',{{x.original_price}},{{x.unit_price}})">✎ Prezzo</button><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="mini">Rimuovi</button></form></div>{% if x.unit_price != x.original_price %}<div class="notice">Listino € {{'%.2f'|format(x.original_price)}} → <b>€ {{'%.2f'|format(x.unit_price)}}</b><br>{{x.reason}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}</div><div><b>€ {{'%.2f'|format(x.subtotal)}}</b><div style="color:#aaa">€ {{'%.2f'|format(x.unit_price)}} cad.</div></div></div>{% else %}<div class="notice">Carrello vuoto. Scansiona il QR o inserisci il codice.</div>{% endfor %}</section><aside class="panel"><div class="total"><div>TOTALE</div><div class="amount">€ {{'%.2f'|format(total)}}</div></div><div id="display" class="display">0</div><div class="keys">{% for k in ['7','8','9','4','5','6','1','2','3','+','0','−'] %}<button class="key" type="button" onclick="press('{{k}}')">{{k}}</button>{% endfor %}</div><div class="payments"><button class="pay cash" onclick="openCash()">CONTANTI</button><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Bancomat"><input type="hidden" name="channel" value="Negozio"><button class="pay cardpay">BANCOMAT</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="pay suspend">SOSPENDI</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="pay cancel" onclick="return confirm('Svuotare il carrello?')">ANNULLA</button></form></div></aside></div></div>
+</style><div class="pos"><div class="head"><div><div class="brand"><span class="gold">JEWELRY</span> · Tattoo Beauty Saloon</div><div style="color:#aaa">Smart POS · {{session.get('user')}}</div></div><a class="mini" href="{{url_for('dashboard')}}">← Dashboard</a></div><div class="layout"><section class="panel"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button type="button" class="add-product-launch" onclick="openAddProduct()"><span class="plus">+</span><span>AGGIUNGI ARTICOLO</span></button><a class="add-product-launch" style="text-decoration:none" href="{{url_for('scan_product',next='pos')}}"><span class="plus">▣</span><span>SCANSIONA QR</span></a></div><h2>Carrello <span class="gold">{{total_qty}} articoli</span></h2>{% for x in rows %}<div class="row">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}">{% else %}<div class="ph">◇</div>{% endif %}<div><b>{{x.product.brand_code}}</b><div style="color:#aaa">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</div><div class="actions"><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity-1}}"><button class="mini">−</button></form><b>{{x.quantity}}</b><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity+1}}"><button class="mini">+</button></form><button class="mini price" type="button" onclick="openPrice({{x.product.id}},'{{x.product.brand_code}}',{{x.original_price}},{{x.unit_price}})">✎ Prezzo</button><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="mini">Rimuovi</button></form></div>{% if x.unit_price != x.original_price %}<div class="notice">Listino € {{'%.2f'|format(x.original_price)}} → <b>€ {{'%.2f'|format(x.unit_price)}}</b><br>{{x.reason}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}</div><div><b>€ {{'%.2f'|format(x.subtotal)}}</b><div style="color:#aaa">€ {{'%.2f'|format(x.unit_price)}} cad.</div></div></div>{% else %}<div class="notice">Carrello vuoto. Scansiona il QR o inserisci il codice.</div>{% endfor %}</section><aside class="panel"><div class="total"><div>TOTALE</div><div class="amount">€ {{'%.2f'|format(total)}}</div></div><div id="display" class="display">0</div><div class="keys">{% for k in ['7','8','9','4','5','6','1','2','3','+','0','−'] %}<button class="key" type="button" onclick="press('{{k}}')">{{k}}</button>{% endfor %}</div><div class="payments"><button class="pay cash" onclick="openCash()">CONTANTI</button><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Bancomat"><input type="hidden" name="channel" value="Negozio"><button class="pay cardpay">BANCOMAT</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="pay suspend">SOSPENDI</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="pay cancel" onclick="return confirm('Svuotare il carrello?')">ANNULLA</button></form></div></aside></div></div>
 <div id="addProductModal" class="modalwrap"><div class="modal"><h2 class="add-modal-title">Aggiungi articolo</h2><p class="add-modal-sub">Scansiona il QR oppure inserisci il codice del gioiello.</p><div class="scan-choice"><button type="button" class="goldbtn" onclick="startProductCamera()">📷 SCANSIONA QR</button><button type="button" class="mini" onclick="focusProductCode()">⌨️ INSERISCI CODICE</button></div><div id="camera" class="camera"><video id="video" playsinline></video><div class="notice" id="camStatus">Autorizza la fotocamera.</div></div><div class="scan-divider">oppure</div><form id="productScanForm" class="scan" method="post" action="{{url_for('pos_add_code')}}"><input id="scanCode" name="code" placeholder="Codice articolo" autocomplete="off" required><button class="goldbtn">AGGIUNGI</button></form><button type="button" class="mini" style="width:100%;margin-top:12px" onclick="closeAddProduct()">ANNULLA</button></div></div>
 <div id="priceModal" class="modalwrap"><div class="modal"><h2>Modifica prezzo</h2><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="pid" name="product_id"><input type="hidden" name="return_to" value="pos"><p id="ptitle"></p><label>Prezzo listino<input id="original" readonly></label><label>Nuovo prezzo<input id="newprice" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label><button class="goldbtn">CONFERMA</button><button type="button" class="mini" onclick="closeM('priceModal')">ANNULLA</button></form></div></div>
 <div id="cashModal" class="modalwrap"><div class="modal"><h2>Pagamento contanti</h2><p>Totale <b>€ {{'%.2f'|format(total)}}</b></p><label>Importo ricevuto<input id="received" type="number" step="0.01" oninput="changeCalc()"></label><p>Resto: <b id="change">€ 0,00</b></p><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Contanti"><input type="hidden" name="channel" value="Negozio"><button class="goldbtn" style="width:100%">CONFERMA VENDITA</button></form><button class="mini" style="width:100%;margin-top:8px" onclick="closeM('cashModal')">ANNULLA</button></div></div>
