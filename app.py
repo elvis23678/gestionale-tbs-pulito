@@ -49,7 +49,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-APP_VERSION = "v8.0 BANCO & DASHBOARD"
+APP_VERSION = "v8.1 VARIANTI STABILI"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -381,6 +381,22 @@ def values(form):
     brand=form["brand_code"].strip().upper()
     return (form["supplier_code"].strip().upper(),brand,int(form["quantity"]),float(form["price"].replace(",",".")),form.get("category") or infer_category(brand),form.get("material",""),form.get("color",""),form.get("size",""),form.get("stone",""),form.get("thread_type",""),form.get("notes",""),max(0,int(form.get("min_stock",1) or 1)),form.get("location","").strip(),float((form.get("cost_price","0") or "0").replace(",",".")),1 if form.get("is_new") else 0,1 if form.get("is_bestseller") else 0,form.get("model_name","").strip(),form.get("variant_group","").strip().upper())
 
+def variant_conflict(db, product_id, variant_group, color, size, stone):
+    """Restituisce una variante duplicata nello stesso gruppo, se presente."""
+    group=(variant_group or "").strip().upper()
+    if not group:
+        return None
+    return db.execute(
+        """SELECT id, brand_code FROM products
+           WHERE id<>? AND UPPER(COALESCE(variant_group,''))=?
+             AND UPPER(TRIM(COALESCE(color,'')))=UPPER(TRIM(?))
+             AND UPPER(TRIM(COALESCE(size,'')))=UPPER(TRIM(?))
+             AND UPPER(TRIM(COALESCE(stone,'')))=UPPER(TRIM(?))
+           LIMIT 1""",
+        (product_id or 0, group, color or "", size or "", stone or "")
+    ).fetchone()
+
+
 def next_sale_number(db):
     prefix=datetime.now().strftime("V%Y%m%d")
     row=db.execute("SELECT COUNT(DISTINCT sale_number) FROM sales WHERE sale_number LIKE ?",(prefix+"%",)).fetchone()
@@ -711,8 +727,31 @@ def product_variants(product_id):
         if not p: flash("Prodotto non trovato."); return redirect(url_for("products"))
         if not p["variant_group"]: flash("Assegna prima un gruppo varianti."); return redirect(url_for("edit_product",product_id=product_id))
         variants=db.execute("SELECT * FROM products WHERE UPPER(variant_group)=UPPER(?) ORDER BY active DESC,color,size,stone,brand_code",(p["variant_group"],)).fetchall()
-    body="""<style>.variants-table{width:100%;border-collapse:collapse}.variants-table th,.variants-table td{padding:11px;border-bottom:1px solid #e5e7eb;text-align:left}.variants-table .num{text-align:right}.variants-actions{display:flex;gap:8px;flex-wrap:wrap}</style><h1>{{p.model_name or p.brand_code}}</h1><p class='muted'>Gruppo <b>{{p.variant_group}}</b> · {{variants|length}} varianti</p><form method='post' action='{{url_for("duplicate_product",product_id=p.id)}}'><button>＋ Crea nuova variante</button></form><div class='card' style='margin-top:15px'><div style='overflow:auto'><table class='variants-table'><tr><th>Codice</th><th>Colore</th><th>Misura</th><th>Pietra</th><th class='num'>Prezzo</th><th class='num'>Qtà</th><th></th></tr>{% for v in variants %}<tr><td><b>{{v.brand_code}}</b><br><span class='muted'>{{v.supplier_code}}</span></td><td>{{v.color or '-'}}</td><td>{{v.size or '-'}}</td><td>{{v.stone or '-'}}</td><td class='num'>€ {{'%.2f'|format(v.price)}}</td><td class='num'>{{v.quantity}}</td><td><div class='variants-actions'><a class='secondary' href='{{url_for("edit_product",product_id=v.id)}}'>Modifica</a><a target='_blank' href='{{url_for("boutique_product",product_id=v.id)}}'>Anteprima</a></div></td></tr>{% endfor %}</table></div></div>"""
+    body="""<style>.variants-table{width:100%;border-collapse:collapse}.variants-table th,.variants-table td{padding:11px;border-bottom:1px solid #e5e7eb;text-align:left}.variants-table .num{text-align:right}.variants-actions{display:flex;gap:8px;flex-wrap:wrap}.quick-form{display:grid;grid-template-columns:100px 105px auto;gap:7px;align-items:center}.quick-form input{padding:8px;min-width:0}.quick-form button{padding:9px 10px}.archived-row{opacity:.55}@media(max-width:700px){.quick-form{grid-template-columns:1fr}.variants-table{min-width:850px}}</style><h1>{{p.model_name or p.brand_code}}</h1><p class='muted'>Gruppo <b>{{p.variant_group}}</b> · {{variants|length}} varianti</p><p class='muted'>Aggiorna rapidamente prezzo e quantità senza aprire ogni singola scheda.</p><form method='post' action='{{url_for("duplicate_product",product_id=p.id)}}'><button>＋ Crea nuova variante</button></form><div class='card' style='margin-top:15px'><div style='overflow:auto'><table class='variants-table'><tr><th>Codice</th><th>Colore</th><th>Misura</th><th>Pietra</th><th>Prezzo / quantità</th><th>Stato</th><th></th></tr>{% for v in variants %}<tr class='{% if not v.active %}archived-row{% endif %}'><td><b>{{v.brand_code}}</b><br><span class='muted'>{{v.supplier_code}}</span></td><td>{{v.color or '-'}}</td><td>{{v.size or '-'}}</td><td>{{v.stone or '-'}}</td><td><form class='quick-form' method='post' action='{{url_for("quick_update_variant",product_id=p.id,variant_id=v.id)}}'><input aria-label='Prezzo' name='price' inputmode='decimal' value='{{"%.2f"|format(v.price)}}'><input aria-label='Quantità' name='quantity' type='number' min='0' value='{{v.quantity}}'><button>Salva</button></form></td><td>{% if v.active %}{% if v.quantity>1 %}🟢 Disponibile{% elif v.quantity==1 %}🟡 Ultimo pezzo{% else %}⚪ Esaurito{% endif %}{% else %}Archiviato{% endif %}</td><td><div class='variants-actions'><a class='secondary' href='{{url_for("edit_product",product_id=v.id)}}'>Modifica</a><a target='_blank' href='{{url_for("boutique_product",product_id=v.id)}}'>Anteprima</a></div></td></tr>{% endfor %}</table></div></div>"""
     return page("Gestione varianti",body,p=p,variants=variants)
+
+@app.post("/products/<int:product_id>/variants/<int:variant_id>/quick-update")
+@role_required("admin","manager")
+def quick_update_variant(product_id,variant_id):
+    try:
+        quantity=max(0,int(request.form.get("quantity","0")))
+        price=float((request.form.get("price","0") or "0").replace(",","."))
+        if price < 0: raise ValueError
+    except ValueError:
+        flash("Prezzo o quantità non validi.")
+        return redirect(url_for("product_variants",product_id=product_id))
+    with connect() as db:
+        parent=db.execute("SELECT variant_group FROM products WHERE id=?",(product_id,)).fetchone()
+        variant=db.execute("SELECT * FROM products WHERE id=?",(variant_id,)).fetchone()
+        if not parent or not variant or not parent["variant_group"] or (variant["variant_group"] or "").upper()!=parent["variant_group"].upper():
+            flash("La variante non appartiene a questo gruppo.")
+            return redirect(url_for("products"))
+        db.execute("UPDATE products SET quantity=?,price=? WHERE id=?",(quantity,price,variant_id))
+        updated=db.execute("SELECT * FROM products WHERE id=?",(variant_id,)).fetchone()
+        log_action(db,"Variante aggiornata rapidamente",updated,f"Quantità {quantity}, prezzo {price:.2f}")
+        db.commit()
+    flash(f"Variante {variant['brand_code']} aggiornata.")
+    return redirect(url_for("product_variants",product_id=product_id))
 
 @app.route("/products/<int:product_id>/edit",methods=["GET","POST"])
 @role_required("admin","manager")
@@ -721,7 +760,16 @@ def edit_product(product_id):
         p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
         if not p: flash("Prodotto non trovato."); return redirect(url_for("products"))
         if request.method=="POST":
-            v=values(request.form); ph=photo_data(request.files.get("photo"))
+            try:
+                v=values(request.form)
+            except (KeyError, ValueError):
+                flash("Controlla quantità e prezzi: devono essere numeri validi.")
+                return redirect(url_for("edit_product",product_id=product_id))
+            conflict=variant_conflict(db,product_id,v[17],v[6],v[7],v[8])
+            if conflict:
+                flash(f"Combinazione già presente nel gruppo: {conflict['brand_code']}.")
+                return redirect(url_for("edit_product",product_id=product_id))
+            ph=photo_data(request.files.get("photo"))
             if ph: db.execute("UPDATE products SET supplier_code=?,brand_code=?,quantity=?,price=?,category=?,material=?,color=?,size=?,stone=?,thread_type=?,notes=?,min_stock=?,location=?,cost_price=?,is_new=?,is_bestseller=?,model_name=?,variant_group=?,photo_data=? WHERE id=?",v+(ph,product_id))
             else: db.execute("UPDATE products SET supplier_code=?,brand_code=?,quantity=?,price=?,category=?,material=?,color=?,size=?,stone=?,thread_type=?,notes=?,min_stock=?,location=?,cost_price=?,is_new=?,is_bestseller=?,model_name=?,variant_group=? WHERE id=?",v+(product_id,))
             updated=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone(); log_action(db,"Prodotto modificato",updated); db.commit(); flash("Prodotto aggiornato."); return redirect(url_for("product_detail",product_id=product_id))
