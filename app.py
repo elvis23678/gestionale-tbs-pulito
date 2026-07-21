@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v13 AUTORIZZAZIONI REMOTE"
+APP_VERSION = "v13.1 SCONTI REMOTI"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -218,7 +218,7 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;colo
  body{padding-bottom:82px}.main-header{position:sticky;top:0;z-index:80;display:grid;grid-template-columns:1fr auto;padding:10px 14px}.header-brand strong{font-size:20px}.header-brand span{font-size:12px}.user-menu .user-label{display:none}.main-nav{display:none;grid-column:1/-1;width:100%;padding-top:10px}.mobile-menu-open .main-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mobile-menu-open .nav-direct,.mobile-menu-open .nav-group{display:block;width:100%}.mobile-menu-open .nav-group summary{min-height:48px}.mobile-menu-open .nav-dropdown{position:static;min-width:0;box-shadow:none;margin-top:5px}.mobile-dock{position:fixed;left:0;right:0;bottom:0;z-index:100;display:grid;grid-template-columns:repeat(5,1fr);background:#111827;border-top:1px solid #334155;padding:7px 5px max(7px,env(safe-area-inset-bottom));box-shadow:0 -8px 25px rgba(0,0,0,.22)}.mobile-dock a,.mobile-dock button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:55px;padding:4px 2px;border:0;background:transparent;color:white;text-decoration:none;font-size:11px;font-weight:800}.mobile-dock span{font-size:22px;line-height:1}.gallery{grid-template-columns:1fr}.product .actions{display:grid;grid-template-columns:1fr 1fr}.product .actions>*{width:100%}.product .actions form button,.product .actions a{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center}.order-stage-grid{grid-template-columns:1fr!important}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('dashboard') }}"><strong>Gestionale TBS</strong><span>{{ app_version }}</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('dashboard') }}">🏠 Dashboard</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">✨ Cassa</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a><a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu">{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('discount_approvals')}}" title="Autorizzazioni sconto">🔔</a>{% endif %}<span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('change_password') }}" title="Cambia password">🔑</a><a href="{{ url_for('lock_register') }}" title="Blocca gestionale">🔒</a><a href="{{ url_for('logout') }}" title="Esci">Esci</a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});})();</script>{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('dashboard')}}"><span>🏠</span>Home</a><a href="{{url_for('pos')}}"><span>💳</span>Vendita</a><a href="{{url_for('products')}}"><span>💎</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>📦</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>🔎</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>☰</span>Altro</button></nav>{% endif %}</body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('dashboard') }}"><strong>Gestionale TBS</strong><span>{{ app_version }}</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('dashboard') }}">🏠 Dashboard</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">✨ Cassa</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('change_password') }}" title="Cambia password">🔑</a><a href="{{ url_for('lock_register') }}" title="Blocca gestionale">🔒</a><a href="{{ url_for('logout') }}" title="Esci">Esci</a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}})();</script>{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('dashboard')}}"><span>🏠</span>Home</a><a href="{{url_for('pos')}}"><span>💳</span>Vendita</a><a href="{{url_for('products')}}"><span>💎</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>📦</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>🔎</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>☰</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -418,20 +418,20 @@ def init_db():
                 quantity INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(cart_id, product_id)
             );
-            CREATE TABLE IF NOT EXISTS discount_approval_requests(
+            CREATE TABLE IF NOT EXISTS discount_requests(
                 id INTEGER PRIMARY KEY,
                 request_token TEXT UNIQUE NOT NULL,
-                seller_user_id INTEGER NOT NULL,
-                seller_username TEXT NOT NULL,
+                requester_user_id INTEGER NOT NULL,
+                requester_username TEXT NOT NULL,
                 product_id INTEGER NOT NULL,
                 product_code TEXT NOT NULL,
                 original_price REAL NOT NULL,
                 requested_price REAL NOT NULL,
                 reason TEXT,
-                return_to TEXT NOT NULL DEFAULT 'cart',
+                return_to TEXT NOT NULL DEFAULT 'pos',
                 status TEXT NOT NULL DEFAULT 'In attesa',
-                approved_by_user_id INTEGER,
-                approved_by_username TEXT,
+                approver_user_id INTEGER,
+                approver_username TEXT,
                 decision_note TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 decided_at TEXT,
@@ -446,10 +446,10 @@ def init_db():
         ensure_column(db,"users","badge_token_hash","TEXT")
         ensure_column(db,"users","badge_created_at","TEXT")
         ensure_column(db,"users","badge_name","TEXT")
-        ensure_column(db,"users","quick_pin_hash","TEXT")
-        ensure_column(db,"users","quick_pin_updated_at","TEXT")
+        ensure_column(db,"users","approval_pin_hash","TEXT")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_badge_token_hash ON users(badge_token_hash) WHERE badge_token_hash IS NOT NULL")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_discount_requests_status_created ON discount_approval_requests(status, created_at)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_discount_requests_status ON discount_requests(status, created_at)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_discount_requests_requester ON discount_requests(requester_user_id, status)")
         ensure_column(db,"sales","sale_number","TEXT")
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
@@ -1724,72 +1724,90 @@ def pos_set_price():
         cp=dict(session.get('cart_prices',{}));cp[str(pid)]={'price':price,'reason':reason,'authorized_by_user_id':session.get('user_id'),'authorized_by_username':session.get('user')};session['cart_prices']=cp;session.modified=True;flash("Prezzo modificato.");return redirect(url_for(return_to))
     token=secrets.token_urlsafe(24)
     with connect() as db:
-        db.execute("UPDATE discount_approval_requests SET status='Annullata', decided_at=CURRENT_TIMESTAMP, decision_note='Sostituita da una nuova richiesta' WHERE seller_user_id=? AND product_id=? AND status='In attesa'",(session.get('user_id'),pid))
-        cur=db.execute("INSERT INTO discount_approval_requests(request_token,seller_user_id,seller_username,product_id,product_code,original_price,requested_price,reason,return_to) VALUES(?,?,?,?,?,?,?,?,?)",(token,session.get('user_id'),session.get('user'),pid,p['brand_code'],float(p['price']),price,reason,return_to))
-        request_id=cur.lastrowid
-        log_action(db,"Richiesta sconto remoto",product_id=pid,product_code=p['brand_code'],details=f"Richiesta #{request_id}; listino € {float(p['price']):.2f}; richiesto € {price:.2f}; motivo {reason}")
+        db.execute("UPDATE discount_requests SET status='Superata',decided_at=CURRENT_TIMESTAMP WHERE requester_user_id=? AND product_id=? AND status='In attesa'",(session.get('user_id'),pid))
+        db.execute("INSERT INTO discount_requests(request_token,requester_user_id,requester_username,product_id,product_code,original_price,requested_price,reason,return_to) VALUES(?,?,?,?,?,?,?,?,?)",(token,session.get('user_id'),session.get('user'),pid,p['brand_code'],float(p['price']),price,reason,return_to))
+        log_action(db,"Richiesta sconto remota",p,f"Listino € {p['price']:.2f}; richiesto € {price:.2f}; motivo {reason}")
         db.commit()
-    session['pending_discount_request_id']=request_id;session.modified=True
+    session['pending_discount_token']=token;session.modified=True
     flash("Richiesta inviata ad Admin e Gestore.")
-    return redirect(url_for('discount_request_wait',request_id=request_id))
+    return redirect(url_for('discount_request_wait',token=token))
 
-@app.get("/discount-requests/<int:request_id>/wait")
+@app.get("/discount-request/<token>")
 @login_required
-def discount_request_wait(request_id):
+def discount_request_wait(token):
     with connect() as db:
-        row=db.execute("SELECT * FROM discount_approval_requests WHERE id=? AND seller_user_id=?",(request_id,session.get('user_id'))).fetchone()
-    if not row:
-        flash("Richiesta non trovata."); return redirect(url_for('cart'))
-    return page("Attesa autorizzazione",'''<style>.approval-wait{max-width:620px;margin:auto;text-align:center}.pulse{font-size:58px;animation:pulse 1.2s infinite}@keyframes pulse{50%{transform:scale(1.12)}}.approval-state{font-size:24px;font-weight:900;margin:14px}.approval-data{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left}.approval-data div{padding:12px;background:#f5f7fb;border-radius:12px}@media(max-width:600px){.approval-data{grid-template-columns:1fr}}</style><div class="approval-wait"><h1>Richiesta sconto inviata</h1><div class="pulse">🔔</div><div id="approvalState" class="approval-state">In attesa di Admin o Gestore…</div><div class="card approval-data"><div><span class="muted">Articolo</span><br><b>{{r.product_code}}</b></div><div><span class="muted">Prezzo</span><br><s>€ {{'%.2f'|format(r.original_price)}}</s> → <b>€ {{'%.2f'|format(r.requested_price)}}</b></div><div><span class="muted">Sconto</span><br><b>{{'%.1f'|format((1-r.requested_price/r.original_price)*100 if r.original_price else 0)}}%</b></div><div><span class="muted">Motivo</span><br><b>{{r.reason}}</b></div></div><a class="secondary" href="{{url_for(r.return_to)}}">Torna indietro</a></div><script>async function checkApproval(){try{const x=await fetch({{url_for('discount_request_status',request_id=r.id)|tojson}},{cache:'no-store'});const d=await x.json();const el=document.getElementById('approvalState');if(d.status==='Approvata'){el.textContent='✅ Approvata da '+d.approved_by;el.style.color='#087f5b';setTimeout(()=>location.href=d.redirect,700)}else if(d.status==='Rifiutata'||d.status==='Annullata'){el.textContent='❌ '+d.status+(d.note?' · '+d.note:'');el.style.color='#b91c1c';}else setTimeout(checkApproval,1800)}catch(e){setTimeout(checkApproval,3000)}}checkApproval();</script>''',r=row)
+        req=db.execute("SELECT * FROM discount_requests WHERE request_token=? AND requester_user_id=?",(token,session.get('user_id'))).fetchone()
+    if not req:
+        flash("Richiesta non trovata.")
+        return redirect(url_for("pos"))
+    if req["status"]=="Approvata":
+        with connect() as db:
+            p=db.execute("SELECT * FROM products WHERE id=?",(req["product_id"],)).fetchone()
+            if not p or str(req["product_id"]) not in session.get("cart",{}):
+                flash("L'articolo non è più nel carrello.")
+                return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
+            cp=dict(session.get("cart_prices",{}))
+            cp[str(req["product_id"])]= {"price":req["requested_price"],"reason":req["reason"],"authorized_by_user_id":req["approver_user_id"],"authorized_by_username":req["approver_username"]}
+            session["cart_prices"]=cp
+            session.pop("pending_discount_token",None)
+            session.modified=True
+            db.execute("UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",(req["id"],))
+            log_action(db,"Sconto remoto applicato",p,f"Autorizzato da {req['approver_username']}; prezzo € {req['requested_price']:.2f}")
+            db.commit()
+        flash(f"Sconto autorizzato da {req['approver_username']}.")
+        return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
+    if req["status"] in ("Rifiutata","Superata","Annullata"):
+        session.pop("pending_discount_token",None);session.modified=True
+        flash("Richiesta sconto non approvata." if req["status"]=="Rifiutata" else "Richiesta non più valida.")
+        return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
+    return page("Attesa autorizzazione",'''<style>.wait-box{max-width:620px;margin:28px auto;text-align:center}.pulse{width:74px;height:74px;border-radius:50%;margin:20px auto;background:#d7b36a;animation:pulse 1.5s infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 #d7b36a99}70%{box-shadow:0 0 0 28px #d7b36a00}100%{box-shadow:0 0 0 0 #d7b36a00}}</style><div class="wait-box card"><div class="pulse"></div><h1>Richiesta inviata</h1><p>Attendo la risposta di Admin o Gestore.</p><p><b>{{req.product_code}}</b><br>Listino € {{'%.2f'|format(req.original_price)}} → richiesto <b>€ {{'%.2f'|format(req.requested_price)}}</b><br>{{req.reason}}</p><p class="muted">La pagina si aggiorna automaticamente.</p><form method="post" action="{{url_for('cancel_discount_request',token=req.request_token)}}"><button class="secondary">Annulla richiesta</button></form></div><script>setTimeout(()=>location.reload(),3000)</script>''',req=req)
 
-@app.get("/api/discount-requests/<int:request_id>/status")
+@app.post("/discount-request/<token>/cancel")
 @login_required
-def discount_request_status(request_id):
+def cancel_discount_request(token):
     with connect() as db:
-        r=db.execute("SELECT * FROM discount_approval_requests WHERE id=? AND seller_user_id=?",(request_id,session.get('user_id'))).fetchone()
-        if not r: return {"status":"Non trovata"},404
-        if r['status']=='Approvata' and not r['applied_at']:
-            cp=dict(session.get('cart_prices',{}));cp[str(r['product_id'])]={'price':r['requested_price'],'reason':r['reason'],'authorized_by_user_id':r['approved_by_user_id'],'authorized_by_username':r['approved_by_username']};session['cart_prices']=cp;session.modified=True
-            db.execute("UPDATE discount_approval_requests SET applied_at=CURRENT_TIMESTAMP WHERE id=?",(r['id'],));db.commit()
-    return {"status":r['status'],"approved_by":r['approved_by_username'] or '',"note":r['decision_note'] or '',"redirect":url_for(r['return_to'] if r['return_to'] in ('cart','pos') else 'cart')}
+        db.execute("UPDATE discount_requests SET status='Annullata',decided_at=CURRENT_TIMESTAMP WHERE request_token=? AND requester_user_id=? AND status='In attesa'",(token,session.get('user_id')))
+        db.commit()
+    session.pop("pending_discount_token",None);session.modified=True
+    flash("Richiesta annullata.")
+    return redirect(url_for("pos"))
+
+@app.get("/api/discount-requests/pending-count")
+@role_required("admin","manager")
+def discount_pending_count():
+    with connect() as db:
+        count=db.execute("SELECT COUNT(*) FROM discount_requests WHERE status='In attesa'").fetchone()[0]
+    return {"count":count}
 
 @app.get("/discount-approvals")
-@roles_required('admin','manager')
+@role_required("admin","manager")
 def discount_approvals():
     with connect() as db:
-        pending=db.execute("SELECT * FROM discount_approval_requests WHERE status='In attesa' ORDER BY created_at ASC").fetchall()
-        recent=db.execute("SELECT * FROM discount_approval_requests WHERE status!='In attesa' ORDER BY COALESCE(decided_at,created_at) DESC LIMIT 40").fetchall()
-        me=db.execute("SELECT quick_pin_hash FROM users WHERE id=?",(session.get('user_id'),)).fetchone()
-    return page("Autorizzazioni sconto",'''<style>.request-card{border-left:7px solid #d39a27}.request-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.discount-big{font-size:30px;font-weight:1000}.decision-grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}.pinbox{font-size:24px;letter-spacing:8px;text-align:center}.notif-banner{background:#fff4d7;border:1px solid #d7b15f;padding:12px;border-radius:12px;margin-bottom:14px}@media(max-width:650px){.decision-grid{grid-template-columns:1fr}.request-head{display:block}}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="notif-banner"><b>Imposta il PIN rapido</b><br>Serve per confermare dal tuo smartphone.<form class="inline" method="post" action="{{url_for('set_my_quick_pin')}}"><input class="pinbox" name="pin" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" placeholder="••••" required><button>Salva PIN</button></form></div>{% endif %}<button type="button" class="secondary" onclick="enableNotifications()">🔔 Attiva notifiche su questo telefono</button><p class="muted">Le notifiche vengono mostrate quando il gestionale resta aperto nel browser. L'elenco si aggiorna automaticamente.</p><div id="pendingArea">{% for r in pending %}<div class="card request-card"><div class="request-head"><div><b>{{r.seller_username}}</b> richiede uno sconto su <b>{{r.product_code}}</b><br><span class="muted">{{r.created_at|rome_time}} · {{r.reason}}</span></div><div class="discount-big">{{'%.1f'|format((1-r.requested_price/r.original_price)*100 if r.original_price else 0)}}%</div></div><p><s>€ {{'%.2f'|format(r.original_price)}}</s> → <b>€ {{'%.2f'|format(r.requested_price)}}</b></p><form method="post" action="{{url_for('decide_discount_request',request_id=r.id)}}"><input class="pinbox" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><label>Nota facoltativa<input name="note" placeholder="Motivo della decisione"></label><div class="decision-grid"><button name="decision" value="approve">✅ APPROVA</button><button class="danger" name="decision" value="reject">❌ RIFIUTA</button></div></form></div>{% else %}<div class="card"><b>Nessuna richiesta in attesa.</b></div>{% endfor %}</div><h2>Storico recente</h2><div class="card">{% for r in recent %}<p><b>{{r.product_code}}</b> · {{r.seller_username}} · <b>{{r.status}}</b>{% if r.approved_by_username %} da {{r.approved_by_username}}{% endif %} · {{r.decided_at|rome_time}}</p>{% else %}<p class="muted">Nessuna decisione.</p>{% endfor %}</div><script>let known={{pending|map(attribute='id')|list|tojson}};async function enableNotifications(){if(!('Notification'in window))return alert('Notifiche non supportate');const p=await Notification.requestPermission();alert(p==='granted'?'Notifiche attivate':'Permesso non concesso')}async function poll(){try{const r=await fetch({{url_for('discount_approval_feed')|tojson}},{cache:'no-store'});const d=await r.json();const fresh=d.items.filter(x=>!known.includes(x.id));if(fresh.length&&Notification.permission==='granted')fresh.forEach(x=>new Notification('Richiesta sconto TBS',{body:x.seller+' · '+x.product+' · '+x.discount+'%'}));if(fresh.length)location.reload();known=d.items.map(x=>x.id)}catch(e){}setTimeout(poll,5000)}poll();</script>''',pending=pending,recent=recent,has_pin=bool(me and me['quick_pin_hash']))
+        me=db.execute("SELECT approval_pin_hash FROM users WHERE id=?",(session.get("user_id"),)).fetchone()
+        rows=db.execute("SELECT * FROM discount_requests WHERE status='In attesa' ORDER BY created_at ASC,id ASC").fetchall()
+        recent=db.execute("SELECT * FROM discount_requests WHERE status!='In attesa' ORDER BY COALESCE(decided_at,created_at) DESC,id DESC LIMIT 20").fetchall()
+    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><button name="decision" value="reject" class="danger" {% if not has_pin %}disabled{% endif %}>✖ Rifiuta</button></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
 
-@app.get("/api/discount-approvals/feed")
-@roles_required('admin','manager')
-def discount_approval_feed():
-    with connect() as db: rows=db.execute("SELECT id,seller_username,product_code,original_price,requested_price FROM discount_approval_requests WHERE status='In attesa' ORDER BY created_at").fetchall()
-    return {"items":[{"id":r['id'],"seller":r['seller_username'],"product":r['product_code'],"discount":round((1-r['requested_price']/r['original_price'])*100,1) if r['original_price'] else 0} for r in rows]}
-
-@app.post("/settings/quick-pin")
-@roles_required('admin','manager')
-def set_my_quick_pin():
-    pin=(request.form.get('pin') or '').strip()
-    if not pin.isdigit() or len(pin) not in (4,5,6): flash("Il PIN deve contenere da 4 a 6 cifre."); return redirect(url_for('discount_approvals'))
-    with connect() as db:
-        db.execute("UPDATE users SET quick_pin_hash=?,quick_pin_updated_at=CURRENT_TIMESTAMP WHERE id=?",(generate_password_hash(pin),session.get('user_id')));log_action(db,"PIN rapido aggiornato");db.commit()
-    flash("PIN rapido salvato.");return redirect(url_for('discount_approvals'))
-
-@app.post("/discount-approvals/<int:request_id>/decide")
-@roles_required('admin','manager')
+@app.post("/discount-approvals/<int:request_id>/decision")
+@role_required("admin","manager")
 def decide_discount_request(request_id):
-    pin=(request.form.get('pin') or '').strip();decision=request.form.get('decision');note=(request.form.get('note') or '').strip()
+    pin=(request.form.get("pin") or "").strip()
+    decision=request.form.get("decision")
     with connect() as db:
-        me=db.execute("SELECT * FROM users WHERE id=? AND active=1",(session.get('user_id'),)).fetchone();r=db.execute("SELECT * FROM discount_approval_requests WHERE id=?",(request_id,)).fetchone()
-        if not me or not me['quick_pin_hash'] or not check_password_hash(me['quick_pin_hash'],pin): flash("PIN rapido errato.");return redirect(url_for('discount_approvals'))
-        if not r or r['status']!='In attesa': flash("La richiesta è già stata gestita.");return redirect(url_for('discount_approvals'))
-        status='Approvata' if decision=='approve' else 'Rifiutata'
-        db.execute("UPDATE discount_approval_requests SET status=?,approved_by_user_id=?,approved_by_username=?,decision_note=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,me['id'],me['username'],note,request_id))
-        log_action(db,f"Richiesta sconto {status.lower()}",product_id=r['product_id'],product_code=r['product_code'],details=f"Richiesta #{request_id}; venditore {r['seller_username']}; € {r['original_price']:.2f} → € {r['requested_price']:.2f}; {note}")
+        me=db.execute("SELECT * FROM users WHERE id=? AND active=1",(session.get("user_id"),)).fetchone()
+        req=db.execute("SELECT * FROM discount_requests WHERE id=?",(request_id,)).fetchone()
+        if not me or not me["approval_pin_hash"] or not check_password_hash(me["approval_pin_hash"],pin):
+            flash("PIN rapido errato.")
+            return redirect(url_for("discount_approvals"))
+        if not req or req["status"]!="In attesa":
+            flash("La richiesta è già stata gestita.")
+            return redirect(url_for("discount_approvals"))
+        status="Approvata" if decision=="approve" else "Rifiutata"
+        db.execute("UPDATE discount_requests SET status=?,approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,me["id"],me["username"],request_id))
+        log_action(db,"Sconto remoto approvato" if status=="Approvata" else "Sconto remoto rifiutato",details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; € {req['requested_price']:.2f}")
         db.commit()
-    flash(f"Richiesta {status.lower()}.");return redirect(url_for('discount_approvals'))
+    flash("Sconto approvato." if status=="Approvata" else "Sconto rifiutato.")
+    return redirect(url_for("discount_approvals"))
 
 @app.route("/pos/authorize-price",methods=['GET','POST'])
 @login_required
@@ -1829,7 +1847,7 @@ def cart():
             total+=subtotal; total_qty+=qty
     return page("Carrello",'''<style>
 .cart-price-box{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.edit-price-btn{background:linear-gradient(135deg,#d6b15f,#a97927);color:#17120a;border:0;border-radius:10px;padding:10px 14px;font-weight:900}.discount-note{background:#fff4d7;border:1px solid #d7b15f;border-radius:10px;padding:10px;margin:8px 0;color:#503a0d}.price-modal-wrap{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:2000}.price-modal-wrap.open{display:flex}.price-modal{width:min(480px,92vw);background:#fff;border-radius:20px;padding:24px;box-shadow:0 30px 90px #0008}.price-modal label{display:block;font-weight:800;margin-top:12px}.price-modal input,.price-modal select{width:100%;margin-top:6px}.price-modal-actions{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-top:18px}.payment-buttons{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}.payment-buttons label{display:block}.payment-buttons input{position:absolute;opacity:0}.payment-buttons span{display:block;text-align:center;padding:15px;border:2px solid #d8dde5;border-radius:12px;font-weight:900;cursor:pointer}.payment-buttons input:checked+span{border-color:#b88a2a;background:#fff4d7;color:#4a350b}@media(max-width:650px){.payment-buttons{grid-template-columns:1fr}.price-modal-actions{grid-template-columns:1fr}}
-</style><h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><div class="cart-price-box"><span>{% if x.unit_price != x.original_price %}<s>€ {{'%.2f'|format(x.original_price)}}</s> <b>€ {{'%.2f'|format(x.unit_price)}} cad.</b>{% else %}<b>€ {{'%.2f'|format(x.original_price)}} cad.</b>{% endif %}</span><button type="button" class="edit-price-btn" onclick='openCartPrice({{x.product.id}}, {{x.product.brand_code|tojson}}, {{x.original_price}}, {{x.unit_price}})'>✏️ Modifica prezzo</button></div>{% if x.unit_price != x.original_price %}<div class="discount-note"><b>Prezzo personalizzato</b><br>Listino € {{'%.2f'|format(x.original_price)}} → vendita € {{'%.2f'|format(x.unit_price)}}<br>{{x.reason or 'Altro'}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita?')"><div class="payment-buttons"><label><input type="radio" name="payment_method" value="Contanti" checked><span>💶 CONTANTI</span></label><label><input type="radio" name="payment_method" value="Bancomat"><span>💳 BANCOMAT</span></label><label><input type="radio" name="payment_method" value="Bonifico"><span>🏦 BONIFICO</span></label><label><input type="radio" name="payment_method" value="Altro"><span>••• ALTRO</span></label></div><input type="hidden" name="channel" value="Negozio"><button>Conferma vendita</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="secondary">Sospendi vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div><div id="cartPriceModal" class="price-modal-wrap"><div class="price-modal"><h2>Modifica prezzo</h2><p id="cartPriceTitle"></p><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="cartPricePid" name="product_id"><input type="hidden" name="return_to" value="cart"><label>Prezzo di listino<input id="cartPriceOriginal" readonly></label><label>Nuovo prezzo<input id="cartPriceNew" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label>{% if session.get('role') == 'seller' %}<div class="discount-note">La richiesta sarà inviata sul telefono di Admin e Gestore.</div>{% endif %}<div class="price-modal-actions"><button class="edit-price-btn">{% if session.get('role') == 'seller' %}RICHIEDI AUTORIZZAZIONE{% else %}CONFERMA PREZZO{% endif %}</button><button type="button" class="secondary" onclick="closeCartPrice()">ANNULLA</button></div></form></div></div><script>function openCartPrice(id,name,original,current){cartPricePid.value=id;cartPriceTitle.textContent=name;cartPriceOriginal.value='€ '+Number(original).toFixed(2);cartPriceNew.value=Number(current).toFixed(2);cartPriceModal.classList.add('open');cartPriceNew.focus()}function closeCartPrice(){cartPriceModal.classList.remove('open')}cartPriceModal.addEventListener('click',function(e){if(e.target===this)closeCartPrice()})</script>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
+</style><h1>Carrello vendita</h1>{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">{{x.product.supplier_code}} · disponibili {{x.product.quantity}}</span><div class="cart-price-box"><span>{% if x.unit_price != x.original_price %}<s>€ {{'%.2f'|format(x.original_price)}}</s> <b>€ {{'%.2f'|format(x.unit_price)}} cad.</b>{% else %}<b>€ {{'%.2f'|format(x.original_price)}} cad.</b>{% endif %}</span><button type="button" class="edit-price-btn" onclick='openCartPrice({{x.product.id}}, {{x.product.brand_code|tojson}}, {{x.original_price}}, {{x.unit_price}})'>✏️ Modifica prezzo</button></div>{% if x.unit_price != x.original_price %}<div class="discount-note"><b>Prezzo personalizzato</b><br>Listino € {{'%.2f'|format(x.original_price)}} → vendita € {{'%.2f'|format(x.unit_price)}}<br>{{x.reason or 'Altro'}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div><form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita?')"><div class="payment-buttons"><label><input type="radio" name="payment_method" value="Contanti" checked><span>💶 CONTANTI</span></label><label><input type="radio" name="payment_method" value="Bancomat"><span>💳 BANCOMAT</span></label><label><input type="radio" name="payment_method" value="Bonifico"><span>🏦 BONIFICO</span></label><label><input type="radio" name="payment_method" value="Altro"><span>••• ALTRO</span></label></div><input type="hidden" name="channel" value="Negozio"><button>Conferma vendita</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="secondary">Sospendi vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div><div id="cartPriceModal" class="price-modal-wrap"><div class="price-modal"><h2>Modifica prezzo</h2><p id="cartPriceTitle"></p><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="cartPricePid" name="product_id"><input type="hidden" name="return_to" value="cart"><label>Prezzo di listino<input id="cartPriceOriginal" readonly></label><label>Nuovo prezzo<input id="cartPriceNew" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label>{% if session.get('role') == 'seller' %}<div class="discount-note">Dopo la conferma sarà richiesto il badge QR di un Gestore o Admin.</div>{% endif %}<div class="price-modal-actions"><button class="edit-price-btn">{% if session.get('role') == 'seller' %}RICHIEDI AUTORIZZAZIONE{% else %}CONFERMA PREZZO{% endif %}</button><button type="button" class="secondary" onclick="closeCartPrice()">ANNULLA</button></div></form></div></div><script>function openCartPrice(id,name,original,current){cartPricePid.value=id;cartPriceTitle.textContent=name;cartPriceOriginal.value='€ '+Number(original).toFixed(2);cartPriceNew.value=Number(current).toFixed(2);cartPriceModal.classList.add('open');cartPriceNew.focus()}function closeCartPrice(){cartPriceModal.classList.remove('open')}cartPriceModal.addEventListener('click',function(e){if(e.target===this)closeCartPrice()})</script>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/cart/add/<int:product_id>")
 @login_required
@@ -2274,7 +2292,7 @@ def users():
             except sqlite3.IntegrityError:
                 flash("Username gia esistente.")
     with connect() as db:
-        rows=db.execute("SELECT id,username,badge_name,role,active,created_at,badge_token_hash,badge_created_at FROM users ORDER BY username").fetchall()
+        rows=db.execute("SELECT id,username,badge_name,role,active,created_at,badge_token_hash,badge_created_at,approval_pin_hash FROM users ORDER BY username").fetchall()
     return page("Utenti",'''<h1>Gestione utenti</h1>
     <div class="card"><h3>Crea dipendente</h3><form class="inline" method="post">
     <input name="username" placeholder="Username di accesso" required>
@@ -2289,8 +2307,26 @@ def users():
     {% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}
     <form method="post" action="{{url_for('generate_user_badge',user_id=u.id)}}" onsubmit="return confirm('Generare un nuovo badge? Il precedente verra invalidato.')"><button class="success">{% if u.badge_token_hash %}Rigenera e stampa badge{% else %}Genera e stampa badge{% endif %}</button></form>
     {% if u.badge_token_hash %}<form method="post" action="{{url_for('revoke_user_badge',user_id=u.id)}}" onsubmit="return confirm('Revocare il badge di {{u.username}}?')"><button class="danger">Revoca badge</button></form>{% endif %}
-    <form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form>
+    <form method="post" action="{{url_for('reset_user_password',user_id=u.id')}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form>
+    {% if u.role in ('admin','manager') %}<form method="post" action="{{url_for('set_user_approval_pin',user_id=u.id')}}" class="inline"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" placeholder="PIN rapido 4-6 cifre" required><button class="success">{% if u.approval_pin_hash %}Cambia PIN sconti{% else %}Imposta PIN sconti{% endif %}</button></form>{% endif %}
     </div><hr>{% endfor %}</div>''',rows=rows,roles=ROLE_LABELS)
+
+@app.post("/users/<int:user_id>/approval-pin")
+@role_required("admin")
+def set_user_approval_pin(user_id):
+    pin=(request.form.get("pin") or "").strip()
+    if not pin.isdigit() or len(pin) not in (4,5,6):
+        flash("Il PIN deve contenere da 4 a 6 cifre.")
+        return redirect(url_for("users"))
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
+        if not u or u["role"] not in ("admin","manager"):
+            flash("Il PIN rapido è disponibile solo per Admin e Gestore.")
+        else:
+            db.execute("UPDATE users SET approval_pin_hash=? WHERE id=?",(generate_password_hash(pin),user_id))
+            log_action(db,"PIN autorizzazioni aggiornato",details=u["username"])
+            db.commit();flash("PIN rapido salvato.")
+    return redirect(url_for("users"))
 
 @app.post("/users/<int:user_id>/badge/name")
 @role_required("admin")
