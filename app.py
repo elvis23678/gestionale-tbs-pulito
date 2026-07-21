@@ -117,7 +117,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v14.0.1 PUSH FIX"
+APP_VERSION = "v14.1 PUSH STABILE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -678,6 +678,123 @@ def role_required(*roles):
             return fn(*a,**k)
         return wrapped
     return decorator
+
+@app.get("/manifest.json")
+def web_manifest():
+    manifest = {
+        "name": "Gestionale TBS",
+        "short_name": "TBS",
+        "description": "Gestionale Tattoo Beauty Saloon",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#111827",
+        "theme_color": "#111827",
+        "icons": [{"src": "/push-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}],
+    }
+    response = jsonify(manifest)
+    response.headers["Content-Type"] = "application/manifest+json"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+@app.get("/service-worker.js")
+def service_worker():
+    script = """self.addEventListener('install', event => self.skipWaiting());
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+self.addEventListener('push', event => {
+  let data = {title: 'TBS Gestionale', body: 'Nuova notifica', url: '/', tag: 'tbs'};
+  try { if (event.data) data = Object.assign(data, event.data.json()); } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/push-icon.svg',
+    badge: data.badge || '/push-icon.svg',
+    tag: data.tag || 'tbs',
+    renotify: true,
+    data: {url: data.url || '/'}
+  };
+  event.waitUntil(self.registration.showNotification(data.title || 'TBS Gestionale', options));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(clients.matchAll({type: 'window', includeUncontrolled: true}).then(list => {
+    for (const client of list) {
+      if ('focus' in client) { client.navigate(target); return client.focus(); }
+    }
+    return clients.openWindow ? clients.openWindow(target) : undefined;
+  }));
+});"""
+    response = Response(script, mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
+@app.get("/push-icon.svg")
+def push_icon():
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="96" fill="#111827"/>
+<circle cx="256" cy="256" r="174" fill="none" stroke="#d4af37" stroke-width="24"/>
+<path d="M154 184h204v46h-75v154h-54V230h-75z" fill="#d4af37"/>
+</svg>"""
+    response = Response(svg, mimetype="image/svg+xml")
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+@app.post("/push/subscribe")
+@role_required("admin", "manager")
+def push_subscribe():
+    payload = request.get_json(silent=True) or {}
+    endpoint = str(payload.get("endpoint") or "").strip()
+    keys = payload.get("keys") or {}
+    p256dh = str(keys.get("p256dh") or "").strip()
+    auth = str(keys.get("auth") or "").strip()
+    if not endpoint or not p256dh or not auth:
+        return jsonify({"ok": False, "error": "Sottoscrizione incompleta"}), 400
+    user_agent = (request.headers.get("User-Agent") or "")[:500]
+    with connect() as db:
+        db.execute("""INSERT INTO push_subscriptions
+            (user_id, username, role, endpoint, p256dh, auth, user_agent, active, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(endpoint) DO UPDATE SET
+              user_id=excluded.user_id, username=excluded.username, role=excluded.role,
+              p256dh=excluded.p256dh, auth=excluded.auth, user_agent=excluded.user_agent,
+              active=1, updated_at=CURRENT_TIMESTAMP""",
+            (session.get("user_id"), session.get("user"), session.get("role"), endpoint, p256dh, auth, user_agent))
+        db.commit()
+    return jsonify({"ok": True, "configured": push_is_configured()})
+
+
+@app.route("/push/test", methods=["GET", "POST"])
+@role_required("admin", "manager")
+def push_test():
+    if request.method == "POST":
+        result = send_push_to_user(session.get("user_id"), "TBS · Notifica di prova",
+                                   "Le notifiche push sono configurate correttamente.",
+                                   url_for("dashboard"), "tbs-test")
+        if result.get("sent"):
+            flash("Notifica di prova inviata al tuo telefono.")
+        elif not push_is_configured():
+            flash("Invio non configurato: controlla pywebpush e le chiavi VAPID.")
+        else:
+            flash("Nessun dispositivo attivo trovato. Premi prima ATTIVA sul telefono.")
+        return redirect(url_for("push_test"))
+    with connect() as db:
+        devices = db.execute("""SELECT id,username,role,user_agent,active,created_at,updated_at
+                              FROM push_subscriptions WHERE user_id=? ORDER BY updated_at DESC""",
+                             (session.get("user_id"),)).fetchall()
+    body = """<h1>📲 Prova notifiche</h1>
+<div class="card"><p>Prima premi <b>ATTIVA</b> nella fascia in alto e autorizza le notifiche nel browser.</p>
+<form method="post"><button class="success">Invia notifica di prova</button></form></div>
+<div class="card"><h2>Dispositivi registrati</h2>{% if devices %}{% for d in devices %}
+<p><b>{{d.role}} · {{'Attivo' if d.active else 'Disattivato'}}</b><br><span class="muted">{{d.user_agent or 'Browser non identificato'}}<br>Aggiornato: {{d.updated_at|rome_time}}</span></p><hr>
+{% endfor %}{% else %}<p>Nessun dispositivo registrato.</p>{% endif %}</div>"""
+    return page("Prova notifiche", body, devices=devices)
+
 
 def log_action(db, action, product=None, details=""):
     db.execute("INSERT INTO audit_log(user_id,username,action,product_id,product_code,details) VALUES(?,?,?,?,?,?)",(
