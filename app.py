@@ -2,6 +2,7 @@ import base64
 import hashlib
 import secrets
 import re
+import json
 import os
 import sqlite3
 import csv
@@ -116,7 +117,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v14.0 CASSA E CATALOGO VARIANTI"
+APP_VERSION = "v14.0.1 PUSH FIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -657,7 +658,7 @@ def send_push_to_user(user_id, title, body, url="/", tag="tbs"):
 
 def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
-    return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
+    return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000, vapid_public_key=VAPID_PUBLIC_KEY)
 
 def login_required(fn):
     @wraps(fn)
