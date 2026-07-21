@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import shutil
 import tempfile
 
-from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file
+from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -24,6 +24,12 @@ from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128, qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics import renderPDF
+
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:
+    webpush = None
+    WebPushException = Exception
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CATALOG_IMAGES_ARCHIVE = os.path.join(APP_DIR, "catalog_images.zip")
@@ -63,6 +69,30 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 LOCK_TIMEOUT_SECONDS = max(60, int(os.environ.get("LOCK_TIMEOUT_SECONDS", "300")))
 
 ROME_TZ = ZoneInfo("Europe/Rome")
+
+# Web Push: su Render puoi sostituire questi valori con variabili d'ambiente.
+# Il fallback permette di testare subito; mantenere le stesse chiavi evita di perdere le iscrizioni.
+DEFAULT_VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgwsggjwiRhpw0MR/C
+AOwPNxSD+Rptj/YGqiEn3gH1q4KhRANCAARxzQRYMcTLRKH4cCR/MLoUYv8TbmjK
+MdQenQ7P6pGC4XCnIgmswlEA/QdO9xwLdMETLBqYNHPSSSog/16VZMXX
+-----END PRIVATE KEY-----"""
+DEFAULT_VAPID_PUBLIC_KEY = "BHHNBFgxxMtEofhwJH8wuhRi_xNuaMox1B6dDs_qkYLhcKciCazCUQD9B073HAt0wRMsGpg0c9JJKiD_XpVkxdc"
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", DEFAULT_VAPID_PRIVATE_KEY).replace("\\n", "\n")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", DEFAULT_VAPID_PRIVATE_KEY).replace("\\n", "\n")
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", DEFAULT_VAPID_PUBLIC_KEY).strip()
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "mailto:admin@tattoobeautysaloon.it").strip()
+
+VAPID_PRIVATE_KEY_PATH = os.environ.get("VAPID_PRIVATE_KEY_PATH", "").strip()
+if not VAPID_PRIVATE_KEY_PATH:
+    VAPID_PRIVATE_KEY_PATH = os.path.join("/tmp", "tbs_vapid_private.pem")
+    try:
+        with open(VAPID_PRIVATE_KEY_PATH, "w", encoding="utf-8") as _vapid_file:
+            _vapid_file.write(VAPID_PRIVATE_KEY)
+        os.chmod(VAPID_PRIVATE_KEY_PATH, 0o600)
+    except OSError as exc:
+        print(f"Impossibile creare la chiave VAPID temporanea: {exc}")
+        VAPID_PRIVATE_KEY_PATH = ""
 
 def now_rome():
     """Restituisce data e ora correnti nel fuso italiano, con ora legale automatica."""
@@ -219,7 +249,13 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:9px}dt{font-weight:bold;colo
  body{padding-bottom:82px}.main-header{position:sticky;top:0;z-index:80;display:grid;grid-template-columns:1fr auto;padding:10px 14px}.header-brand strong{font-size:20px}.header-brand span{font-size:12px}.user-menu .user-label{display:none}.main-nav{display:none;grid-column:1/-1;width:100%;padding-top:10px}.mobile-menu-open .main-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mobile-menu-open .nav-direct,.mobile-menu-open .nav-group{display:block;width:100%}.mobile-menu-open .nav-group summary{min-height:48px}.mobile-menu-open .nav-dropdown{position:static;min-width:0;box-shadow:none;margin-top:5px}.mobile-dock{position:fixed;left:0;right:0;bottom:0;z-index:100;display:grid;grid-template-columns:repeat(5,1fr);background:#111827;border-top:1px solid #334155;padding:7px 5px max(7px,env(safe-area-inset-bottom));box-shadow:0 -8px 25px rgba(0,0,0,.22)}.mobile-dock a,.mobile-dock button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:55px;padding:4px 2px;border:0;background:transparent;color:white;text-decoration:none;font-size:11px;font-weight:800}.mobile-dock span{font-size:22px;line-height:1}.gallery{grid-template-columns:1fr}.product .actions{display:grid;grid-template-columns:1fr 1fr}.product .actions>*{width:100%}.product .actions form button,.product .actions a{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;text-align:center}.order-stage-grid{grid-template-columns:1fr!important}}
 '''
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('dashboard') }}"><strong>Gestionale TBS</strong><span>{{ app_version }}</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('dashboard') }}">🏠 Dashboard</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('change_password') }}" title="Cambia password">🔑</a><a href="{{ url_for('lock_register') }}" title="Blocca gestionale">🔒</a><a href="{{ url_for('logout') }}" title="Esci">Esci</a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}})();</script>{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('dashboard')}}"><span>🏠</span>Home</a><a href="{{url_for('pos')}}"><span>💰</span>Cassa</a><a href="{{url_for('products')}}"><span>💎</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>📦</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>🔎</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>☰</span>Altro</button></nav>{% endif %}</body></html>'''
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#111827"><link rel="manifest" href="{{ url_for('web_manifest') }}"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('dashboard') }}"><strong>Gestionale TBS</strong><span>{{ app_version }}</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('dashboard') }}">🏠 Dashboard</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('push_test') }}">📲 Prova notifica</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a href="{{ url_for('change_password') }}" title="Cambia password">🔑</a><a href="{{ url_for('lock_register') }}" title="Blocca gestionale">🔒</a><a href="{{ url_for('logout') }}" title="Esci">Esci</a></div></header>{% endif %}<main>{% if session.get('role') in ('admin','manager') %}<div id="pushSetup" class="flash" style="display:none;border-left:5px solid #b8860b"><b>🔔 Attiva notifiche TBS</b><br><span>Ricevi richieste sconto e nuove vendite anche quando il gestionale non è aperto.</span> <button type="button" id="enablePushBtn" style="width:auto;margin-left:8px;padding:8px 12px">ATTIVA</button></div>{% endif %}{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}checkDiscounts();setInterval(checkDiscounts,8000);
+const pushBox=document.getElementById('pushSetup'),pushBtn=document.getElementById('enablePushBtn');
+function b64ToUint8Array(base64String){const padding='='.repeat((4-base64String.length%4)%4);const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+async function existingPush(){if(!('serviceWorker' in navigator)||!('PushManager' in window)){return null;}const reg=await navigator.serviceWorker.register("{{url_for('service_worker')}}",{scope:'/'});await navigator.serviceWorker.ready;return {reg,sub:await reg.pushManager.getSubscription()};}
+async function updatePushBox(){try{const x=await existingPush();if(!x){pushBox.style.display='block';pushBox.querySelector('span').textContent='Questo browser non supporta le notifiche push.';pushBtn.style.display='none';return;}if(Notification.permission==='denied'){pushBox.style.display='block';pushBox.querySelector('span').textContent='Le notifiche sono bloccate nelle impostazioni del browser.';pushBtn.style.display='none';return;}pushBox.style.display=x.sub?'none':'block';}catch(e){pushBox.style.display='block';}}
+async function enablePush(){pushBtn.disabled=true;pushBtn.textContent='ATTENDO…';try{const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Permesso non concesso');const x=await existingPush();let sub=x.sub;if(!sub){sub=await x.reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToUint8Array({{ vapid_public_key|tojson }})});}const r=await fetch("{{url_for('push_subscribe')}}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)});if(!r.ok)throw new Error('Registrazione non riuscita');pushBox.style.display='none';new Notification('TBS Gestionale',{body:'Notifiche attivate correttamente.'});}catch(e){alert('Non è stato possibile attivare le notifiche: '+e.message);pushBtn.disabled=false;pushBtn.textContent='ATTIVA';}}
+if(pushBtn)pushBtn.addEventListener('click',enablePush);updatePushBox();{% endif %}})();</script>{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('dashboard')}}"><span>🏠</span>Home</a><a href="{{url_for('pos')}}"><span>💰</span>Cassa</a><a href="{{url_for('products')}}"><span>💎</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>📦</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>🔎</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>☰</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -419,6 +455,21 @@ def init_db():
                 quantity INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(cart_id, product_id)
             );
+            CREATE TABLE IF NOT EXISTS push_subscriptions(
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                endpoint TEXT UNIQUE NOT NULL,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                user_agent TEXT,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_role ON push_subscriptions(role, active);
+            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id, active);
             CREATE TABLE IF NOT EXISTS discount_requests(
                 id INTEGER PRIMARY KEY,
                 request_token TEXT UNIQUE NOT NULL,
@@ -528,6 +579,82 @@ def init_db():
                          row.get("supplier_quantity","").strip(),row.get("image_file","").strip(),int(row.get("pdf_page") or 0)))
         db.commit()
 
+
+def push_is_configured():
+    return bool(webpush and VAPID_PRIVATE_KEY_PATH and VAPID_PUBLIC_KEY and VAPID_SUBJECT)
+
+
+def _push_payload(title, body, url="/", tag="tbs", extra=None):
+    payload={"title":title,"body":body,"url":url,"tag":tag,"icon":"/push-icon.svg","badge":"/push-icon.svg"}
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def send_push_to_roles(roles, title, body, url="/", tag="tbs", exclude_user_id=None):
+    """Invia una notifica ai dispositivi iscritti dei ruoli indicati."""
+    if not push_is_configured():
+        print("Web Push non disponibile: installare pywebpush e configurare le chiavi VAPID.")
+        return {"sent":0,"failed":0}
+    roles=tuple(dict.fromkeys(roles or ()))
+    if not roles:
+        return {"sent":0,"failed":0}
+    placeholders=",".join("?" for _ in roles)
+    params=list(roles)
+    sql=f"SELECT * FROM push_subscriptions WHERE active=1 AND role IN ({placeholders})"
+    if exclude_user_id is not None:
+        sql += " AND user_id<>?"
+        params.append(exclude_user_id)
+    with connect() as db:
+        subscriptions=db.execute(sql,params).fetchall()
+    import json
+    data=json.dumps(_push_payload(title,body,url,tag),ensure_ascii=False)
+    sent=failed=0
+    stale=[]
+    for sub in subscriptions:
+        info={"endpoint":sub["endpoint"],"keys":{"p256dh":sub["p256dh"],"auth":sub["auth"]}}
+        try:
+            webpush(subscription_info=info,data=data,vapid_private_key=VAPID_PRIVATE_KEY_PATH,
+                    vapid_claims={"sub":VAPID_SUBJECT},ttl=120)
+            sent+=1
+        except WebPushException as exc:
+            failed+=1
+            status=getattr(getattr(exc,"response",None),"status_code",None)
+            if status in (404,410):
+                stale.append(sub["id"])
+            print(f"Errore Web Push endpoint {sub['id']}: {exc}")
+        except Exception as exc:
+            failed+=1
+            print(f"Errore Web Push endpoint {sub['id']}: {exc}")
+    if stale:
+        with connect() as db:
+            db.executemany("UPDATE push_subscriptions SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",[(x,) for x in stale])
+            db.commit()
+    return {"sent":sent,"failed":failed}
+
+
+def send_push_to_user(user_id, title, body, url="/", tag="tbs"):
+    if not push_is_configured():
+        return {"sent":0,"failed":0}
+    with connect() as db:
+        roles=[r[0] for r in db.execute("SELECT DISTINCT role FROM push_subscriptions WHERE active=1 AND user_id=?",(user_id,)).fetchall()]
+    # filtro diretto tramite ruolo non basta se più utenti condividono il ruolo: invio specifico
+    import json
+    data=json.dumps(_push_payload(title,body,url,tag),ensure_ascii=False)
+    with connect() as db:
+        subscriptions=db.execute("SELECT * FROM push_subscriptions WHERE active=1 AND user_id=?",(user_id,)).fetchall()
+    sent=failed=0
+    for sub in subscriptions:
+        try:
+            webpush(subscription_info={"endpoint":sub["endpoint"],"keys":{"p256dh":sub["p256dh"],"auth":sub["auth"]}},
+                    data=data,vapid_private_key=VAPID_PRIVATE_KEY_PATH,vapid_claims={"sub":VAPID_SUBJECT},ttl=120)
+            sent+=1
+        except Exception as exc:
+            failed+=1
+            print(f"Errore Web Push utente {user_id}: {exc}")
+    return {"sent":sent,"failed":failed}
+
+
 def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
@@ -561,13 +688,28 @@ def log_action(db, action, product=None, details=""):
 
 
 def catalog_group_key(row):
-    image=(row["image_file"] or "").strip().lower()
+    """Raggruppa le varianti dello stesso modello, senza separarle per foto, misura o colore."""
     description=(row["description"] or "").strip().lower()
-    base=description or (row["brand_code"] or "").strip().lower()
-    base=re.sub(r"\b(?:6|7|8|9|10|11|12|14|16)\s*mm\b", "", base)
-    base=re.sub(r"\b(?:argento|silver|oro(?:\s+giallo)?|gold|oro\s+rosa|rose\s+gold|nero|black|blu|blue|verde|green|viola|purple|multicolore)\b", "", base)
+    brand=(row["brand_code"] or "").strip().lower()
+    supplier=(row["supplier_code"] or "").strip().lower()
+    base=description or brand or supplier
+
+    # Elimina le informazioni che normalmente cambiano tra le varianti.
+    base=re.sub(r"\b(?:diametro|diameter|lunghezza|length|barra|bar|gauge|spessore)\s*[:=-]?\s*", " ", base)
+    base=re.sub(r"\b\d+(?:[.,]\d+)?\s*(?:mm|cm|g|ga)\b", " ", base)
+    base=re.sub(r"\b(?:argento|silver|oro(?:\s+giallo)?|gold|oro\s+rosa|rose\s+gold|nero|black|blu|blue|verde|green|viola|purple|rosso|red|bianco|white|multicolore|rainbow|clear|crystal)\b", " ", base)
+    base=re.sub(r"\b(?:zirconia|zircone|opal|opale|diamond|diamante)\s*(?:[a-z]+)?\b", " ", base)
+    base=re.sub(r"\b(?:size|misura|color|colour|colore)\s*[a-z0-9-]*\b", " ", base)
     base=re.sub(r"[^a-z0-9]+", " ", base).strip()
-    return f"{row['category']}|img:{image}" if image else f"{row['category']}|{base or row['brand_code']}"
+
+    # Se la descrizione non è utile, usa la famiglia del codice togliendo i suffissi variante.
+    if not base or len(base) < 3:
+        code=brand or supplier
+        code=re.sub(r"(?:[-_.]?(?:rg|gd|bk|sv|bl|gr|pu|rd|wh|clr))$", "", code)
+        code=re.sub(r"(?:[-_.]?\d+(?:[.,]\d+)?)$", "", code)
+        base=code or brand or supplier
+
+    return f"{(row['category'] or 'Altro').strip().lower()}|{base}"
 
 BADGE_PREFIX = "TBSLOGIN:"
 
@@ -1738,6 +1880,9 @@ def pos_set_price():
         db.execute("INSERT INTO discount_requests(request_token,requester_user_id,requester_username,product_id,product_code,original_price,requested_price,reason,return_to) VALUES(?,?,?,?,?,?,?,?,?)",(token,session.get('user_id'),session.get('user'),pid,p['brand_code'],float(p['price']),price,reason,return_to))
         log_action(db,"Richiesta sconto remota",p,f"Listino € {p['price']:.2f}; richiesto € {price:.2f}; motivo {reason}")
         db.commit()
+    send_push_to_roles(("admin","manager"), "TBS · Richiesta sconto",
+        f"{session.get('user')} richiede {p['brand_code']}: € {p['price']:.2f} → € {price:.2f}",
+        url_for("discount_approvals"), "discount-request")
     session['pending_discount_token']=token;session.modified=True
     flash("Richiesta inviata ad Admin e Gestore.")
     return redirect(url_for('discount_request_wait',token=token))
@@ -1927,6 +2072,9 @@ def checkout_cart():
             log_action(db,"Vendita da carrello",p,f"{sale_number}; {channel}; {payment}; pezzi: {qty}; listino € {p['price']:.2f}; venduto € {unit_price:.2f}; autorizzato da {pd['authorized_by_username'] or '-'}")
             total+=qty*unit_price; pieces+=qty
         db.commit()
+    send_push_to_roles(("admin","manager"), "TBS · Nuova vendita",
+        f"{session.get('user')} · € {total:.2f} · {payment} · {pieces} articol{'o' if pieces==1 else 'i'}",
+        url_for("sales_log"), "new-sale")
     session.pop("cart",None); session.pop("cart_prices",None); session.modified=True
     flash(f"Vendita {sale_number} confermata: {pieces} articoli · € {total:.2f}.")
     return redirect(url_for("pos"))
@@ -2164,21 +2312,44 @@ def supplier_catalog():
     if q:
         like=f"%{q}%"; sql+=" AND (c.supplier_code LIKE ? OR c.brand_code LIKE ? OR c.category LIKE ? OR c.description LIKE ? OR c.size LIKE ? OR c.stone_color LIKE ? OR c.plating_color LIKE ?)"; params += [like]*7
     if category: sql+=" AND c.category=?"; params.append(category)
-    sql+=" ORDER BY c.category,c.description,c.image_file,c.brand_code LIMIT 600"
+    sql+=" ORDER BY c.category,c.description,c.brand_code LIMIT 1000"
     with connect() as db:
         rows=db.execute(sql,params).fetchall()
         categories=[r[0] for r in db.execute("SELECT DISTINCT category FROM supplier_catalog WHERE active=1 AND excluded=0 ORDER BY category").fetchall()]
         total=db.execute("""SELECT COUNT(*) FROM supplier_catalog c WHERE c.active=1 AND c.excluded=0 AND NOT EXISTS(SELECT 1 FROM products p WHERE UPPER(p.supplier_code)=UPPER(c.supplier_code) OR UPPER(p.brand_code)=UPPER(c.brand_code))""").fetchone()[0]
+
     grouped={}
-    for row in rows: grouped.setdefault(catalog_group_key(row),[]).append(dict(row))
+    for row in rows:
+        grouped.setdefault(catalog_group_key(row),[]).append(dict(row))
+
     groups=[]
     for variants in grouped.values():
         variants.sort(key=lambda x:((x.get("size") or ""),(x.get("plating_color") or ""),(x.get("stone_color") or ""),x.get("brand_code") or ""))
-        first=variants[0]; image=url_for("static",filename="catalog/"+first["image_file"]) if first.get("image_file") else ""
-        groups.append({"title":(first.get("description") or first.get("brand_code") or "Gioiello").strip(),"category":first.get("category"),"image":image,"variants":variants})
-    groups.sort(key=lambda g:(g["category"] or "",g["title"].lower()))
-    body="""<style>.variant-photo{width:100%;height:220px;object-fit:contain;background:#f7f7f7;border-radius:12px}.variant-select{width:100%;margin:8px 0}.variant-summary{background:#fff7df;border:1px solid #dec278;border-radius:10px;padding:10px;margin:8px 0}</style><h1>📘 Catalogo ordinabili</h1><p class='muted'>{{total}} referenze raggruppate in {{groups|length}} modelli. Scegli misura e colore.</p><div class='card'><form class='inline' method='get'><input name='q' value='{{q}}' placeholder='Modello, codice, misura o colore'><select name='category'><option value=''>Tutte le categorie</option>{% for x in categories %}<option {% if x==category %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Cerca</button></form></div><div class='grid'>{% for g in groups %}<div class='card' data-variant-card>{% if g.image %}<img class='variant-photo' src='{{g.image}}'>{% else %}<div class='variant-photo' style='display:flex;align-items:center;justify-content:center;font-size:54px'>💎</div>{% endif %}<span class='badge'>🔵 Ordinabile</span><h3>{{g.category}} · {{g.title}}</h3><p class='muted'>{{g.variants|length}} varianti</p><label>Misura e colore<select class='variant-select' data-variant-select>{% for v in g.variants %}<option value='{{v.id}}' data-code='{{v.brand_code}}' data-supplier='{{v.supplier_code}}' data-price='{{"%.2f"|format(v.sale_price_eur)}}' data-size='{{v.size or "-"}}' data-color='{{v.plating_color or v.stone_color or "-"}}'>{{v.size or "Misura standard"}} · {{v.plating_color or v.stone_color or "Colore standard"}} · {{v.brand_code}}</option>{% endfor %}</select></label><div class='variant-summary'><b data-v-code></b><br>Codice produttore: <span data-v-supplier></span><br>Misura: <span data-v-size></span> · Colore: <span data-v-color></span><div class='metric' style='font-size:28px'>€ <span data-v-price></span></div></div><p class='muted'>Consegna indicativa: <b>15–20 giorni</b></p><form method='post' action='{{url_for("request_catalog_variant")}}'><input type='hidden' name='catalog_id' data-catalog-id><input required name='customer_name' placeholder='Nome cliente'><input required name='customer_phone' placeholder='Telefono'><input name='quantity' type='number' min='1' value='1'><textarea name='notes' placeholder='Note aggiuntive'></textarea><button class='success'>Crea ordine cliente</button></form></div>{% else %}<div class='card'>Nessun articolo trovato.</div>{% endfor %}</div><script>document.querySelectorAll('[data-variant-card]').forEach(card=>{const sel=card.querySelector('[data-variant-select]');function sync(){const o=sel.options[sel.selectedIndex];card.querySelector('[data-catalog-id]').value=o.value;card.querySelector('[data-v-code]').textContent=o.dataset.code;card.querySelector('[data-v-supplier]').textContent=o.dataset.supplier;card.querySelector('[data-v-price]').textContent=o.dataset.price;card.querySelector('[data-v-size]').textContent=o.dataset.size;card.querySelector('[data-v-color]').textContent=o.dataset.color;}sel.addEventListener('change',sync);sync();});</script>"""
-    return page("Catalogo ordinabili",body,groups=groups,q=q,category=category,categories=categories,total=total)
+        first=variants[0]
+        # Usa la prima foto disponibile nel gruppo, non necessariamente quella della prima variante.
+        image_row=next((v for v in variants if v.get("image_file")),first)
+        image=url_for("static",filename="catalog/"+image_row["image_file"]) if image_row.get("image_file") else ""
+        groups.append({"title":(first.get("description") or first.get("brand_code") or "Gioiello").strip(),"category":first.get("category") or "Altro","image":image,"variants":variants})
+    groups.sort(key=lambda g:(g["category"].lower(),g["title"].lower()))
+
+    sections=[]
+    section_map={}
+    for group in groups:
+        cat=group["category"] or "Altro"
+        if cat not in section_map:
+            section={"category":cat,"groups":[],"reference_count":0}
+            section_map[cat]=section
+            sections.append(section)
+        section_map[cat]["groups"].append(group)
+        section_map[cat]["reference_count"] += len(group["variants"])
+
+    body="""<style>
+    .catalog-section{margin:26px 0 38px}.catalog-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:14px 16px;border:1px solid #d8bd72;border-radius:14px;background:#151515;color:#f4d889}.catalog-section-head h2{margin:0;font-size:24px}.catalog-section-count{font-weight:800;white-space:nowrap}.catalog-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.variant-photo{width:100%;height:220px;object-fit:contain;background:#f7f7f7;border-radius:12px}.variant-select{width:100%;margin:8px 0}.variant-summary{background:#fff7df;border:1px solid #dec278;border-radius:10px;padding:10px;margin:8px 0}
+    @media(max-width:640px){.catalog-section-head h2{font-size:20px}.catalog-section-head{align-items:flex-start;flex-direction:column}.catalog-grid{grid-template-columns:1fr}}
+    </style><h1>📘 Catalogo ordinabili</h1><p class='muted'>{{total}} referenze organizzate per tipologia in {{groups|length}} modelli. Dentro ogni modello scegli misura e colore.</p><div class='card'><form class='inline' method='get'><input name='q' value='{{q}}' placeholder='Modello, codice, misura o colore'><select name='category'><option value=''>Tutte le tipologie</option>{% for x in categories %}<option {% if x==category %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Cerca</button></form></div>
+    {% for section in sections %}<section class='catalog-section'><div class='catalog-section-head'><h2>{{section.category}}</h2><span class='catalog-section-count'>{{section.groups|length}} modelli · {{section.reference_count}} varianti</span></div><div class='catalog-grid'>{% for g in section.groups %}<div class='card' data-variant-card>{% if g.image %}<img class='variant-photo' src='{{g.image}}'>{% else %}<div class='variant-photo' style='display:flex;align-items:center;justify-content:center;font-size:54px'>💎</div>{% endif %}<span class='badge'>🔵 Ordinabile</span><h3>{{g.title}}</h3><p class='muted'>{{g.variants|length}} varianti disponibili</p><label>Misura e colore<select class='variant-select' data-variant-select>{% for v in g.variants %}<option value='{{v.id}}' data-code='{{v.brand_code}}' data-supplier='{{v.supplier_code}}' data-price='{{"%.2f"|format(v.sale_price_eur)}}' data-size='{{v.size or "-"}}' data-color='{{v.plating_color or v.stone_color or "-"}}'>{{v.size or "Misura standard"}} · {{v.plating_color or v.stone_color or "Colore standard"}} · {{v.brand_code}}</option>{% endfor %}</select></label><div class='variant-summary'><b data-v-code></b><br>Codice produttore: <span data-v-supplier></span><br>Misura: <span data-v-size></span> · Colore: <span data-v-color></span><div class='metric' style='font-size:28px'>€ <span data-v-price></span></div></div><p class='muted'>Consegna indicativa: <b>15–20 giorni</b></p><form method='post' action='{{url_for("request_catalog_variant")}}'><input type='hidden' name='catalog_id' data-catalog-id><input required name='customer_name' placeholder='Nome cliente'><input required name='customer_phone' placeholder='Telefono'><input name='quantity' type='number' min='1' value='1'><textarea name='notes' placeholder='Note aggiuntive'></textarea><button class='success'>Crea ordine cliente</button></form></div>{% endfor %}</div></section>{% else %}<div class='card'>Nessun articolo trovato.</div>{% endfor %}
+    <script>document.querySelectorAll('[data-variant-card]').forEach(card=>{const sel=card.querySelector('[data-variant-select]');function sync(){const o=sel.options[sel.selectedIndex];card.querySelector('[data-catalog-id]').value=o.value;card.querySelector('[data-v-code]').textContent=o.dataset.code;card.querySelector('[data-v-supplier]').textContent=o.dataset.supplier;card.querySelector('[data-v-price]').textContent=o.dataset.price;card.querySelector('[data-v-size]').textContent=o.dataset.size;card.querySelector('[data-v-color]').textContent=o.dataset.color;}sel.addEventListener('change',sync);sync();});</script>"""
+    return page("Catalogo ordinabili",body,sections=sections,groups=groups,q=q,category=category,categories=categories,total=total)
 
 @app.post("/catalogo-ordinabili/richiedi-variante")
 @login_required
