@@ -13,6 +13,8 @@ from datetime import datetime, timezone, date, time, timedelta
 from zoneinfo import ZoneInfo
 import shutil
 import tempfile
+import json
+import threading
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -86,8 +88,64 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.0.0 LTS · Gestione Ordini Clienti"
+APP_VERSION = "v37.0.0 LTS · Firebase Push"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
+
+# Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
+FIREBASE_VAPID_PUBLIC_KEY = os.environ.get(
+    "FIREBASE_VAPID_PUBLIC_KEY",
+    "BGUMsZB9LddQBriLdvhqeonmM9aq3IKwn2yP0RgMTzt6uOIEF3s04tjhnV0xOmye50NxZABNMbgsulVWj-NjmUM",
+).strip()
+FIREBASE_WEB_CONFIG = {
+    "apiKey": os.environ.get("FIREBASE_API_KEY", "").strip(),
+    "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", "tbs-gestionale.firebaseapp.com").strip(),
+    "projectId": os.environ.get("FIREBASE_PROJECT_ID", "tbs-gestionale").strip(),
+    "storageBucket": os.environ.get("FIREBASE_STORAGE_BUCKET", "").strip(),
+    "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", "342914995645").strip(),
+    "appId": os.environ.get("FIREBASE_APP_ID", "").strip(),
+}
+_FIREBASE_ADMIN_READY = False
+_FIREBASE_ADMIN_ERROR = None
+_FIREBASE_LOCK = threading.Lock()
+
+def firebase_web_ready():
+    return bool(FIREBASE_VAPID_PUBLIC_KEY and FIREBASE_WEB_CONFIG.get("apiKey") and
+                FIREBASE_WEB_CONFIG.get("projectId") and FIREBASE_WEB_CONFIG.get("messagingSenderId") and
+                FIREBASE_WEB_CONFIG.get("appId"))
+
+def init_firebase_admin():
+    """Inizializza Firebase Admin senza mai inserire credenziali private nel repository."""
+    global _FIREBASE_ADMIN_READY, _FIREBASE_ADMIN_ERROR
+    if _FIREBASE_ADMIN_READY:
+        return True
+    with _FIREBASE_LOCK:
+        if _FIREBASE_ADMIN_READY:
+            return True
+        try:
+            import firebase_admin
+            from firebase_admin import credentials
+            if firebase_admin._apps:
+                _FIREBASE_ADMIN_READY = True
+                return True
+            cred = None
+            raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+            if raw_json:
+                cred = credentials.Certificate(json.loads(raw_json))
+            else:
+                credential_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+                if credential_path and os.path.isfile(credential_path):
+                    cred = credentials.Certificate(credential_path)
+            if cred is None:
+                _FIREBASE_ADMIN_ERROR = "Credenziali Firebase Admin non configurate"
+                return False
+            firebase_admin.initialize_app(cred, {"projectId": FIREBASE_WEB_CONFIG.get("projectId")})
+            _FIREBASE_ADMIN_READY = True
+            _FIREBASE_ADMIN_ERROR = None
+            return True
+        except Exception as exc:
+            _FIREBASE_ADMIN_ERROR = str(exc)
+            print(f"Firebase Admin non disponibile: {exc}")
+            return False
 
 def choose_db_path():
     configured = os.environ.get("DATABASE_PATH", "").strip()
@@ -368,7 +426,52 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
     });
   }
 })();
-</script></body></html>'''
+</script>{% if session.get('user_id') %}<script type="module">
+(async function(){
+  const buttonId='tbsPushEnable';
+  function showButton(label){
+    let b=document.getElementById(buttonId);
+    if(!b){
+      b=document.createElement('button'); b.id=buttonId; b.type='button';
+      b.style.cssText='position:fixed;right:18px;bottom:94px;z-index:9999;border:1px solid #d8b75c;background:#111722;color:#fff;border-radius:999px;padding:11px 15px;font-weight:900;box-shadow:0 10px 25px rgba(0,0,0,.28)';
+      document.body.appendChild(b);
+    }
+    b.textContent=label||'🔔 Attiva push'; b.hidden=false; return b;
+  }
+  try{
+    if(!('serviceWorker' in navigator)||!('Notification' in window)) return;
+    const cfgResp=await fetch('/api/push/config',{cache:'no-store'});
+    if(!cfgResp.ok) return;
+    const settings=await cfgResp.json();
+    if(!settings.enabled) return;
+    const [{initializeApp},{getMessaging,getToken,deleteToken}]=await Promise.all([
+      import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')
+    ]);
+    const firebaseApp=initializeApp(settings.config);
+    const messaging=getMessaging(firebaseApp);
+    const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
+    async function registerToken(){
+      const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+      if(permission!=='granted') throw new Error('Permesso notifiche non concesso');
+      const token=await getToken(messaging,{vapidKey:settings.vapidKey,serviceWorkerRegistration:registration});
+      if(!token) throw new Error('Firebase non ha restituito il token');
+      const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,platform:'web-pwa'})});
+      if(!r.ok) throw new Error('Registrazione dispositivo non riuscita');
+      localStorage.setItem('tbsPushToken',token);
+      const b=document.getElementById(buttonId); if(b) b.hidden=true;
+      return token;
+    }
+    if(Notification.permission==='granted'){
+      registerToken().catch(console.warn);
+    }else if(Notification.permission==='default'){
+      const b=showButton('🔔 Attiva notifiche');
+      b.addEventListener('click',async()=>{b.disabled=true;b.textContent='Attivazione…';try{await registerToken();}catch(e){b.disabled=false;b.textContent='Riprova notifiche';alert(e.message)}});
+    }
+    window.TBSPush={register:registerToken,async disable(){const token=localStorage.getItem('tbsPushToken');if(token){await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});await deleteToken(messaging);localStorage.removeItem('tbsPushToken')}}};
+  }catch(e){console.warn('TBS Push:',e)}
+})();
+</script>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -1475,6 +1578,72 @@ def health():
     }, (200 if db_ok else 500)
 
 
+def _ensure_push_subscriptions(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS push_subscriptions(
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        username TEXT,
+        token TEXT NOT NULL UNIQUE,
+        platform TEXT,
+        user_agent TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        last_success_at TEXT,
+        last_error TEXT
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_push_user_active ON push_subscriptions(user_id,active)")
+
+
+def _push_url_for(kind, reference_type=None, reference_id=None):
+    if kind == 'discount_request':
+        return '/discount-approvals'
+    if kind in ('customer_order','catalog_request','order_arrived'):
+        return '/customer-orders'
+    return '/notifications'
+
+
+def _send_push_for_user(db, user_id, title, message, kind='notification', reference_type=None, reference_id=None):
+    """Invia una push a tutti i dispositivi attivi dell'utente. Gli errori non bloccano il gestionale."""
+    _ensure_push_subscriptions(db)
+    tokens=db.execute("SELECT id,token FROM push_subscriptions WHERE user_id=? AND active=1",(user_id,)).fetchall()
+    if not tokens or not init_firebase_admin():
+        return 0
+    try:
+        from firebase_admin import messaging
+    except Exception as exc:
+        print(f"Firebase messaging non disponibile: {exc}")
+        return 0
+    sent=0
+    target_url=_push_url_for(kind,reference_type,reference_id)
+    for row in tokens:
+        try:
+            msg=messaging.Message(
+                token=row['token'],
+                data={
+                    'title':str(f"TBS · {title}"),
+                    'body':str(message or ''),
+                    'url':target_url,
+                    'kind':str(kind or 'notification'),
+                    'reference_type':str(reference_type or ''),
+                    'reference_id':str(reference_id or ''),
+                },
+                webpush=messaging.WebpushConfig(
+                    headers={'Urgency':'high'},
+                    fcm_options=messaging.WebpushFCMOptions(link=target_url),
+                ),
+            )
+            messaging.send(msg)
+            db.execute("UPDATE push_subscriptions SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
+            sent += 1
+        except Exception as exc:
+            error_text=str(exc)[:500]
+            deactivate=any(x in error_text.lower() for x in ('not registered','registration-token-not-registered','unregistered','invalid registration'))
+            db.execute("UPDATE push_subscriptions SET active=?,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(0 if deactivate else 1,error_text,row['id']))
+            print(f"Invio push fallito token #{row['id']}: {error_text}")
+    return sent
+
+
 def _ensure_notifications(db):
     db.execute("""CREATE TABLE IF NOT EXISTS notifications(
         id INTEGER PRIMARY KEY,
@@ -1514,14 +1683,17 @@ def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=
     recipient=_current_user_for_identity(db,user_id,recipient_username)
     if not recipient:
         return False
-    db.execute("""INSERT OR IGNORE INTO notifications(
+    cursor=db.execute("""INSERT OR IGNORE INTO notifications(
         recipient_user_id,recipient_username,notification_type,title,message,
         reference_type,reference_id,event_key
     ) VALUES(?,?,?,?,?,?,?,?)""",(
         recipient['id'],recipient['username'],kind,title,message,
         reference_type,reference_id,event_key
     ))
-    return True
+    inserted = cursor.rowcount > 0
+    if inserted:
+        _send_push_for_user(db,recipient['id'],title,message,kind,reference_type,reference_id)
+    return inserted
 
 
 def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
@@ -1616,6 +1788,75 @@ def _notification_unread_count(db,user_id):
     _ensure_notifications(db)
     _repair_notification_recipients(db)
     return int(db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND read_at IS NULL AND archived_at IS NULL",(user_id,)).fetchone()[0] or 0)
+
+@app.get('/api/push/config')
+@login_required
+def push_config():
+    return jsonify({
+        'enabled': firebase_web_ready(),
+        'config': FIREBASE_WEB_CONFIG if firebase_web_ready() else {},
+        'vapidKey': FIREBASE_VAPID_PUBLIC_KEY if firebase_web_ready() else '',
+        'adminReady': init_firebase_admin(),
+    })
+
+
+@app.get('/api/push/status')
+@login_required
+def push_status():
+    with connect() as db:
+        _ensure_push_subscriptions(db)
+        active=int(db.execute("SELECT COUNT(*) FROM push_subscriptions WHERE user_id=? AND active=1",(session.get('user_id'),)).fetchone()[0] or 0)
+        db.commit()
+    return jsonify({'configured':firebase_web_ready(),'activeDevices':active,'adminReady':init_firebase_admin(),'adminError':_FIREBASE_ADMIN_ERROR})
+
+
+@app.post('/api/push/subscribe')
+@login_required
+def push_subscribe():
+    payload=request.get_json(silent=True) or {}
+    token=str(payload.get('token') or '').strip()
+    if len(token) < 40:
+        return jsonify({'ok':False,'error':'Token push non valido'}),400
+    platform=str(payload.get('platform') or 'web')[:50]
+    user_agent=request.headers.get('User-Agent','')[:500]
+    with connect() as db:
+        _ensure_push_subscriptions(db)
+        db.execute("""INSERT INTO push_subscriptions(user_id,username,token,platform,user_agent,active)
+                      VALUES(?,?,?,?,?,1)
+                      ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,username=excluded.username,
+                      platform=excluded.platform,user_agent=excluded.user_agent,active=1,
+                      updated_at=CURRENT_TIMESTAMP,last_error=NULL""",
+                   (session.get('user_id'),session.get('user'),token,platform,user_agent))
+        db.commit()
+    return jsonify({'ok':True})
+
+
+@app.post('/api/push/unsubscribe')
+@login_required
+def push_unsubscribe():
+    payload=request.get_json(silent=True) or {}
+    token=str(payload.get('token') or '').strip()
+    with connect() as db:
+        _ensure_push_subscriptions(db)
+        if token:
+            db.execute("UPDATE push_subscriptions SET active=0,updated_at=CURRENT_TIMESTAMP WHERE token=? AND user_id=?",(token,session.get('user_id')))
+        else:
+            db.execute("UPDATE push_subscriptions SET active=0,updated_at=CURRENT_TIMESTAMP WHERE user_id=?",(session.get('user_id'),))
+        db.commit()
+    return jsonify({'ok':True})
+
+
+@app.post('/api/push/test')
+@login_required
+@role_required('admin','manager')
+def push_test():
+    with connect() as db:
+        sent=_send_push_for_user(db,session.get('user_id'),'Test notifiche push','Le notifiche TBS funzionano anche a gestionale chiuso.','push_test')
+        db.commit()
+    if sent:
+        return jsonify({'ok':True,'sent':sent})
+    return jsonify({'ok':False,'sent':0,'error':_FIREBASE_ADMIN_ERROR or 'Nessun dispositivo registrato'}),400
+
 
 @app.get("/notifications/count")
 @login_required
@@ -3625,7 +3866,7 @@ SELLER_ALLOWED_ENDPOINTS = {
     'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart',
     'notification_center','notification_count','notification_poll','notification_sales_group','archive_notification_group',
     'notification_detail','archive_notification','universal_search','change_password',
-    'supplier_catalog','request_catalog_item','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker'
+    'supplier_catalog','request_catalog_item','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker','push_config','push_status','push_subscribe','push_unsubscribe'
 }
 
 @app.before_request
@@ -4224,30 +4465,57 @@ def pwa_icon_svg():
 
 @app.get("/service-worker.js")
 def service_worker():
-    # Non memorizza pagine autenticate né risposte API: evita dati obsoleti o sensibili.
-    script = r"""
-const CACHE_NAME = 'tbs-pwa-v35-4-0';
+    # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
+    config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
+    script = f"""
+const CACHE_NAME = 'tbs-pwa-v37-0-0';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
-self.addEventListener('install', event => {
+const FIREBASE_CONFIG = {config_json};
+self.addEventListener('install', event => {{
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
-});
-self.addEventListener('activate', event => {
+}});
+self.addEventListener('activate', event => {{
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
   self.clients.claim();
-});
-self.addEventListener('fetch', event => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-  if (STATIC_ASSETS.includes(url.pathname)) {
+}});
+self.addEventListener('fetch', event => {{
+  const req=event.request;
+  if(req.method!=='GET') return;
+  const url=new URL(req.url);
+  if(url.origin!==self.location.origin) return;
+  if(STATIC_ASSETS.includes(url.pathname)) {{
     event.respondWith(caches.match(req).then(hit => hit || fetch(req)));
     return;
-  }
-  // Tutte le pagine del gestionale e le API restano network-only.
+  }}
   event.respondWith(fetch(req));
-});
+}});
+if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const messaging=firebase.messaging();
+  messaging.onBackgroundMessage(payload => {{
+    const data=payload.data || {{}};
+    const notification=payload.notification || {{}};
+    const title=notification.title || data.title || 'TBS Gestionale';
+    const options={{
+      body:notification.body || data.body || '',
+      icon:'/pwa-icon-192.png', badge:'/pwa-icon-192.png',
+      tag:data.kind ? 'tbs-'+data.kind+'-'+(data.reference_id||'') : 'tbs-push',
+      data:{{url:data.url || '/notifications'}}
+    }};
+    self.registration.showNotification(title,options);
+  }});
+}}
+self.addEventListener('notificationclick', event => {{
+  event.notification.close();
+  const target=(event.notification.data && event.notification.data.url) || '/notifications';
+  event.waitUntil(clients.matchAll({{type:'window',includeUncontrolled:true}}).then(list => {{
+    for(const client of list) {{ if('focus' in client) {{ client.navigate(target); return client.focus(); }} }}
+    return clients.openWindow ? clients.openWindow(target) : undefined;
+  }}));
+}});
 """
     return Response(script, mimetype="application/javascript", headers={
         "Cache-Control":"no-cache, no-store, must-revalidate",
