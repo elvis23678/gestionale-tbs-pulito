@@ -1,13 +1,13 @@
-CHECKLIST TBS v20 rev.8
+TBS Gestionale v20 rev.9 · Checklist
 
-[ ] Aprire /login da utente disconnesso: nessun menu inferiore o icona operativa.
-[ ] Aprire /login con una sessione ancora attiva: la pagina resta pulita e senza menu.
-[ ] Verificare visualizzazione v20 rev.8 · Stable.
-[ ] Verificare avvio automatico fotocamera e login con badge.
-[ ] Verificare login con username/password.
-[ ] Verificare mostra/nascondi password.
-[ ] Admin entra nella propria area.
-[ ] Gestore entra nella propria area.
-[ ] Venditore entra nella Cassa secondo i permessi configurati.
-[ ] Verificare logout e nuovo accesso.
-[ ] Verificare layout su smartphone, Mac e PC.
+[ ] Login con badge QR
+[ ] Login con username e password
+[ ] Dashboard Admin mostra “Bentornato, Elvis”
+[ ] Dashboard Gestore/Venditore mostra il relativo username
+[ ] Versione visibile: v20 rev.9 · Stable
+[ ] Header non presenta elementi tagliati su smartphone
+[ ] Dock inferiore non copre le ultime card
+[ ] Pulsante Catalogo è centrato e meno sporgente
+[ ] Cassa, carrello, catalogo e ordini si aprono correttamente
+[ ] Notifiche, blocco, cambio password e logout funzionano
+[ ] Verifica desktop su Mac/PC

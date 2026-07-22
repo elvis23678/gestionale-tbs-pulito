@@ -1,4 +1,2 @@
 ROLLBACK
-
-Se la rev.8 presenta problemi, ripristinare i file app.py e requirements.txt della TBS Gestionale v20 rev.7 Dashboard Smart RC.
-Il database non viene modificato da questa revisione, quindi non è richiesta alcuna migrazione inversa.
+In caso di anomalie, ripristinare app.py e requirements.txt della versione TBS Gestionale v20 rev.8 Stable e ridistribuire su Render. La rev.9 non modifica lo schema del database.

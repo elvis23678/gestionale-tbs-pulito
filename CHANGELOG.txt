@@ -1,16 +1,15 @@
-TBS Gestionale v20 rev.8 · Stable
+TBS Gestionale v20 rev.9 · Stable
+Revisione cumulativa: include integralmente le revisioni v20 rev.1–rev.8.
 
-Revisione cumulativa: include integralmente v20 rev.1–rev.7.
+UI POLISH
+- Versione installata aggiornata e visibile come v20 rev.9 · Stable.
+- Saluto Admin personalizzato: “Bentornato, Elvis”.
+- Header più compatto e meglio proporzionato su smartphone.
+- Tipografia e gerarchia visiva della dashboard rifinite.
+- Card operative e KPI uniformati per altezza, raggi e spaziature.
+- Numeri KPI più leggibili e descrizioni più discrete.
+- Dock inferiore alleggerito e pulsante Catalogo abbassato.
+- Margine inferiore aumentato per evitare contenuti coperti dal dock.
+- Micro-feedback al tocco e rispetto dell’opzione “riduci movimento”.
 
-Novità rev.8 — Login Experience
-- Pagina di accesso completamente separata dall'interfaccia autenticata.
-- Rimossi menu inferiore, notifiche, blocco, cambio password e logout prima dell'accesso.
-- Header login dedicato TBS / Tattoo Beauty Saloon.
-- Versione installata mostrata in una pill compatta: v20 rev.8 · Stable.
-- Badge QR reso protagonista con layout premium nero, avorio e oro.
-- Accesso manuale ridisegnato.
-- Pulsante mostra/nascondi password.
-- Footer con versione e copyright.
-- Versione nell'header autenticato resa più compatta.
-
-Nessuna modifica ai dati, alle vendite, agli ordini o ai flussi operativi.
+Nessuna modifica a database, vendite, ordini, permessi o flussi operativi.
