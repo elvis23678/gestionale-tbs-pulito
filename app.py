@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import shutil
 import tempfile
 
-from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify
+from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -22,7 +22,7 @@ from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128, qr
-from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.graphics import renderPDF
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.3.1 LTS · Permission & Reject Fix"
+APP_VERSION = "v35.4.0 LTS · PWA Foundation"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -356,11 +356,19 @@ body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba
 '''
 
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS Gestionale"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>TATTOO BEAUTY SALOON</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});let tbsLatestNotificationId=Number(sessionStorage.getItem('tbsLatestNotificationId')||0);function tbsBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.12,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.22);o.start();o.stop(c.currentTime+.24)}catch(e){}}function tbsLiveToast(title,message,url){const stack=document.getElementById('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast toast-info';el.innerHTML='<b></b><br><span></span>';el.querySelector('b').textContent=title||'Nuova notifica';el.querySelector('span').textContent=message||'';el.style.cursor='pointer';el.onclick=()=>{if(url)location.href=url};stack.appendChild(el);setTimeout(()=>{el.classList.add('toast-hide');setTimeout(()=>el.remove(),450)},7000)}async function checkLiveNotifications(){try{const r=await fetch("{{url_for('notification_poll')}}",{cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(b){if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex'}else b.style.display='none'}if(d.latest&&Number(d.latest.id)>tbsLatestNotificationId){const firstRun=tbsLatestNotificationId===0;tbsLatestNotificationId=Number(d.latest.id);sessionStorage.setItem('tbsLatestNotificationId',String(tbsLatestNotificationId));if(!firstRun){tbsBeep();tbsLiveToast(d.latest.title,d.latest.message,d.latest.url);if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('TBS · '+d.latest.title,{body:d.latest.message||'',tag:'tbs-'+d.latest.id});n.onclick=()=>{window.focus();location.href=d.latest.url}}}}}catch(e){}}checkLiveNotifications();setInterval(checkLiveNotifications,4000);{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}{% if session.get('role') == 'seller' %}{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>TATTOO BEAUTY SALOON</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});let tbsLatestNotificationId=Number(sessionStorage.getItem('tbsLatestNotificationId')||0);function tbsBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.12,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.22);o.start();o.stop(c.currentTime+.24)}catch(e){}}function tbsLiveToast(title,message,url){const stack=document.getElementById('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast toast-info';el.innerHTML='<b></b><br><span></span>';el.querySelector('b').textContent=title||'Nuova notifica';el.querySelector('span').textContent=message||'';el.style.cursor='pointer';el.onclick=()=>{if(url)location.href=url};stack.appendChild(el);setTimeout(()=>{el.classList.add('toast-hide');setTimeout(()=>el.remove(),450)},7000)}async function checkLiveNotifications(){try{const r=await fetch("{{url_for('notification_poll')}}",{cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(b){if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex'}else b.style.display='none'}if(d.latest&&Number(d.latest.id)>tbsLatestNotificationId){const firstRun=tbsLatestNotificationId===0;tbsLatestNotificationId=Number(d.latest.id);sessionStorage.setItem('tbsLatestNotificationId',String(tbsLatestNotificationId));if(!firstRun){tbsBeep();tbsLiveToast(d.latest.title,d.latest.message,d.latest.url);if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('TBS · '+d.latest.title,{body:d.latest.message||'',tag:'tbs-'+d.latest.id});n.onclick=()=>{window.focus();location.href=d.latest.url}}}}}catch(e){}}checkLiveNotifications();setInterval(checkLiveNotifications,4000);{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}{% if session.get('role') == 'seller' %}{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}<script>
+(function(){
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("/service-worker.js", {scope:"/"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
+    });
+  }
+})();
+</script></body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -675,7 +683,7 @@ def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
 
-LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><style>{{ css }}
+LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS Gestionale"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}
 body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#111722 0 180px,#f7f5ef 180px 100%);color:#111722}
 .login-only .login-top{height:180px;padding:24px 26px;display:flex;align-items:flex-start;justify-content:space-between;color:#fff;border-bottom:1px solid rgba(210,174,76,.7)}
 .login-only .login-brand strong{display:block;font-size:38px;line-height:1;letter-spacing:.04em}.login-only .login-brand span{display:block;margin-top:8px;color:#d8b75c;font:700 12px Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase}
@@ -685,7 +693,15 @@ body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#11
 .login-only input{min-height:54px;border-radius:15px;font-size:16px}.login-only .password-wrap{position:relative}.login-only .password-wrap input{padding-right:54px}.login-only .password-toggle{position:absolute;right:7px;top:7px;width:40px;min-height:40px;padding:0;border-radius:11px;background:#f0ede5;color:#111722;font-size:18px}
 .login-only .login-submit{min-height:56px;border-radius:16px;background:linear-gradient(135deg,#e3c568,#bd8f2d);color:#17120a;font-size:17px;box-shadow:0 12px 24px rgba(184,138,45,.22)}.login-only .login-footer{text-align:center;padding:20px 10px 4px;color:#888e99;font:12px Arial,sans-serif}.login-only .login-footer b{display:block;color:#111722;margin-bottom:4px}.login-only .flash{margin:0 0 14px}
 @media(max-width:560px){body.login-only{background:linear-gradient(180deg,#111722 0 158px,#f7f5ef 158px 100%)}.login-only .login-top{height:158px;padding:20px 18px}.login-only .login-brand strong{font-size:31px}.login-only .version-pill{padding:7px 9px;font-size:10px}.login-only main{margin:-42px auto 0;padding:0 12px 24px}.login-only .badge-login{padding:18px!important}.login-only .card{border-radius:22px}}
-</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS</strong><span>Tattoo Beauty Saloon</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS Gestionale</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main></body></html>'''
+</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS</strong><span>Tattoo Beauty Saloon</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS Gestionale</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main><script>
+(function(){
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("/service-worker.js", {scope:"/"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
+    });
+  }
+})();
+</script></body></html>'''
 
 def login_page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
@@ -3584,7 +3600,7 @@ SELLER_ALLOWED_ENDPOINTS = {
     'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart',
     'notification_center','notification_count','notification_poll','notification_sales_group','archive_notification_group',
     'notification_detail','archive_notification','universal_search','change_password',
-    'supplier_catalog','request_catalog_item','static'
+    'supplier_catalog','request_catalog_item','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker'
 }
 
 @app.before_request
@@ -4127,5 +4143,90 @@ def v35_release_center():
     health=_v35_health()
     body="""<div class='dash-head'><div><span class='eyebrow'>V35 · ENTERPRISE</span><h1>Release Center</h1><p class='muted'>Controllo tecnico e accesso ai moduli finali.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Database</strong><div class='metric'>{{health.database}}</div></div><div class='kpi'><strong>Integrità</strong><div class='metric'>{{health.integrity}}</div></div><div class='kpi'><strong>Storage</strong><div class='metric'>{{health.storage}}</div></div><div class='kpi'><strong>Ultimo backup</strong><div style='font-size:18px;font-weight:900;margin-top:12px'>{{health.backup}}</div></div></div><div class='grid'><a class='card' href='{{url_for("v31_dashboard")}}' style='text-decoration:none;color:inherit'><h2>Enterprise UX</h2><p>Home operativa.</p></a><a class='card' href='{{url_for("v32_inventory")}}' style='text-decoration:none;color:inherit'><h2>Smart Inventory</h2><p>Scorte e riordini.</p></a><a class='card' href='{{url_for("v33_assistant")}}' style='text-decoration:none;color:inherit'><h2>Business Assistant</h2><p>Priorità guidate.</p></a><a class='card' href='{{url_for("v34_analytics")}}' style='text-decoration:none;color:inherit'><h2>Analytics</h2><p>Grafici e KPI.</p></a></div><div class='card'><h2>Backup manuale</h2><form method='post'><input type='hidden' name='action' value='backup'><button>Crea backup ora</button></form></div>"""
     return page('V35 Release Center',body,health=health)
+
+
+# ============================================================
+# v35.4 PWA FOUNDATION
+# ============================================================
+@app.get("/manifest.webmanifest")
+def pwa_manifest():
+    manifest = {
+        "id": "/",
+        "name": "TBS Gestionale",
+        "short_name": "TBS",
+        "description": "Gestionale operativo Tattoo Beauty Saloon",
+        "lang": "it-IT",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "portrait-primary",
+        "background_color": "#111722",
+        "theme_color": "#111722",
+        "icons": [
+            {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ]
+    }
+    response = jsonify(manifest)
+    response.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+def _pwa_icon_file(filename):
+    path = os.path.join(APP_DIR, filename)
+    if not os.path.isfile(path):
+        return ("Icona PWA non disponibile", 404)
+    return send_file(path, mimetype="image/png", max_age=86400)
+
+@app.get("/pwa-icon-192.png")
+def pwa_icon_192():
+    return _pwa_icon_file("pwa-icon-192.png")
+
+@app.get("/pwa-icon-512.png")
+def pwa_icon_512():
+    return _pwa_icon_file("pwa-icon-512.png")
+
+@app.get("/pwa-icon.svg")
+def pwa_icon_svg():
+    svg = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'>
+    <rect width='512' height='512' rx='92' fill='#111722'/>
+    <rect x='34' y='34' width='444' height='444' rx='70' fill='none' stroke='#d8b75c' stroke-width='12'/>
+    <text x='256' y='286' text-anchor='middle' font-family='Arial,sans-serif' font-weight='800' font-size='142' fill='white'>TBS</text>
+    <text x='256' y='360' text-anchor='middle' font-family='Arial,sans-serif' font-weight='700' font-size='34' letter-spacing='5' fill='#d8b75c'>GESTIONALE</text>
+    </svg>"""
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
+
+@app.get("/service-worker.js")
+def service_worker():
+    # Non memorizza pagine autenticate né risposte API: evita dati obsoleti o sensibili.
+    script = r"""
+const CACHE_NAME = 'tbs-pwa-v35-4-0';
+const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
+  self.skipWaiting();
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (STATIC_ASSETS.includes(url.pathname)) {
+    event.respondWith(caches.match(req).then(hit => hit || fetch(req)));
+    return;
+  }
+  // Tutte le pagine del gestionale e le API restano network-only.
+  event.respondWith(fetch(req));
+});
+"""
+    return Response(script, mimetype="application/javascript", headers={
+        "Cache-Control":"no-cache, no-store, must-revalidate",
+        "Service-Worker-Allowed":"/"
+    })
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
