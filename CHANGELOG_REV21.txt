@@ -1,1 +1,0 @@
-Timeout realmente configurabile; blocco automatico; registro sicurezza; solo Admin. Build cumulativa dalla rev.20.
