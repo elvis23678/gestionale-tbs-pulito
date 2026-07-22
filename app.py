@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.2 ENTERPRISE · Redirect Fix"
+APP_VERSION = "v35.1.0 LTS · Notification Center"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -706,18 +706,38 @@ def login_required(fn):
         return redirect(url_for("login"), code=303) if not session.get("user_id") else fn(*a,**k)
     return wrapped
 
+def _request_expects_json():
+    """Riconosce API/AJAX per evitare redirect HTML e catene di messaggi flash."""
+    return (
+        request.path.startswith("/api/")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
+
+def flash_once(message, category="warning"):
+    """Inserisce un messaggio una sola volta nella coda della sessione."""
+    pending = session.get("_flashes", [])
+    if not any(text == message for _category, text in pending):
+        flash(message, category)
+
+
 def role_required(*roles):
     def decorator(fn):
         @wraps(fn)
         def wrapped(*a,**k):
             if not session.get("user_id"):
+                if _request_expects_json():
+                    return jsonify({"ok": False, "error": "Autenticazione richiesta"}), 401
                 return redirect(url_for("login"), code=303)
             if session.get("role") not in roles:
-                flash("Non hai i permessi per questa operazione.")
+                if _request_expects_json():
+                    return jsonify({"ok": False, "error": "Accesso non autorizzato"}), 403
                 target = role_landing_endpoint()
-                # Non redirigere mai verso la stessa route: è la protezione anti-loop.
+                # Non redirigere mai verso la stessa route: protezione anti-loop.
                 if request.endpoint == target:
                     return ("Accesso non autorizzato", 403)
+                flash_once("Non hai i permessi per questa operazione.")
                 return redirect(url_for(target), code=303)
             return fn(*a,**k)
         return wrapped
