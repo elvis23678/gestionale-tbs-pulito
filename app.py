@@ -850,14 +850,27 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       status.textContent='Richiesta accesso alla fotocamera…';
       await halt();
       const isIPad=((navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)||/iPad/i.test(navigator.userAgent));
-      const constraints={{{{audio:false,video:{{{{facingMode:{{{{ideal:isIPad?'user':'environment'}}}},width:{{{{ideal:1280}}}},height:{{{{ideal:720}}}}}}}}}};
-      try{{
-        stream=await navigator.mediaDevices.getUserMedia(constraints);
-      }}catch(firstError){{
-        if(firstError && (firstError.name==='OverconstrainedError'||firstError.name==='ConstraintNotSatisfiedError')){{
-          stream=await navigator.mediaDevices.getUserMedia({{audio:false,video:true}});
-        }}else throw firstError;
-      }}
+      let devices=[];
+      try{ devices=await navigator.mediaDevices.enumerateDevices(); }catch(e){}
+      const videos=devices.filter(d=>d.kind==='videoinput');
+      let preferred=null;
+      if(videos.length){
+        preferred=videos.find(d=>isIPad?/front|user|facetime/i.test(d.label):/back|rear|environment/i.test(d.label))||videos[0];
+      }
+      const tries=[];
+      if(preferred){
+        tries.push({audio:false,video:{deviceId:{exact:preferred.deviceId}}});
+      }
+      tries.push({audio:false,video:{facingMode:{ideal:isIPad?'user':'environment'},width:{ideal:1280},height:{ideal:720}});
+      tries.push({audio:false,video:true});
+      let lastError=null;
+      for(const c of tries){
+        try{
+          stream=await navigator.mediaDevices.getUserMedia(c);
+          break;
+        }catch(e){ lastError=e; }
+      }
+      if(!stream) throw lastError;
       video.srcObject=stream;
       video.setAttribute('playsinline','');
       video.setAttribute('webkit-playsinline','');
