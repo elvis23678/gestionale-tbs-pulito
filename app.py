@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.24.3 · Fotocamera iPad · Beta"
+APP_VERSION = "v20 rev.24.1 · UI e Notifiche Hotfix · Beta"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -849,28 +849,14 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       await loadJsQR();
       status.textContent='Richiesta accesso alla fotocamera…';
       await halt();
-      const isIPad=((navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)||/iPad/i.test(navigator.userAgent));
-      let devices=[];
-      try{ devices=await navigator.mediaDevices.enumerateDevices(); }catch(e){}
-      const videos=devices.filter(d=>d.kind==='videoinput');
-      let preferred=null;
-      if(videos.length){
-        preferred=videos.find(d=>isIPad?/front|user|facetime/i.test(d.label):/back|rear|environment/i.test(d.label))||videos[0];
-      }
-      const tries=[];
-      if(preferred){
-        tries.push({audio:false,video:{deviceId:{exact:preferred.deviceId}}});
-      }
-      tries.push({audio:false,video:{facingMode:{ideal:isIPad?'user':'environment'},width:{ideal:1280},height:{ideal:720}});
-      tries.push({audio:false,video:true});
-      let lastError=null;
-      for(const c of tries){
-        try{
-          stream=await navigator.mediaDevices.getUserMedia(c);
-          break;
-        }catch(e){ lastError=e; }
-      }
-      if(!stream) throw lastError;
+      const constraints={{audio:false,video:{{facingMode:{{ideal:'environment'}},width:{{ideal:1280}},height:{{ideal:720}}}}}};
+      try{{
+        stream=await navigator.mediaDevices.getUserMedia(constraints);
+      }}catch(firstError){{
+        if(firstError && (firstError.name==='OverconstrainedError'||firstError.name==='ConstraintNotSatisfiedError')){{
+          stream=await navigator.mediaDevices.getUserMedia({{audio:false,video:true}});
+        }}else throw firstError;
+      }}
       video.srcObject=stream;
       video.setAttribute('playsinline','');
       video.setAttribute('webkit-playsinline','');
@@ -2228,118 +2214,10 @@ def pos():
     return page("Cassa Smart POS",'''<style>
 body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 100%);color:#f7f2e8}.pos{max-width:1450px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center}.brand{font-size:29px;letter-spacing:.08em}.gold{color:#d7b36a}.layout{display:grid;grid-template-columns:1.55fr .75fr;gap:18px}.panel{background:rgba(25,25,27,.9);border:1px solid rgba(215,179,106,.3);border-radius:22px;padding:18px;box-shadow:0 24px 70px #0008}.scan{display:grid;grid-template-columns:1fr auto;gap:10px}.scan input,.modal input,.modal select{background:#0d0e10;color:#fff;border:1px solid #5d5038;padding:15px;font-size:18px}.goldbtn{background:linear-gradient(135deg,#efd28f,#b88a38);color:#17120a;border:0;border-radius:14px;padding:15px;font-weight:900}.add-product-launch{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:72px;margin-bottom:20px;background:linear-gradient(135deg,#f0d795,#b98a39);color:#17120a;border:1px solid #f6e5b8;border-radius:18px;font-size:20px;font-weight:950;letter-spacing:.4px;box-shadow:0 14px 34px rgba(185,138,57,.22);cursor:pointer}.add-product-launch:hover{transform:translateY(-1px);filter:brightness(1.04)}.add-product-launch .plus{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#17120a;color:#efd28f;font-size:27px;line-height:1}.add-modal-title{text-align:center;margin-bottom:5px}.add-modal-sub{text-align:center;color:#aaa;margin-top:0}.scan-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.scan-choice button{min-height:56px}.scan-divider{display:flex;align-items:center;gap:10px;color:#8e8e94;margin:18px 0}.scan-divider:before,.scan-divider:after{content:"";height:1px;background:#3a3a3f;flex:1}.row{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #343438}.row img,.ph{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff}.ph{display:grid;place-items:center;color:#777}.actions{display:flex;gap:8px;flex-wrap:wrap}.mini{padding:8px 12px;border-radius:10px;border:1px solid #66583f;background:#191a1d;color:#fff}.price{color:#d7b36a}.notice{padding:9px;border-radius:10px;background:#2e281d;color:#f3dca6;margin-top:8px}.total{text-align:center;background:#0d0d0e;border:1px solid #5e4c2d;border-radius:18px;padding:16px}.amount{font-size:48px;font-weight:900;color:#efd28f}.display{background:#090a0b;border:1px solid #50452f;border-radius:13px;padding:13px;text-align:right;font-size:25px;margin-top:12px}.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}.key{min-height:64px;background:#222327;color:#fff;border:1px solid #444;border-radius:14px;font-size:24px}.payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pay{padding:18px 6px;border:0;border-radius:14px;color:#fff;font-weight:900;width:100%}.cash{background:#177148}.cardpay{background:#24599b}.suspend{background:#6b4f9b}.cancel{background:#8f3030}.modalwrap{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:1000}.modalwrap.open{display:flex}.modal{width:min(480px,92vw);background:#17181b;border:1px solid #806a42;border-radius:22px;padding:22px}.camera{display:none;margin-top:12px}.camera video{width:100%;max-height:280px;background:#000;border-radius:15px}@media(max-width:900px){.layout{grid-template-columns:1fr}.brand{font-size:22px}.amount{font-size:40px}}
 </style><div class="pos"><div class="head"><div><div class="brand"><span class="gold">JEWELRY</span> · Tattoo Beauty Saloon</div><div style="color:#aaa">Smart POS · {{session.get('user')}}</div></div><a class="mini" href="{{url_for('home')}}">← Dashboard</a></div><div class="layout"><section class="panel"><button type="button" class="add-product-launch" onclick="openAddProduct()"><span class="plus">+</span><span>AGGIUNGI ARTICOLO</span></button><h2>Carrello <span class="gold">{{total_qty}} articoli</span></h2>{% for x in rows %}<div class="row">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}">{% else %}<div class="ph">◇</div>{% endif %}<div><b>{{x.product.brand_code}}</b><div style="color:#aaa">Codice interno: {{x.product.brand_code}}{% if session.get('role') in ('admin','manager') %} · Codice fornitore: {{x.product.supplier_code}}{% endif %} · disponibili {{x.product.quantity}}</div><div class="actions"><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity-1}}"><button class="mini">−</button></form><b>{{x.quantity}}</b><form method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input type="hidden" name="quantity" value="{{x.quantity+1}}"><button class="mini">+</button></form><button class="mini price" type="button" onclick="openPrice({{x.product.id}},'{{x.product.brand_code}}',{{x.original_price}},{{x.unit_price}})">✎ Prezzo</button><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="mini">Rimuovi</button></form></div>{% if x.unit_price != x.original_price %}<div class="notice">Listino € {{'%.2f'|format(x.original_price)}} → <b>€ {{'%.2f'|format(x.unit_price)}}</b><br>{{x.reason}}{% if x.authorized_by %} · autorizzato da {{x.authorized_by}}{% endif %}</div>{% endif %}</div><div><b>€ {{'%.2f'|format(x.subtotal)}}</b><div style="color:#aaa">€ {{'%.2f'|format(x.unit_price)}} cad.</div></div></div>{% else %}<div class="notice">Carrello vuoto. Scansiona il QR o inserisci il codice.</div>{% endfor %}</section><aside class="panel"><div class="total"><div>TOTALE</div><div class="amount">€ {{'%.2f'|format(total)}}</div></div><div id="display" class="display">0</div><div class="keys">{% for k in ['7','8','9','4','5','6','1','2','3','+','0','−'] %}<button class="key" type="button" onclick="press('{{k}}')">{{k}}</button>{% endfor %}</div><div class="payments"><button class="pay cash" onclick="openCash()">CONTANTI</button><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Bancomat"><input type="hidden" name="channel" value="Negozio"><button class="pay cardpay">BANCOMAT</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="pay suspend">SOSPENDI</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="pay cancel" onclick="return confirm('Svuotare il carrello?')">ANNULLA</button></form></div></aside></div></div>
-<div id="addProductModal" class="modalwrap"><div class="modal"><h2 class="add-modal-title">Aggiungi articolo</h2><p class="add-modal-sub">Scansiona il QR oppure inserisci il codice del gioiello.</p><div class="scan-choice"><button type="button" class="goldbtn" onclick="startProductCamera()">📷 SCANSIONA QR</button><button type="button" class="mini" onclick="focusProductCode()">⌨️ INSERISCI CODICE</button></div><div id="camera" class="camera"><div style="position:relative;overflow:hidden;border-radius:15px;background:#000"><video id="video" playsinline webkit-playsinline muted autoplay></video><canvas id="productQrCanvas" style="display:none"></canvas><div style="position:absolute;inset:14%;border:3px solid rgba(255,255,255,.92);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.25);pointer-events:none"></div></div><div class="notice" id="camStatus">Autorizza la fotocamera.</div><button type="button" class="mini" id="switchProductCamera" style="width:100%;margin-top:8px" onclick="switchProductCameraMode()">🔄 CAMBIA FOTOCAMERA</button></div><div class="scan-divider">oppure</div><form id="productScanForm" class="scan" method="post" action="{{url_for('pos_add_code')}}"><input id="scanCode" name="code" placeholder="Codice interno articolo" autocomplete="off" required><button class="goldbtn">AGGIUNGI</button></form><button type="button" class="mini" style="width:100%;margin-top:12px" onclick="closeAddProduct()">ANNULLA</button></div></div>
+<div id="addProductModal" class="modalwrap"><div class="modal"><h2 class="add-modal-title">Aggiungi articolo</h2><p class="add-modal-sub">Scansiona il QR oppure inserisci il codice del gioiello.</p><div class="scan-choice"><button type="button" class="goldbtn" onclick="startProductCamera()">📷 SCANSIONA QR</button><button type="button" class="mini" onclick="focusProductCode()">⌨️ INSERISCI CODICE</button></div><div id="camera" class="camera"><video id="video" playsinline></video><div class="notice" id="camStatus">Autorizza la fotocamera.</div></div><div class="scan-divider">oppure</div><form id="productScanForm" class="scan" method="post" action="{{url_for('pos_add_code')}}"><input id="scanCode" name="code" placeholder="Codice interno articolo" autocomplete="off" required><button class="goldbtn">AGGIUNGI</button></form><button type="button" class="mini" style="width:100%;margin-top:12px" onclick="closeAddProduct()">ANNULLA</button></div></div>
 <div id="priceModal" class="modalwrap"><div class="modal"><h2>Modifica prezzo</h2><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="pid" name="product_id"><input type="hidden" name="return_to" value="pos"><p id="ptitle"></p><label>Prezzo listino<input id="original" readonly></label><label>Nuovo prezzo<input id="newprice" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label><button class="goldbtn">CONFERMA</button><button type="button" class="mini" onclick="closeM('priceModal')">ANNULLA</button></form></div></div>
 <div id="cashModal" class="modalwrap"><div class="modal"><h2>Pagamento contanti</h2><p>Totale <b>€ {{'%.2f'|format(total)}}</b></p><label>Importo ricevuto<input id="received" type="number" step="0.01" oninput="changeCalc()"></label><p>Resto: <b id="change">€ 0,00</b></p><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Contanti"><input type="hidden" name="channel" value="Negozio"><button class="goldbtn" style="width:100%">CONFERMA VENDITA</button></form><button class="mini" style="width:100%;margin-top:8px" onclick="closeM('cashModal')">ANNULLA</button></div></div>
-<script>
-let d='';
-function press(k){d+=k==='−'?'-':k;display.textContent=d||'0'}
-function openPrice(id,n,o,c){pid.value=id;ptitle.textContent=n;original.value='€ '+o.toFixed(2);newprice.value=c.toFixed(2);priceModal.classList.add('open')}
-function closeM(id){document.getElementById(id).classList.remove('open')}
-function openCash(){cashModal.classList.add('open');received.focus()}
-function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}
-let stream=null,running=false,scanFrameId=null,scannerSubmitted=false,jsQRPromise=null;
-const isIPadDevice=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-let productFacingMode=isIPadDevice?'user':'environment';
-function openAddProduct(){addProductModal.classList.add('open');setTimeout(()=>scanCode.focus(),120)}
-function loadProductJsQR(){
-  if(window.jsQR)return Promise.resolve(window.jsQR);
-  if(jsQRPromise)return jsQRPromise;
-  jsQRPromise=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
-    script.async=true;
-    script.onload=()=>window.jsQR?resolve(window.jsQR):reject(new Error('Lettore QR non disponibile'));
-    script.onerror=()=>reject(new Error('Impossibile caricare il lettore QR'));
-    document.head.appendChild(script);
-  });
-  return jsQRPromise;
-}
-function productCameraError(e){
-  const n=(e&&e.name)||'';
-  if(!window.isSecureContext)return 'Apri il gestionale tramite HTTPS.';
-  if(n==='NotAllowedError'||n==='PermissionDeniedError')return 'Fotocamera non autorizzata nelle impostazioni di Safari.';
-  if(n==='NotFoundError'||n==='DevicesNotFoundError')return 'Nessuna fotocamera disponibile.';
-  if(n==='NotReadableError'||n==='TrackStartError')return 'La fotocamera è occupata da un’altra applicazione.';
-  return 'Fotocamera non disponibile: '+((e&&e.message)||'errore sconosciuto');
-}
-function stopProductCamera(){
-  running=false;
-  if(scanFrameId){cancelAnimationFrame(scanFrameId);scanFrameId=null}
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
-  try{video.pause();video.srcObject=null}catch(e){}
-  camera.style.display='none';
-}
-function closeAddProduct(){stopProductCamera();addProductModal.classList.remove('open')}
-function focusProductCode(){stopProductCamera();scanCode.focus()}
-function submitProductQr(value){
-  if(scannerSubmitted)return;
-  const clean=(value||'').trim();
-  if(!clean)return;
-  scannerSubmitted=true;
-  scanCode.value=clean;
-  camStatus.textContent='✓ QR letto: '+clean+'. Aggiunta al carrello…';
-  camStatus.style.color='#34d399';
-  stopProductCamera();
-  document.getElementById('productScanForm').submit();
-}
-function scanProductFrame(){
-  if(!running||scannerSubmitted)return;
-  if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0&&window.jsQR){
-    const canvas=document.getElementById('productQrCanvas');
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});
-    const maxWidth=960;
-    const scale=Math.min(1,maxWidth/video.videoWidth);
-    canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-    canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    try{
-      const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-      if(code&&code.data){submitProductQr(code.data);return}
-    }catch(e){}
-  }
-  scanFrameId=requestAnimationFrame(scanProductFrame);
-}
-async function switchProductCameraMode(){
-  productFacingMode=productFacingMode==='user'?'environment':'user';
-  camStatus.textContent=productFacingMode==='user'?'Passaggio alla fotocamera frontale…':'Passaggio alla fotocamera posteriore…';
-  stopProductCamera();
-  scannerSubmitted=false;
-  await startProductCamera();
-}
-async function startProductCamera(){
-  camera.style.display='block';
-  if(running)return;
-  scannerSubmitted=false;
-  camStatus.style.color='';
-  try{
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Browser senza accesso fotocamera');
-    camStatus.textContent='Caricamento lettore QR…';
-    await loadProductJsQR();
-    camStatus.textContent='Avvio fotocamera…';
-    let constraints={audio:false,video:{facingMode:{ideal:productFacingMode},width:{ideal:1280},height:{ideal:720}}};
-    try{stream=await navigator.mediaDevices.getUserMedia(constraints)}catch(first){
-      if(first&&(first.name==='OverconstrainedError'||first.name==='ConstraintNotSatisfiedError'))stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true});
-      else throw first;
-    }
-    video.srcObject=stream;
-    video.setAttribute('playsinline','');
-    video.setAttribute('webkit-playsinline','');
-    video.muted=true;
-    await video.play();
-    running=true;
-    camStatus.textContent=(productFacingMode==='user'?'Fotocamera frontale':'Fotocamera posteriore')+' attiva. Inquadra il QR nel riquadro.';
-    scanFrameId=requestAnimationFrame(scanProductFrame);
-  }catch(e){
-    stopProductCamera();
-    camera.style.display='block';
-    camStatus.textContent=productCameraError(e);
-    console.error('Product QR camera error',e);
-  }
-}
-addProductModal.addEventListener('click',e=>{if(e.target===addProductModal)closeAddProduct()});
-</script>''',rows=rows,total=total,total_qty=total_qty)
+<script>let d='';function press(k){d+=k==='−'?'-':k;display.textContent=d||'0'}function openPrice(id,n,o,c){pid.value=id;ptitle.textContent=n;original.value='€ '+o.toFixed(2);newprice.value=c.toFixed(2);priceModal.classList.add('open')}function closeM(id){document.getElementById(id).classList.remove('open')}function openCash(){cashModal.classList.add('open');received.focus()}function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}let stream,running=false;function openAddProduct(){addProductModal.classList.add('open');setTimeout(()=>scanCode.focus(),120)}function stopProductCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}running=false;camera.style.display='none'}function closeAddProduct(){stopProductCamera();addProductModal.classList.remove('open')}function focusProductCode(){stopProductCamera();scanCode.focus()}async function startProductCamera(){camera.style.display='block';if(running)return;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;await video.play();running=true;camStatus.textContent='Inquadra il QR del gioiello.';scan()}catch(e){running=false;camStatus.textContent='Fotocamera non disponibile: '+e.message}}async function scan(){if(!running)return;if('BarcodeDetector'in window){try{let r=await new BarcodeDetector({formats:['qr_code']}).detect(video);if(r.length){scanCode.value=r[0].rawValue;stopProductCamera();document.getElementById('productScanForm').submit();return}}catch(e){}}requestAnimationFrame(scan)}addProductModal.addEventListener('click',e=>{if(e.target===addProductModal)closeAddProduct()});</script>''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/pos/add-code")
 @login_required
