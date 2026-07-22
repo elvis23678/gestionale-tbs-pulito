@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v16.5 CENTRO NOTIFICHE COMPLETO"
+APP_VERSION = "v16.6 NOTIFICHE MULTIUTENTE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1297,19 +1297,39 @@ def _ensure_notifications(db):
         read_at TEXT,
         archived_at TEXT,
         archived_by_user_id INTEGER,
-        archived_by_username TEXT
+        archived_by_username TEXT,
+        event_key TEXT
     )""")
+    ensure_column(db,"notifications","event_key","TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_user_id,archived_at,read_at,created_at)")
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_event_user ON notifications(recipient_user_id,event_key) WHERE event_key IS NOT NULL")
 
-def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None):
+def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None,event_key=None):
+    if not user_id:
+        return
     _ensure_notifications(db)
-    db.execute("INSERT INTO notifications(recipient_user_id,notification_type,title,message,reference_type,reference_id) VALUES(?,?,?,?,?,?)",(user_id,kind,title,message,reference_type,reference_id))
+    db.execute("INSERT OR IGNORE INTO notifications(recipient_user_id,notification_type,title,message,reference_type,reference_id,event_key) VALUES(?,?,?,?,?,?,?)",(user_id,kind,title,message,reference_type,reference_id,event_key))
 
-def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None):
+def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
     placeholders=','.join('?' for _ in roles)
     users=db.execute(f"SELECT id FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
     for user in users:
-        _notify_user(db,user['id'],kind,title,message,reference_type,reference_id)
+        _notify_user(db,user['id'],kind,title,message,reference_type,reference_id,event_key)
+
+def _backfill_personal_notifications(db):
+    """Recupera eventuali esiti sconto decisi prima del deploy o persi durante un aggiornamento."""
+    _ensure_notifications(db)
+    rows=db.execute("""SELECT id,requester_user_id,requester_username,product_code,original_price,requested_price,status,approver_username
+                       FROM discount_requests
+                       WHERE status IN ('Approvata','Applicata','Rifiutata') AND requester_user_id IS NOT NULL""").fetchall()
+    for req in rows:
+        approved=req['status'] in ('Approvata','Applicata')
+        kind='discount_approved' if approved else 'discount_rejected'
+        title='Sconto autorizzato' if approved else 'Sconto rifiutato'
+        message=f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f}"
+        if req['approver_username']:
+            message += f" · {req['approver_username']}"
+        _notify_user(db,req['requester_user_id'],kind,title,message,'discount',req['id'],f"discount:{req['id']}:{kind}")
 
 def _notification_unread_count(db,user_id):
     _ensure_notifications(db)
@@ -1319,6 +1339,8 @@ def _notification_unread_count(db,user_id):
 @login_required
 def notification_count():
     with connect() as db:
+        _backfill_personal_notifications(db)
+        db.commit()
         count=_notification_unread_count(db,session.get("user_id"))
     return jsonify({"count":count})
 
@@ -1327,7 +1349,8 @@ def notification_count():
 def notification_center():
     history=request.args.get('history')=='1'
     with connect() as db:
-        _ensure_notifications(db)
+        _backfill_personal_notifications(db)
+        db.commit()
         if history:
             rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC,id DESC LIMIT 150",(session.get('user_id'),)).fetchall()
         else:
@@ -1821,7 +1844,7 @@ def pos_set_price():
         db.execute("UPDATE discount_requests SET status='Superata',decided_at=CURRENT_TIMESTAMP WHERE requester_user_id=? AND product_id=? AND status='In attesa'",(session.get('user_id'),pid))
         db.execute("INSERT INTO discount_requests(request_token,requester_user_id,requester_username,product_id,product_code,original_price,requested_price,reason,return_to) VALUES(?,?,?,?,?,?,?,?,?)",(token,session.get('user_id'),session.get('user'),pid,p['brand_code'],float(p['price']),price,reason,return_to))
         request_id=db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        _notify_roles(db,('admin','manager'),'discount_request','Nuova richiesta sconto',f"{session.get('user')} · {p['brand_code']} · € {float(p['price']):.2f} → € {price:.2f}",'discount',request_id)
+        _notify_roles(db,('admin','manager'),'discount_request','Nuova richiesta sconto',f"{session.get('user')} · {p['brand_code']} · € {float(p['price']):.2f} → € {price:.2f}",'discount',request_id,f"discount:{request_id}:request")
         log_action(db,"Richiesta sconto remota",p,f"Listino € {p['price']:.2f}; richiesto € {price:.2f}; motivo {reason}")
         db.commit()
     session['pending_discount_token']=token;session.modified=True
@@ -1900,7 +1923,7 @@ def decide_discount_request(request_id):
             return redirect(url_for("discount_approvals"))
         status="Approvata" if decision=="approve" else "Rifiutata"
         db.execute("UPDATE discount_requests SET status=?,approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,me["id"],me["username"],request_id))
-        _notify_user(db,req['requester_user_id'],'discount_approved' if status=='Approvata' else 'discount_rejected','Sconto autorizzato' if status=='Approvata' else 'Sconto rifiutato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id)
+        _notify_user(db,req['requester_user_id'],'discount_approved' if status=='Approvata' else 'discount_rejected','Sconto autorizzato' if status=='Approvata' else 'Sconto rifiutato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:{'approved' if status=='Approvata' else 'rejected'}")
         log_action(db,"Sconto remoto approvato" if status=="Approvata" else "Sconto remoto rifiutato",details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; € {req['requested_price']:.2f}")
         db.commit()
     flash("Sconto approvato." if status=="Approvata" else "Sconto rifiutato.")
@@ -2083,7 +2106,7 @@ def checkout_cart():
             log_action(db,"Vendita da carrello",p,f"{sale_number}; {channel}; {payment}; pezzi: {qty}; listino € {p['price']:.2f}; venduto € {unit_price:.2f}; autorizzato da {pd['authorized_by_username'] or '-'}")
             total+=qty*unit_price; pieces+=qty
         first_sale=db.execute("SELECT MIN(id) FROM sales WHERE sale_number=?",(sale_number,)).fetchone()[0]
-        _notify_roles(db,('admin','manager'),'sale','Nuova vendita',f"{session.get('user','sconosciuto')} · {pieces} articoli · € {total:.2f} · {payment}",'sale',first_sale)
+        _notify_roles(db,('admin','manager'),'sale','Nuova vendita',f"{session.get('user','sconosciuto')} · {pieces} articoli · € {total:.2f} · {payment}",'sale',first_sale,f"sale:{first_sale}")
         db.commit()
     session.pop("cart",None); session.pop("cart_prices",None); session.modified=True
     flash(f"Vendita {sale_number} confermata: {pieces} articoli · € {total:.2f}.")
