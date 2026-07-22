@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v16.6 NOTIFICHE MULTIUTENTE"
+APP_VERSION = "v16.7 NOTIFICHE VENDITORE FIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1288,6 +1288,7 @@ def _ensure_notifications(db):
     db.execute("""CREATE TABLE IF NOT EXISTS notifications(
         id INTEGER PRIMARY KEY,
         recipient_user_id INTEGER NOT NULL,
+        recipient_username TEXT,
         notification_type TEXT NOT NULL,
         title TEXT NOT NULL,
         message TEXT,
@@ -1300,39 +1301,89 @@ def _ensure_notifications(db):
         archived_by_username TEXT,
         event_key TEXT
     )""")
+    ensure_column(db,"notifications","recipient_username","TEXT")
     ensure_column(db,"notifications","event_key","TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_user_id,archived_at,read_at,created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_notifications_username ON notifications(recipient_username,archived_at,read_at,created_at)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_event_user ON notifications(recipient_user_id,event_key) WHERE event_key IS NOT NULL")
 
-def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None,event_key=None):
-    if not user_id:
-        return
+
+def _current_user_for_identity(db, user_id=None, username=None):
+    """Risolve l'account attivo corrente anche se un utente è stato ricreato con un nuovo ID."""
+    row=None
+    if user_id:
+        row=db.execute("SELECT id,username FROM users WHERE id=? AND active=1",(user_id,)).fetchone()
+    if not row and username:
+        row=db.execute("SELECT id,username FROM users WHERE lower(username)=lower(?) AND active=1 ORDER BY id DESC LIMIT 1",(username,)).fetchone()
+    return row
+
+
+def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None,event_key=None,recipient_username=None):
     _ensure_notifications(db)
-    db.execute("INSERT OR IGNORE INTO notifications(recipient_user_id,notification_type,title,message,reference_type,reference_id,event_key) VALUES(?,?,?,?,?,?,?)",(user_id,kind,title,message,reference_type,reference_id,event_key))
+    recipient=_current_user_for_identity(db,user_id,recipient_username)
+    if not recipient:
+        return False
+    db.execute("""INSERT OR IGNORE INTO notifications(
+        recipient_user_id,recipient_username,notification_type,title,message,
+        reference_type,reference_id,event_key
+    ) VALUES(?,?,?,?,?,?,?,?)""",(
+        recipient['id'],recipient['username'],kind,title,message,
+        reference_type,reference_id,event_key
+    ))
+    return True
+
 
 def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
     placeholders=','.join('?' for _ in roles)
-    users=db.execute(f"SELECT id FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
+    users=db.execute(f"SELECT id,username FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
     for user in users:
-        _notify_user(db,user['id'],kind,title,message,reference_type,reference_id,event_key)
+        user_event_key=f"{event_key}:user:{user['id']}" if event_key else None
+        _notify_user(db,user['id'],kind,title,message,reference_type,reference_id,user_event_key,user['username'])
+
+
+def _repair_notification_recipients(db):
+    """Ricollega notifiche e richieste agli account attivi quando gli utenti sono stati ricreati."""
+    _ensure_notifications(db)
+    # Completa username mancanti per notifiche ancora legate a un account esistente.
+    db.execute("""UPDATE notifications
+                  SET recipient_username=(SELECT username FROM users WHERE users.id=notifications.recipient_user_id)
+                  WHERE recipient_username IS NULL
+                    AND EXISTS(SELECT 1 FROM users WHERE users.id=notifications.recipient_user_id)""")
+    # Se lo stesso username ora ha un nuovo ID, sposta la notifica sul profilo attivo corrente.
+    rows=db.execute("SELECT id,recipient_user_id,recipient_username FROM notifications WHERE recipient_username IS NOT NULL").fetchall()
+    for n in rows:
+        current=_current_user_for_identity(db,None,n['recipient_username'])
+        if current and current['id'] != n['recipient_user_id']:
+            try:
+                db.execute("UPDATE notifications SET recipient_user_id=? WHERE id=?",(current['id'],n['id']))
+            except sqlite3.IntegrityError:
+                # Una notifica equivalente esiste già sul nuovo profilo.
+                db.execute("DELETE FROM notifications WHERE id=?",(n['id'],))
+
 
 def _backfill_personal_notifications(db):
-    """Recupera eventuali esiti sconto decisi prima del deploy o persi durante un aggiornamento."""
+    """Crea/ripara gli esiti sconto personali, anche dopo ricreazione degli utenti."""
     _ensure_notifications(db)
+    _repair_notification_recipients(db)
     rows=db.execute("""SELECT id,requester_user_id,requester_username,product_code,original_price,requested_price,status,approver_username
                        FROM discount_requests
-                       WHERE status IN ('Approvata','Applicata','Rifiutata') AND requester_user_id IS NOT NULL""").fetchall()
+                       WHERE status IN ('Approvata','Applicata','Rifiutata')""").fetchall()
     for req in rows:
+        recipient=_current_user_for_identity(db,req['requester_user_id'],req['requester_username'])
+        if not recipient:
+            continue
         approved=req['status'] in ('Approvata','Applicata')
         kind='discount_approved' if approved else 'discount_rejected'
         title='Sconto autorizzato' if approved else 'Sconto rifiutato'
         message=f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f}"
         if req['approver_username']:
             message += f" · {req['approver_username']}"
-        _notify_user(db,req['requester_user_id'],kind,title,message,'discount',req['id'],f"discount:{req['id']}:{kind}")
+        _notify_user(db,recipient['id'],kind,title,message,'discount',req['id'],f"discount:{req['id']}:{kind}",recipient['username'])
+
 
 def _notification_unread_count(db,user_id):
     _ensure_notifications(db)
+    _repair_notification_recipients(db)
     return int(db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND read_at IS NULL AND archived_at IS NULL",(user_id,)).fetchone()[0] or 0)
 
 @app.get("/notifications/count")
@@ -1923,7 +1974,9 @@ def decide_discount_request(request_id):
             return redirect(url_for("discount_approvals"))
         status="Approvata" if decision=="approve" else "Rifiutata"
         db.execute("UPDATE discount_requests SET status=?,approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,me["id"],me["username"],request_id))
-        _notify_user(db,req['requester_user_id'],'discount_approved' if status=='Approvata' else 'discount_rejected','Sconto autorizzato' if status=='Approvata' else 'Sconto rifiutato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:{'approved' if status=='Approvata' else 'rejected'}")
+        recipient=_current_user_for_identity(db,req['requester_user_id'],req['requester_username'])
+        if recipient:
+            _notify_user(db,recipient['id'],'discount_approved' if status=='Approvata' else 'discount_rejected','Sconto autorizzato' if status=='Approvata' else 'Sconto rifiutato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:{'approved' if status=='Approvata' else 'rejected'}",recipient['username'])
         log_action(db,"Sconto remoto approvato" if status=="Approvata" else "Sconto remoto rifiutato",details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; € {req['requested_price']:.2f}")
         db.commit()
     flash("Sconto approvato." if status=="Approvata" else "Sconto rifiutato.")
