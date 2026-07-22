@@ -1,6 +1,0 @@
-TBS Gestionale v20 rev.18.1 · Home Hotfix
-
-- Corretto errore del pulsante Home/Dashboard.
-- La Dashboard Smart ora gestisce database provenienti da versioni precedenti,
-  anche quando alcune tabelle o colonne PRO non sono ancora presenti.
-- Nessuna modifica a prodotti, utenti, vendite o dati esistenti.
