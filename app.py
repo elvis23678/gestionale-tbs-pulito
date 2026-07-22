@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.1.0 LTS · Firebase Push Complete"
+APP_VERSION = "v37.2.0 LTS · Push Activation Fix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -433,43 +433,54 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
     let b=document.getElementById(buttonId);
     if(!b){
       b=document.createElement('button'); b.id=buttonId; b.type='button';
-      b.style.cssText='position:fixed;right:18px;bottom:94px;z-index:9999;border:1px solid #d8b75c;background:#111722;color:#fff;border-radius:999px;padding:11px 15px;font-weight:900;box-shadow:0 10px 25px rgba(0,0,0,.28)';
+      b.style.cssText='position:fixed;right:14px;bottom:96px;z-index:99999;border:2px solid #d8b75c;background:#111722;color:#fff;border-radius:999px;padding:12px 16px;font-weight:900;font-size:14px;box-shadow:0 12px 28px rgba(0,0,0,.38);max-width:calc(100vw - 28px)';
       document.body.appendChild(b);
     }
-    b.textContent=label||'🔔 Attiva push'; b.hidden=false; return b;
+    b.textContent=label; b.hidden=false; b.disabled=false; return b;
   }
+  function blockedHelp(){alert('Le notifiche sono bloccate. Tocca l’icona delle impostazioni del sito nella barra di Chrome, apri Permessi → Notifiche e scegli Consenti. Poi ricarica la pagina.');}
+  const waiting=showButton('🔔 Verifica notifiche'); waiting.disabled=true;
   try{
-    if(!('serviceWorker' in navigator)||!('Notification' in window)) return;
-    const cfgResp=await fetch('/api/push/config',{cache:'no-store'});
-    if(!cfgResp.ok) return;
+    if(!('serviceWorker' in navigator)||!('Notification' in window)){
+      const b=showButton('⚠️ Push non supportate'); b.onclick=()=>alert('Usa Chrome aggiornato o installa la PWA TBS.'); return;
+    }
+    const cfgResp=await fetch('/api/push/config',{cache:'no-store',headers:{'Accept':'application/json'}});
+    if(!cfgResp.ok) throw new Error('Configurazione push non raggiungibile');
     const settings=await cfgResp.json();
-    if(!settings.enabled) return;
-    const [{initializeApp},{getMessaging,getToken,deleteToken}]=await Promise.all([
+    if(!settings.enabled){const b=showButton('⚠️ Firebase da configurare');b.onclick=()=>alert('Controlla le variabili Firebase su Render.');return;}
+    const [{initializeApp,getApps},{getMessaging,getToken,deleteToken,isSupported}]=await Promise.all([
       import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')
     ]);
-    const firebaseApp=initializeApp(settings.config);
+    if(!(await isSupported())){const b=showButton('⚠️ Push non supportate');b.onclick=()=>alert('Firebase Messaging non è supportato su questo browser.');return;}
+    const firebaseApp=getApps().length?getApps()[0]:initializeApp(settings.config);
     const messaging=getMessaging(firebaseApp);
     const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
+    await navigator.serviceWorker.ready;
     async function registerToken(){
+      if(Notification.permission==='denied'){blockedHelp();throw new Error('Permesso notifiche bloccato');}
       const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
       if(permission!=='granted') throw new Error('Permesso notifiche non concesso');
       const token=await getToken(messaging,{vapidKey:settings.vapidKey,serviceWorkerRegistration:registration});
       if(!token) throw new Error('Firebase non ha restituito il token');
       const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,platform:'web-pwa'})});
-      if(!r.ok) throw new Error('Registrazione dispositivo non riuscita');
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(data.error||'Registrazione dispositivo non riuscita');
       localStorage.setItem('tbsPushToken',token);
-      const b=document.getElementById(buttonId); if(b) b.hidden=true;
+      const b=showButton('✅ Notifiche attive'); b.onclick=()=>location.href='/notifications'; setTimeout(()=>b.hidden=true,4000);
       return token;
     }
     if(Notification.permission==='granted'){
-      registerToken().catch(console.warn);
-    }else if(Notification.permission==='default'){
+      showButton('🔔 Registrazione…').disabled=true;
+      registerToken().catch(e=>{console.warn(e);const b=showButton('⚠️ Riprova notifiche');b.onclick=()=>registerToken().catch(x=>alert(x.message));});
+    }else if(Notification.permission==='denied'){
+      const b=showButton('🔕 Notifiche bloccate'); b.onclick=blockedHelp;
+    }else{
       const b=showButton('🔔 Attiva notifiche');
-      b.addEventListener('click',async()=>{b.disabled=true;b.textContent='Attivazione…';try{await registerToken();}catch(e){b.disabled=false;b.textContent='Riprova notifiche';alert(e.message)}});
+      b.onclick=async()=>{b.disabled=true;b.textContent='Attivazione…';try{await registerToken();}catch(e){b.disabled=false;b.textContent='Riprova notifiche';alert(e.message);}};
     }
-    window.TBSPush={register:registerToken,async disable(){const token=localStorage.getItem('tbsPushToken');if(token){await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});await deleteToken(messaging);localStorage.removeItem('tbsPushToken')}}};
-  }catch(e){console.warn('TBS Push:',e)}
+    window.TBSPush={register:registerToken,async disable(){const token=localStorage.getItem('tbsPushToken');if(token){await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});await deleteToken(messaging);localStorage.removeItem('tbsPushToken');}location.reload();}};
+  }catch(e){console.warn('TBS Push:',e);const b=showButton('⚠️ Riprova notifiche');b.onclick=()=>location.reload();}
 })();
 </script>{% endif %}</body></html>'''
 
