@@ -849,8 +849,8 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       await loadJsQR();
       status.textContent='Richiesta accesso alla fotocamera…';
       await halt();
-      const isiPad=((navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)||/iPad/.test(navigator.userAgent));
-      const constraints={audio:false,video:{facingMode:{ideal:(isiPad?'user':'environment')},width:{ideal:1280},height:{ideal:720}}};
+      const isIPad=((navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)||/iPad/i.test(navigator.userAgent));
+      const constraints={audio:false,video:{facingMode:{ideal:isIPad?'user':'environment'},width:{ideal:1280},height:{ideal:720}}};
       try{{
         stream=await navigator.mediaDevices.getUserMedia(constraints);
       }}catch(firstError){{
