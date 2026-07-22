@@ -849,7 +849,9 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       await loadJsQR();
       status.textContent='Richiesta accesso alla fotocamera…';
       await halt();
-      const constraints={{audio:false,video:{{facingMode:{{ideal:'environment'}},width:{{ideal:1280}},height:{{ideal:720}}}}}};
+      const isIPad=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      const preferredFacing=isIPad?'user':'environment';
+      const constraints={{audio:false,video:{{facingMode:{{ideal:preferredFacing}},width:{{ideal:1280}},height:{{ideal:720}}}}}};
       try{{
         stream=await navigator.mediaDevices.getUserMedia(constraints);
       }}catch(firstError){{
@@ -2267,7 +2269,9 @@ async function startProductCamera(){
   camStatus.textContent='Avvio fotocamera…';
   try{
     await loadJsQR();
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const isIPad=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const preferredFacing=isIPad?'user':'environment';
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:preferredFacing},width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject=stream;
     video.setAttribute('playsinline','');
     video.muted=true;
