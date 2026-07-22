@@ -1,15 +1,6 @@
-TBS Gestionale v20 rev.20 · Ordini Clienti PRO · DEVELOPMENT
-Base cumulativa: v20 rev.19
+TBS Gestionale v20 rev.18.1 · Home Hotfix
 
-Contiene integralmente la rev.19 e prepara il flusso operativo degli ordini cliente:
-- Venditore: inserimento richiesta con nome, telefono, articolo e quantità.
-- Gestore/Admin: approvazione o rifiuto.
-- Ordine approvato: confluenza nel riordino fornitore.
-- Ricezione merce: spunta articolo per articolo.
-- Stati previsti: in attesa, approvato, ordinato, parziale, da contattare, consegnato, annullato.
-- Venditore: consegna degli ordini pronti.
-- Costi fornitore e PDF fornitore riservati a Gestore/Admin.
-
-ATTENZIONE
-Questa è una build DEVELOPMENT cumulativa destinata al collaudo progressivo.
-Prima di usarla in produzione deve essere verificato l'intero flusso ordine con una copia del database.
+- Corretto errore del pulsante Home/Dashboard.
+- La Dashboard Smart ora gestisce database provenienti da versioni precedenti,
+  anche quando alcune tabelle o colonne PRO non sono ancora presenti.
+- Nessuna modifica a prodotti, utenti, vendite o dati esistenti.
