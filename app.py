@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v16.9 RC1 · NOTIFICHE STORICHE"
+APP_VERSION = "v17.0 STABLE RC2 · COLLAUDO"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1445,18 +1445,136 @@ def notification_center():
         _sync_all_notifications(db)
         db.commit()
         if view=='archive':
-            rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC,id DESC LIMIT 200",(session.get('user_id'),)).fetchall()
+            raw_rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NOT NULL ORDER BY archived_at DESC,id DESC LIMIT 200",(session.get('user_id'),)).fetchall()
         elif view=='read':
-            rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NOT NULL ORDER BY read_at DESC,id DESC LIMIT 150",(session.get('user_id'),)).fetchall()
+            raw_rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NOT NULL ORDER BY read_at DESC,id DESC LIMIT 150",(session.get('user_id'),)).fetchall()
         else:
-            rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 150",(session.get('user_id'),)).fetchall()
+            raw_rows=db.execute("SELECT * FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 150",(session.get('user_id'),)).fetchall()
         counts={
             'unread':db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NULL",(session.get('user_id'),)).fetchone()[0],
             'read':db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND archived_at IS NULL AND read_at IS NOT NULL",(session.get('user_id'),)).fetchone()[0],
             'archive':db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND archived_at IS NOT NULL",(session.get('user_id'),)).fetchone()[0],
         }
-    body="""<style>.notice-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.notice-tabs a{padding:11px 8px;border-radius:11px;background:#e5e7eb;color:#111;text-align:center;text-decoration:none;font-weight:900}.notice-tabs a.active{background:#111827;color:#fff}.notice-list{display:grid;gap:11px;margin-top:16px}.notice-row{display:grid;grid-template-columns:45px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:14px;padding:13px}.notice-row.unread{border-left:7px solid #dc2626}.notice-main{text-decoration:none;color:inherit}.trash{background:#fff0f0;color:#b91c1c;padding:9px}.new{background:#dc2626;color:#fff;border-radius:99px;padding:3px 7px;font-size:11px}@media(max-width:560px){.notice-tabs{grid-template-columns:1fr}.notice-row{grid-template-columns:36px 1fr auto}}</style><h1>🔔 Centro notifiche</h1><div class='notice-tabs'><a class='{% if view=="unread" %}active{% endif %}' href='{{url_for("notification_center",view="unread")}}'>🔴 Da leggere ({{counts.unread}})</a><a class='{% if view=="read" %}active{% endif %}' href='{{url_for("notification_center",view="read")}}'>🟢 Lette ({{counts.read}})</a><a class='{% if view=="archive" %}active{% endif %}' href='{{url_for("notification_center",view="archive")}}'>📚 Archivio ({{counts.archive}})</a></div><p class='muted'>{% if view=='archive' %}Eventi archiviati: nessuna traccia viene eliminata.{% elif view=='read' %}Notifiche aperte ma non ancora archiviate.{% else %}Tocca una notifica per vedere il dettaglio.{% endif %}</p><div class='notice-list'>{% for n in rows %}<div class='notice-row {% if not n.read_at and view!='archive' %}unread{% endif %}'><div style='font-size:26px'>{% if n.notification_type=='sale' %}💰{% elif n.notification_type=='discount_request' %}🏷️{% elif n.notification_type=='discount_approved' %}✅{% elif n.notification_type=='discount_rejected' %}❌{% else %}🔔{% endif %}</div><a class='notice-main' href='{{url_for("notification_detail",notification_id=n.id)}}'><b>{{n.title}}</b>{% if not n.read_at and view!='archive' %} <span class='new'>NUOVA</span>{% endif %}<br>{{n.message or ''}}<br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviata {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></a>{% if view!='archive' %}<form method='post' action='{{url_for("archive_notification",notification_id=n.id)}}' onsubmit="return confirm('Archiviare? Rimarrà nello storico.')"><button class='trash'>🗑️</button></form>{% endif %}</div>{% else %}<div class='card'>Nessuna notifica in questa sezione.</div>{% endfor %}</div>"""
+
+    # Raggruppa solo le vendite consecutive dello stesso venditore nello stesso minuto.
+    # Gli altri eventi rimangono singoli per conservare un flusso operativo chiaro.
+    grouped=[]
+    sale_groups={}
+    for row in raw_rows:
+        item=dict(row)
+        if item.get('notification_type')=='sale':
+            seller=(item.get('message') or '').split(' · ',1)[0].strip() or 'Venditore'
+            minute=(item.get('created_at') or '')[:16]
+            key=(seller,minute)
+            if key not in sale_groups:
+                sale_groups[key]={
+                    'is_group':True,'seller':seller,'minute':minute,'items':[],
+                    'created_at':item.get('created_at'),'read_at':item.get('read_at'),
+                    'archived_at':item.get('archived_at'),'archived_by_username':item.get('archived_by_username')
+                }
+                grouped.append(sale_groups[key])
+            sale_groups[key]['items'].append(item)
+            try:
+                parts=(item.get('message') or '').split(' · ')
+                amount=float(parts[2].replace('€','').replace(',','.').strip()) if len(parts)>2 else 0.0
+            except (ValueError,TypeError):
+                amount=0.0
+            sale_groups[key]['group_total']=sale_groups[key].get('group_total',0.0)+amount
+            if not item.get('read_at'): sale_groups[key]['read_at']=None
+        else:
+            item['is_group']=False
+            grouped.append(item)
+
+    # I gruppi con una sola vendita vengono mostrati come notifica normale.
+    rows=[]
+    for item in grouped:
+        if item.get('is_group') and len(item['items'])==1:
+            single=item['items'][0]
+            single['is_group']=False
+            rows.append(single)
+        else:
+            rows.append(item)
+
+    body="""<style>
+    .notice-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0}.notice-tabs a{padding:14px 8px;border-radius:14px;background:#e5e7eb;color:#111;text-align:center;text-decoration:none;font-weight:950}.notice-tabs a.active{background:#111827;color:#fff}
+    .notice-list{display:grid;gap:12px;margin-top:16px}.notice-row{display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:16px;padding:14px;cursor:pointer;transition:transform .12s,box-shadow .12s}.notice-row:active{transform:scale(.99)}.notice-row:hover{box-shadow:0 8px 22px rgba(15,23,42,.08)}.notice-row.unread{border-left:7px solid #dc2626}.notice-row.read{border-left:7px solid #10b981}
+    .notice-main{text-decoration:none;color:inherit}.trash{background:#fff0f0;color:#b91c1c;padding:10px;border-radius:12px}.status-pill{border-radius:99px;padding:3px 8px;font-size:11px;color:#fff;white-space:nowrap}.status-new{background:#dc2626}.status-read{background:#059669}.group-pill{background:#d7a72c;color:#111;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:900}
+    @media(max-width:560px){.notice-tabs{grid-template-columns:1fr}.notice-row{grid-template-columns:38px 1fr auto;padding:13px 10px}}
+    </style>
+    <h1>🔔 Centro notifiche</h1>
+    <div class='notice-tabs'><a class='{% if view=="unread" %}active{% endif %}' href='{{url_for("notification_center",view="unread")}}'>🔴 Da leggere ({{counts.unread}})</a><a class='{% if view=="read" %}active{% endif %}' href='{{url_for("notification_center",view="read")}}'>🟢 Lette ({{counts.read}})</a><a class='{% if view=="archive" %}active{% endif %}' href='{{url_for("notification_center",view="archive")}}'>📚 Archivio ({{counts.archive}})</a></div>
+    <p class='muted'>{% if view=='archive' %}Eventi archiviati: nessuna traccia viene eliminata.{% elif view=='read' %}Notifiche aperte ma non ancora archiviate.{% else %}Tocca qualsiasi punto della scheda per vedere il dettaglio.{% endif %}</p>
+    <div class='notice-list'>{% for n in rows %}
+      {% if n.is_group %}
+      <div class='notice-row {% if not n.read_at and view!="archive" %}unread{% elif view!="archive" %}read{% endif %}' data-href='{{url_for("notification_sales_group",seller=n.seller,minute=n.minute)}}'>
+        <div style='font-size:28px'>💰</div>
+        <div class='notice-main'><b>{{n.seller}} · {{n.items|length}} vendite</b> <span class='group-pill'>RAGGRUPPATE</span>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVE</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTE</span>{% endif %}<br>Totale gruppo: <b>€ {{'%.2f'|format(n.group_total)}}</b><br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviate {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
+        {% if view!='archive' %}<form method='post' action='{{url_for("archive_notification_group")}}' onsubmit="event.stopPropagation();return confirm('Archiviare tutte le notifiche di questo gruppo? Rimarranno nello storico.')"><input type='hidden' name='seller' value='{{n.seller}}'><input type='hidden' name='minute' value='{{n.minute}}'><button class='trash' type='submit'>🗑️</button></form>{% endif %}
+      </div>
+      {% else %}
+      <div class='notice-row {% if not n.read_at and view!="archive" %}unread{% elif view!="archive" %}read{% endif %}' data-href='{{url_for("notification_detail",notification_id=n.id)}}'>
+        <div style='font-size:28px'>{% if n.notification_type=='sale' %}💰{% elif n.notification_type=='discount_request' %}🏷️{% elif n.notification_type=='discount_approved' %}✅{% elif n.notification_type=='discount_rejected' %}❌{% else %}🔔{% endif %}</div>
+        <div class='notice-main'><b>{{n.title}}</b>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVA</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTA</span>{% endif %}<br>{{n.message or ''}}<br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviata {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
+        {% if view!='archive' %}<form method='post' action='{{url_for("archive_notification",notification_id=n.id)}}' onsubmit="event.stopPropagation();return confirm('Archiviare questa notifica? Rimarrà nello storico.')"><button class='trash' type='submit'>🗑️</button></form>{% endif %}
+      </div>
+      {% endif %}
+    {% else %}<div class='card'>Nessuna notifica in questa sezione.</div>{% endfor %}</div>
+    <script>document.querySelectorAll('.notice-row[data-href]').forEach(function(row){row.addEventListener('click',function(e){if(e.target.closest('form,button,a,input'))return;window.location.href=row.dataset.href;});});</script>"""
     return page("Centro notifiche",body,rows=rows,view=view,counts=counts)
+
+
+@app.get("/notifications/sales-group")
+@login_required
+def notification_sales_group():
+    seller=(request.args.get('seller') or '').strip()
+    minute=(request.args.get('minute') or '').strip()[:16]
+    if not seller or not minute:
+        flash('Gruppo notifiche non valido.')
+        return redirect(url_for('notification_center'))
+    with connect() as db:
+        rows=db.execute("""SELECT * FROM notifications
+                           WHERE recipient_user_id=? AND notification_type='sale'
+                             AND substr(created_at,1,16)=? AND message LIKE ?
+                           ORDER BY created_at,id""",(session.get('user_id'),minute,seller+' · %')).fetchall()
+        if not rows:
+            flash('Gruppo notifiche non trovato.')
+            return redirect(url_for('notification_center'))
+        db.execute("""UPDATE notifications SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP)
+                      WHERE recipient_user_id=? AND notification_type='sale'
+                        AND substr(created_at,1,16)=? AND message LIKE ?""",(session.get('user_id'),minute,seller+' · %'))
+        sales=[]
+        grand_total=0.0
+        for n in rows:
+            sale=db.execute("SELECT * FROM sales WHERE id=?",(n['reference_id'],)).fetchone()
+            if not sale: continue
+            sale_number=sale['sale_number']
+            if sale_number:
+                items=db.execute("SELECT * FROM sales WHERE sale_number=? ORDER BY id",(sale_number,)).fetchall()
+            else:
+                items=[sale]
+            total=sum(float(x['quantity'] or 0)*float(x['unit_price'] or 0) for x in items)
+            grand_total+=total
+            sales.append({'notification':dict(n),'sale':dict(sale),'items':[dict(x) for x in items],'total':total})
+        db.commit()
+    body="""<h1>💰 {{seller}} · {{sales|length}} vendite</h1><div class='card'><p><b>Periodo:</b> {{minute}}</p><div class='metric'>Totale € {{'%.2f'|format(grand_total)}}</div></div>{% for s in sales %}<div class='card'><h2>{{s.sale.sale_number or ('Vendita #' ~ s.sale.id)}}</h2><p>Pagamento: <b>{{s.sale.payment_method or 'Altro'}}</b><br>{{s.sale.created_at|rome_time}}</p>{% for x in s.items %}<p><b>{{x.product_code}}</b> · {{x.quantity}} × € {{'%.2f'|format(x.unit_price)}}{% if x.original_unit_price and x.original_unit_price != x.unit_price %}<br><small>Listino € {{'%.2f'|format(x.original_unit_price)}} · {{x.discount_reason or 'sconto'}}{% if x.authorized_by_username %} · autorizzato da {{x.authorized_by_username}}{% endif %}</small>{% endif %}</p>{% endfor %}<hr><b>Totale vendita € {{'%.2f'|format(s.total)}}</b></div>{% endfor %}<p><a href='{{url_for("notification_center",view="read")}}'>← Notifiche lette</a></p>"""
+    return page('Dettaglio vendite raggruppate',body,seller=seller,minute=minute,sales=sales,grand_total=grand_total)
+
+
+@app.post("/notifications/sales-group/archive")
+@login_required
+def archive_notification_group():
+    seller=(request.form.get('seller') or '').strip()
+    minute=(request.form.get('minute') or '').strip()[:16]
+    with connect() as db:
+        _ensure_notifications(db)
+        db.execute("""UPDATE notifications SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP),
+                      archived_at=COALESCE(archived_at,CURRENT_TIMESTAMP),
+                      archived_by_user_id=?,archived_by_username=?
+                      WHERE recipient_user_id=? AND notification_type='sale'
+                        AND substr(created_at,1,16)=? AND message LIKE ? AND archived_at IS NULL""",
+                   (session.get('user_id'),session.get('user'),session.get('user_id'),minute,seller+' · %'))
+        db.commit()
+    return redirect(url_for('notification_center',view='archive'))
 
 @app.get("/notifications/<int:notification_id>")
 @login_required
