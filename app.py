@@ -463,9 +463,10 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
       if(permission!=='granted') throw new Error('Permesso notifiche non concesso');
       const token=await getToken(messaging,{vapidKey:settings.vapidKey,serviceWorkerRegistration:registration});
       if(!token) throw new Error('Firebase non ha restituito il token');
-      const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,platform:'web-pwa'})});
-      const data=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error(data.error||'Registrazione dispositivo non riuscita');
+      const r=await fetch('/api/push/subscribe',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({token,platform:'web-pwa'})});
+      const raw=await r.text();let data={};try{data=raw?JSON.parse(raw):{};}catch(_e){}
+      if(!r.ok) throw new Error(data.error||('Registrazione dispositivo non riuscita (HTTP '+r.status+')'));
+      if(!data.ok) throw new Error(data.error||'Il server non ha confermato la registrazione');
       localStorage.setItem('tbsPushToken',token);
       const b=showButton('✅ Notifiche attive'); b.onclick=()=>location.href='/notifications'; setTimeout(()=>b.hidden=true,4000);
       return token;
@@ -1590,6 +1591,7 @@ def health():
 
 
 def _ensure_push_subscriptions(db):
+    """Crea e migra in modo non distruttivo la tabella dei dispositivi push."""
     db.execute("""CREATE TABLE IF NOT EXISTS push_subscriptions(
         id INTEGER PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -1603,6 +1605,22 @@ def _ensure_push_subscriptions(db):
         last_success_at TEXT,
         last_error TEXT
     )""")
+    # Alcuni database esistenti possono contenere una prima versione incompleta
+    # della tabella. Aggiungiamo solo le colonne mancanti, senza cancellare dati.
+    for name, definition in (
+        ("user_id", "INTEGER"),
+        ("username", "TEXT"),
+        ("token", "TEXT"),
+        ("platform", "TEXT"),
+        ("user_agent", "TEXT"),
+        ("active", "INTEGER NOT NULL DEFAULT 1"),
+        ("created_at", "TEXT"),
+        ("updated_at", "TEXT"),
+        ("last_success_at", "TEXT"),
+        ("last_error", "TEXT"),
+    ):
+        ensure_column(db, "push_subscriptions", name, definition)
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_token_unique ON push_subscriptions(token)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_push_user_active ON push_subscriptions(user_id,active)")
 
 
@@ -1824,22 +1842,42 @@ def push_status():
 @app.post('/api/push/subscribe')
 @login_required
 def push_subscribe():
+    """Registra o riattiva il token FCM del dispositivo autenticato."""
     payload=request.get_json(silent=True) or {}
     token=str(payload.get('token') or '').strip()
+    user_id=session.get('user_id')
+    if not user_id:
+        return jsonify({'ok':False,'error':'Sessione non valida: accedi nuovamente'}),401
     if len(token) < 40:
-        return jsonify({'ok':False,'error':'Token push non valido'}),400
+        return jsonify({'ok':False,'error':'Token push non valido o incompleto'}),400
     platform=str(payload.get('platform') or 'web')[:50]
     user_agent=request.headers.get('User-Agent','')[:500]
-    with connect() as db:
-        _ensure_push_subscriptions(db)
-        db.execute("""INSERT INTO push_subscriptions(user_id,username,token,platform,user_agent,active)
-                      VALUES(?,?,?,?,?,1)
-                      ON CONFLICT(token) DO UPDATE SET user_id=excluded.user_id,username=excluded.username,
-                      platform=excluded.platform,user_agent=excluded.user_agent,active=1,
-                      updated_at=CURRENT_TIMESTAMP,last_error=NULL""",
-                   (session.get('user_id'),session.get('user'),token,platform,user_agent))
-        db.commit()
-    return jsonify({'ok':True})
+    try:
+        with connect() as db:
+            _ensure_push_subscriptions(db)
+            existing=db.execute("SELECT id FROM push_subscriptions WHERE token=?",(token,)).fetchone()
+            if existing:
+                db.execute("""UPDATE push_subscriptions
+                              SET user_id=?,username=?,platform=?,user_agent=?,active=1,
+                                  updated_at=CURRENT_TIMESTAMP,last_error=NULL
+                              WHERE token=?""",
+                           (user_id,session.get('user'),platform,user_agent,token))
+            else:
+                db.execute("""INSERT INTO push_subscriptions
+                              (user_id,username,token,platform,user_agent,active,created_at,updated_at)
+                              VALUES(?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",
+                           (user_id,session.get('user'),token,platform,user_agent))
+            db.commit()
+            saved=db.execute("SELECT id,active FROM push_subscriptions WHERE token=? AND user_id=?",(token,user_id)).fetchone()
+        if not saved:
+            return jsonify({'ok':False,'error':'Il token non è stato salvato nel database'}),500
+        return jsonify({'ok':True,'subscriptionId':saved['id'],'active':bool(saved['active'])})
+    except sqlite3.IntegrityError as exc:
+        print(f"Registrazione push IntegrityError: {exc}")
+        return jsonify({'ok':False,'error':'Conflitto durante la registrazione del dispositivo'}),409
+    except Exception as exc:
+        print(f"Registrazione push fallita: {type(exc).__name__}: {exc}")
+        return jsonify({'ok':False,'error':f'Registrazione dispositivo non riuscita: {type(exc).__name__}'}),500
 
 
 @app.post('/api/push/unsubscribe')
@@ -4479,7 +4517,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-1-0';
+const CACHE_NAME = 'tbs-pwa-v37-2-1';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 self.addEventListener('install', event => {{
