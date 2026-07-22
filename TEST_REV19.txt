@@ -1,0 +1,13 @@
+TEST REV.19
+[ ] Home
+[ ] Cassa
+[ ] Catalogo
+[ ] Ordini
+[ ] Carrello con almeno 1 articolo
+[ ] Blocco dopo 5 minuti
+[ ] Sblocco con password
+[ ] Sblocco con badge
+[ ] Carrello conservato
+[ ] Venditore non accede alle pagine Admin
+[ ] Gestore non accede alla gestione software/utenti
+[ ] Admin accede a tutte le funzioni

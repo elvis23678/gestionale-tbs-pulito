@@ -1,0 +1,21 @@
+ORDINE DI LAVORO · REV.20
+
+1. Inserimento ordine cliente
+   Campi: nome, telefono, codice articolo, quantità, note.
+
+2. Approvazione
+   Solo Admin/Gestore possono accettare o rifiutare.
+
+3. Riordino fornitore
+   Gli articoli approvati incrementano la quantità del medesimo codice.
+   Il PDF fornitore non deve contenere dati personali dei clienti.
+
+4. Ricezione
+   Ogni pezzo deve poter essere spuntato singolarmente.
+   Ammessa ricezione parziale.
+
+5. Contatto cliente
+   Quando tutti i pezzi del cliente sono arrivati: stato Da contattare e notifica interna.
+
+6. Consegna
+   Il Venditore può segnare Consegnato solo per ordini completi.

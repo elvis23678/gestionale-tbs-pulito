@@ -1,0 +1,12 @@
+TEST REV.20
+[ ] Venditore inserisce ordine cliente
+[ ] Ordine compare In attesa
+[ ] Gestore approva
+[ ] Quantità confluisce nel riordino
+[ ] Due clienti stesso articolo sommano la quantità fornitore
+[ ] PDF fornitore senza nome/telefono cliente
+[ ] Ricezione parziale pezzo per pezzo
+[ ] Stato Da contattare solo a ordine completo
+[ ] Venditore può segnare Consegnato
+[ ] Venditore non vede costi fornitore
+[ ] Venditore non elimina/modifica ordini approvati
