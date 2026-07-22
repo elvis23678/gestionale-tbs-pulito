@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import math
 import secrets
 import os
 import sqlite3
@@ -85,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v26.0 STABLE · Premium Experience"
+APP_VERSION = "v30.0 ENTERPRISE · Jewelry Management"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2374,7 +2375,14 @@ def pos_set_price():
         db.execute("UPDATE discount_requests SET status='Superata',decided_at=CURRENT_TIMESTAMP WHERE requester_user_id=? AND product_id=? AND status='In attesa'",(session.get('user_id'),pid))
         db.execute("INSERT INTO discount_requests(request_token,requester_user_id,requester_username,product_id,product_code,original_price,requested_price,reason,return_to) VALUES(?,?,?,?,?,?,?,?,?)",(token,session.get('user_id'),session.get('user'),pid,p['brand_code'],float(p['price']),price,reason,return_to))
         request_id=db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        _notify_roles(db,('admin','manager'),'discount_request','Nuova richiesta sconto',f"{session.get('user')} · {p['brand_code']} · € {float(p['price']):.2f} → € {price:.2f}",'discount',request_id,f"discount:{request_id}:request")
+        cost=float(p['cost_price'] or 0)
+        if cost>0:
+            minimum_safe=cost*2.0
+            suggested=min(float(p['price']), max(price, math.ceil(minimum_safe*2)/2))
+            suggestion_text=f" · costo € {cost:.2f} · suggerito € {suggested:.2f}"
+        else:
+            suggestion_text=" · costo non inserito"
+        _notify_roles(db,('admin','manager'),'discount_request','Nuova richiesta sconto',f"{session.get('user')} · {p['brand_code']} · € {float(p['price']):.2f} → € {price:.2f}{suggestion_text}",'discount',request_id,f"discount:{request_id}:request")
         log_action(db,"Richiesta sconto remota",p,f"Listino € {p['price']:.2f}; richiesto € {price:.2f}; motivo {reason}")
         db.commit()
     session['pending_discount_token']=token;session.modified=True
@@ -2435,9 +2443,34 @@ def discount_pending_count():
 def discount_approvals():
     with connect() as db:
         me=db.execute("SELECT approval_pin_hash FROM users WHERE id=?",(session.get("user_id"),)).fetchone()
-        rows=db.execute("SELECT * FROM discount_requests WHERE status='In attesa' ORDER BY created_at ASC,id ASC").fetchall()
+        raw_rows=db.execute("""SELECT dr.*, COALESCE(p.cost_price,0) AS cost_price
+                               FROM discount_requests dr
+                               LEFT JOIN products p ON p.id=dr.product_id
+                               WHERE dr.status='In attesa'
+                               ORDER BY dr.created_at ASC,dr.id ASC""").fetchall()
+        rows=[]
+        for row in raw_rows:
+            x=dict(row)
+            cost=float(x.get('cost_price') or 0)
+            requested=float(x.get('requested_price') or 0)
+            original=float(x.get('original_price') or 0)
+            if cost>0:
+                minimum_safe=cost*2.0
+                suggested=min(original, max(requested, math.ceil(minimum_safe*2)/2))
+                x['requested_profit']=requested-cost
+                x['requested_margin']=((requested-cost)/requested*100) if requested>0 else 0
+                x['suggested_price']=suggested
+                x['suggested_profit']=suggested-cost
+                x['suggested_margin']=((suggested-cost)/suggested*100) if suggested>0 else 0
+            else:
+                x['requested_profit']=None
+                x['requested_margin']=None
+                x['suggested_price']=requested
+                x['suggested_profit']=None
+                x['suggested_margin']=None
+            rows.append(x)
         recent=db.execute("SELECT * FROM discount_requests WHERE status!='In attesa' ORDER BY COALESCE(decided_at,created_at) DESC,id DESC LIMIT 20").fetchall()
-    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure inserisci una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" placeholder="Prezzo alternativo €" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
+    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}.price-advisor{grid-column:1/-1;background:#f6f0df;border:1px solid #d7b36a;border-radius:16px;padding:14px;margin:8px 0}.price-advisor strong{color:#72510d}.advisor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.advisor-value{font-size:22px;font-weight:900}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><div class="price-advisor"><h3>💡 Suggerimento prezzo</h3>{% if x.cost_price and x.cost_price>0 %}<div class="advisor-grid"><div><span class="muted">Pagato</span><div class="advisor-value">€ {{'%.2f'|format(x.cost_price)}}</div></div><div><span class="muted">Utile al prezzo richiesto</span><div class="advisor-value">€ {{'%.2f'|format(x.requested_profit)}}</div></div><div><span class="muted">Margine richiesto</span><div><b>{{'%.1f'|format(x.requested_margin)}}%</b></div></div><div><span class="muted">Prezzo consigliato</span><div class="advisor-value">€ {{'%.2f'|format(x.suggested_price)}}</div></div></div><p class="muted" style="margin-bottom:0">Il suggerimento tutela almeno il 50% di margine lordo, senza superare il listino.</p>{% else %}<p><b>Costo di acquisto non inserito.</b> Aggiungilo nella scheda prodotto per ottenere il suggerimento automatico.</p>{% endif %}</div><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure invia una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" value="{{'%.2f'|format(x.suggested_price)}}" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta suggerita</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
 
 @app.post("/discount-approvals/<int:request_id>/decision")
 @role_required("admin","manager")
@@ -3607,5 +3640,331 @@ def dashboard_smart():
     body='''<div class="dash-head"><div><span class="eyebrow">CENTRO OPERATIVO</span><h1>Bentornato, {% if session.get('role') == 'admin' %}<span class="welcome-name">Elvis</span>{% else %}<span class="welcome-name">{{session.get('user')}}</span>{% endif %}.</h1><p class="muted">Vendite, ordini e scorte. Tutto sotto controllo.</p></div><div class="quick-actions"><a href="{{url_for('pos')}}"><span>€</span><b>Cassa</b><small>Nuova vendita</small></a><a href="{{url_for('scan_product')}}"><span>⌗</span><b>Scanner</b><small>Leggi QR prodotto</small></a><a href="{{url_for('inventory_pro')}}"><span>◇</span><b>Magazzino</b><small>Scorte e riordini</small></a><a href="{{url_for('customers_crm')}}"><span>◎</span><b>Clienti</b><small>Ordini e contatti</small></a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite</span></div><div class="kpi"><strong>Scorte basse</strong><div class="metric">{{low}}</div></div><div class="kpi"><strong>Clienti in attesa</strong><div class="metric">{{waiting}}</div></div><div class="kpi"><strong>Riordini aperti</strong><div class="metric">{{pending_reorders}}</div></div></div><h2>Da fare</h2><div class="grid">{% for kind,text,link in alerts %}<a class="card" href="{{link}}" style="text-decoration:none;color:inherit"><span class="eyebrow">{{kind}}</span><h3>{{text}}</h3><span>Apri →</span></a>{% else %}<div class="card"><h3>Tutto sotto controllo</h3><p class="muted">Non risultano priorità operative.</p></div>{% endfor %}</div>'''
     return page('Dashboard Smart',body,today=today,low=low,waiting=waiting,pending_reorders=pending_reorders,alerts=alerts)
 
+
+
+# ============================================================
+# v27.0 ENTERPRISE · Magazzino gioielli
+# ============================================================
+def _v27_init():
+    with connect() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS stock_movements(
+            id INTEGER PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            product_code TEXT NOT NULL,
+            movement_type TEXT NOT NULL,
+            quantity_delta INTEGER NOT NULL,
+            quantity_before INTEGER NOT NULL,
+            quantity_after INTEGER NOT NULL,
+            reason TEXT,
+            reference TEXT,
+            username TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS stocktakes(
+            id INTEGER PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            product_code TEXT NOT NULL,
+            expected_quantity INTEGER NOT NULL,
+            counted_quantity INTEGER NOT NULL,
+            difference INTEGER NOT NULL,
+            notes TEXT,
+            username TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        ensure_column(db,"products","reserved_quantity","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db,"products","incoming_quantity","INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db,"products","last_stocktake_at","TEXT")
+        db.commit()
+_v27_init()
+
+@app.get('/enterprise/inventory')
+@login_required
+@role_required('admin','manager')
+def enterprise_inventory():
+    q=request.args.get('q','').strip()
+    state=request.args.get('state','all')
+    with connect() as db:
+        where=['active=1']; params=[]
+        if q:
+            term=f"%{q}%"; where.append('(brand_code LIKE ? OR supplier_code LIKE ? OR category LIKE ? OR material LIKE ? OR color LIKE ?)'); params += [term]*5
+        if state=='low': where.append('quantity<=COALESCE(min_stock,1)')
+        elif state=='zero': where.append('quantity<=0')
+        elif state=='incoming': where.append('COALESCE(incoming_quantity,0)>0')
+        rows=db.execute(f"""SELECT *, MAX(quantity-COALESCE(reserved_quantity,0),0) available_qty,
+                            quantity*COALESCE(cost_price,0) stock_cost_value,
+                            quantity*COALESCE(price,0) stock_sale_value
+                            FROM products WHERE {' AND '.join(where)}
+                            ORDER BY (quantity<=COALESCE(min_stock,1)) DESC, quantity ASC, brand_code""",params).fetchall()
+        summary=db.execute("""SELECT COUNT(*) refs,COALESCE(SUM(quantity),0) pieces,
+                     COALESCE(SUM(quantity*COALESCE(cost_price,0)),0) cost_value,
+                     COALESCE(SUM(quantity*COALESCE(price,0)),0) sale_value,
+                     SUM(CASE WHEN quantity<=COALESCE(min_stock,1) THEN 1 ELSE 0 END) low,
+                     SUM(CASE WHEN quantity<=0 THEN 1 ELSE 0 END) zero,
+                     COALESCE(SUM(reserved_quantity),0) reserved,COALESCE(SUM(incoming_quantity),0) incoming
+                     FROM products WHERE active=1""").fetchone()
+        movements=db.execute('SELECT * FROM stock_movements ORDER BY id DESC LIMIT 30').fetchall()
+    body='''<div class="dash-head"><div><span class="eyebrow">V27 ENTERPRISE</span><h1>Magazzino gioielli</h1><p class="muted">Disponibilità reale, valore delle scorte e rettifiche completamente tracciate.</p></div><a class="secondary" href="{{url_for('products')}}">Catalogo prodotti</a></div>
+    <div class="kpi-grid"><div class="kpi"><strong>Valore al costo</strong><div class="metric">€ {{'%.2f'|format(summary.cost_value)}}</div></div><div class="kpi"><strong>Valore vendita</strong><div class="metric">€ {{'%.2f'|format(summary.sale_value)}}</div></div><div class="kpi"><strong>Scorte basse</strong><div class="metric">{{summary.low}}</div></div><div class="kpi"><strong>In arrivo</strong><div class="metric">{{summary.incoming}}</div></div></div>
+    <div class="card"><form class="inline"><input name="q" value="{{q}}" placeholder="Codice, categoria, materiale o colore"><select name="state"><option value="all" {% if state=='all' %}selected{% endif %}>Tutti</option><option value="low" {% if state=='low' %}selected{% endif %}>Scorte basse</option><option value="zero" {% if state=='zero' %}selected{% endif %}>Esauriti</option><option value="incoming" {% if state=='incoming' %}selected{% endif %}>In arrivo</option></select><button>Filtra</button></form></div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Articolo</th><th>Variante</th><th>Fisici</th><th>Prenotati</th><th>Disponibili</th><th>In arrivo</th><th>Valore costo</th><th></th></tr></thead><tbody>{% for p in rows %}<tr><td><b>{{p.brand_code}}</b><br><small>{{p.supplier_code}}</small></td><td>{{p.material or '-'}} · {{p.color or '-'}} · {{p.size or '-'}}</td><td>{{p.quantity}}</td><td>{{p.reserved_quantity}}</td><td><b>{{p.available_qty}}</b></td><td>{{p.incoming_quantity}}</td><td>€ {{'%.2f'|format(p.stock_cost_value)}}</td><td><a href="{{url_for('enterprise_stock_adjust',product_id=p.id)}}">Rettifica</a></td></tr>{% else %}<tr><td colspan="8">Nessun articolo trovato.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Ultimi movimenti manuali</h2>{% for m in movements %}<p><b>{{m.product_code}}</b> · {{'%+d'|format(m.quantity_delta)}} pz · {{m.movement_type}}<br><small class="muted">{{m.created_at|rome_time}} · {{m.username}} · {{m.reason or ''}}</small></p>{% else %}<p class="muted">Nessun movimento manuale registrato.</p>{% endfor %}</div>'''
+    return page('Magazzino Enterprise',body,rows=rows,summary=summary,movements=movements,q=q,state=state)
+
+@app.route('/enterprise/inventory/<int:product_id>/adjust',methods=['GET','POST'])
+@login_required
+@role_required('admin','manager')
+def enterprise_stock_adjust(product_id):
+    with connect() as db:
+        p=db.execute('SELECT * FROM products WHERE id=?',(product_id,)).fetchone()
+        if not p:
+            flash('Articolo non trovato.','error'); return redirect(url_for('enterprise_inventory'))
+        if request.method=='POST':
+            try: counted=max(0,int(request.form.get('counted_quantity','0')))
+            except ValueError:
+                flash('Quantità non valida.','error'); return redirect(request.url)
+            reason=request.form.get('reason','Inventario manuale').strip() or 'Inventario manuale'
+            before=int(p['quantity'] or 0); delta=counted-before
+            db.execute('UPDATE products SET quantity=?,last_stocktake_at=CURRENT_TIMESTAMP WHERE id=?',(counted,product_id))
+            db.execute('INSERT INTO stocktakes(product_id,product_code,expected_quantity,counted_quantity,difference,notes,username) VALUES(?,?,?,?,?,?,?)',(product_id,p['brand_code'],before,counted,delta,reason,session.get('user')))
+            db.execute('INSERT INTO stock_movements(product_id,product_code,movement_type,quantity_delta,quantity_before,quantity_after,reason,username) VALUES(?,?,?,?,?,?,?,?)',(product_id,p['brand_code'],'Rettifica inventario',delta,before,counted,reason,session.get('user')))
+            log_action(db,'Rettifica magazzino',product_id,p['brand_code'],f'{before} → {counted}; {reason}')
+            db.commit(); flash('Giacenza aggiornata e movimento registrato.','success'); return redirect(url_for('enterprise_inventory'))
+    body='''<div class="card" style="max-width:650px;margin:auto"><span class="eyebrow">RETTIFICA TRACCIATA</span><h1>{{p.brand_code}}</h1><p>Giacenza registrata: <b>{{p.quantity}} pezzi</b></p><form method="post"><label>Quantità realmente contata</label><input type="number" min="0" name="counted_quantity" value="{{p.quantity}}" required><label>Motivo / nota</label><textarea name="reason" required>Inventario manuale</textarea><button>Conferma rettifica</button> <a class="secondary" href="{{url_for('enterprise_inventory')}}">Annulla</a></form></div>'''
+    return page('Rettifica magazzino',body,p=p)
+
+
+# ============================================================
+# v28.0 ENTERPRISE · Vendite, resi e marginalità
+# ============================================================
+def _v28_init():
+    with connect() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS sale_returns(
+            id INTEGER PRIMARY KEY,
+            sale_number TEXT NOT NULL,
+            sale_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            product_code TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            refund_amount REAL NOT NULL,
+            reason TEXT NOT NULL,
+            username TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        ensure_column(db,'sales','returned_quantity','INTEGER NOT NULL DEFAULT 0')
+        db.commit()
+_v28_init()
+
+@app.get('/enterprise/sales')
+@login_required
+@role_required('admin','manager')
+def enterprise_sales():
+    days=max(1,min(365,int(request.args.get('days','30') or 30)))
+    with connect() as db:
+        totals=db.execute("""SELECT COALESCE(SUM(quantity*unit_price),0) revenue,
+            COALESCE(SUM(quantity*COALESCE(p.cost_price,0)),0) cost,
+            COALESCE(SUM(quantity*unit_price)-SUM(quantity*COALESCE(p.cost_price,0)),0) gross_profit,
+            COALESCE(SUM(quantity),0) pieces,COUNT(DISTINCT sale_number) receipts
+            FROM sales s LEFT JOIN products p ON p.id=s.product_id
+            WHERE COALESCE(s.status,'Confermata')='Confermata' AND datetime(s.created_at)>=datetime('now',?)""",(f'-{days} days',)).fetchone()
+        rows=db.execute("""SELECT s.sale_number,MAX(s.created_at) created_at,MAX(s.username) username,
+            MAX(COALESCE(s.payment_method,'Altro')) payment_method,SUM(s.quantity) pieces,
+            SUM(s.quantity*s.unit_price) total,SUM(s.quantity*COALESCE(p.cost_price,0)) cost,
+            SUM(s.quantity*s.unit_price)-SUM(s.quantity*COALESCE(p.cost_price,0)) profit
+            FROM sales s LEFT JOIN products p ON p.id=s.product_id
+            WHERE COALESCE(s.status,'Confermata')='Confermata' AND datetime(s.created_at)>=datetime('now',?)
+            GROUP BY s.sale_number ORDER BY MAX(s.id) DESC LIMIT 250""",(f'-{days} days',)).fetchall()
+        returns=db.execute('SELECT * FROM sale_returns ORDER BY id DESC LIMIT 30').fetchall()
+    margin=(totals['gross_profit']/totals['revenue']*100) if totals['revenue'] else 0
+    body='''<div class="dash-head"><div><span class="eyebrow">V28 ENTERPRISE</span><h1>Vendite e marginalità</h1><p class="muted">Controllo economico, resi tracciati e ripristino automatico delle scorte.</p></div></div><div class="card"><form class="inline"><select name="days"><option value="7" {% if days==7 %}selected{% endif %}>7 giorni</option><option value="30" {% if days==30 %}selected{% endif %}>30 giorni</option><option value="90" {% if days==90 %}selected{% endif %}>90 giorni</option><option value="365" {% if days==365 %}selected{% endif %}>365 giorni</option></select><button>Aggiorna</button></form></div>
+    <div class="kpi-grid"><div class="kpi"><strong>Incasso</strong><div class="metric">€ {{'%.2f'|format(totals.revenue)}}</div></div><div class="kpi"><strong>Utile lordo</strong><div class="metric">€ {{'%.2f'|format(totals.gross_profit)}}</div></div><div class="kpi"><strong>Margine</strong><div class="metric">{{'%.1f'|format(margin)}}%</div></div><div class="kpi"><strong>Scontrini</strong><div class="metric">{{totals.receipts}}</div></div></div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Vendita</th><th>Data</th><th>Operatore</th><th>Pagamento</th><th>Pezzi</th><th>Totale</th><th>Utile</th><th></th></tr></thead><tbody>{% for s in rows %}<tr><td><b>{{s.sale_number or 'Senza numero'}}</b></td><td>{{s.created_at|rome_time}}</td><td>{{s.username}}</td><td>{{s.payment_method}}</td><td>{{s.pieces}}</td><td>€ {{'%.2f'|format(s.total)}}</td><td>€ {{'%.2f'|format(s.profit)}}</td><td>{% if s.sale_number %}<a href="{{url_for('enterprise_sale_return',sale_number=s.sale_number)}}">Reso</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8">Nessuna vendita nel periodo.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Ultimi resi</h2>{% for r in returns %}<p><b>{{r.product_code}}</b> · {{r.quantity}} pz · rimborso € {{'%.2f'|format(r.refund_amount)}}<br><small class="muted">{{r.created_at|rome_time}} · {{r.username}} · {{r.reason}}</small></p>{% else %}<p class="muted">Nessun reso registrato.</p>{% endfor %}</div>'''
+    return page('Vendite Enterprise',body,totals=totals,rows=rows,returns=returns,margin=margin,days=days)
+
+@app.route('/enterprise/sales/<sale_number>/return',methods=['GET','POST'])
+@login_required
+@role_required('admin','manager')
+def enterprise_sale_return(sale_number):
+    with connect() as db:
+        items=db.execute("""SELECT s.*,p.brand_code,p.quantity stock_qty,p.cost_price
+                            FROM sales s LEFT JOIN products p ON p.id=s.product_id
+                            WHERE s.sale_number=? AND COALESCE(s.status,'Confermata')='Confermata' ORDER BY s.id""",(sale_number,)).fetchall()
+        if not items:
+            flash('Vendita non trovata o già annullata.','error'); return redirect(url_for('enterprise_sales'))
+        if request.method=='POST':
+            try: sale_id=int(request.form.get('sale_id')); qty=max(1,int(request.form.get('quantity','1')))
+            except (TypeError,ValueError):
+                flash('Dati del reso non validi.','error'); return redirect(request.url)
+            row=next((x for x in items if x['id']==sale_id),None)
+            if not row:
+                flash('Riga vendita non trovata.','error'); return redirect(request.url)
+            available=max(0,int(row['quantity'])-int(row['returned_quantity'] or 0))
+            if qty>available:
+                flash(f'Puoi restituire al massimo {available} pezzi.','error'); return redirect(request.url)
+            reason=request.form.get('reason','').strip()
+            if not reason:
+                flash('Indica il motivo del reso.','error'); return redirect(request.url)
+            refund=qty*float(row['unit_price'])
+            before=int(row['stock_qty'] or 0); after=before+qty
+            db.execute('UPDATE sales SET returned_quantity=COALESCE(returned_quantity,0)+? WHERE id=?',(qty,sale_id))
+            db.execute('UPDATE products SET quantity=quantity+? WHERE id=?',(qty,row['product_id']))
+            db.execute('INSERT INTO sale_returns(sale_number,sale_id,product_id,product_code,quantity,refund_amount,reason,username) VALUES(?,?,?,?,?,?,?,?)',(sale_number,sale_id,row['product_id'],row['product_code'],qty,refund,reason,session.get('user')))
+            db.execute('INSERT INTO stock_movements(product_id,product_code,movement_type,quantity_delta,quantity_before,quantity_after,reason,reference,username) VALUES(?,?,?,?,?,?,?,?,?)',(row['product_id'],row['product_code'],'Reso cliente',qty,before,after,reason,sale_number,session.get('user')))
+            log_action(db,'Reso vendita',row['product_id'],row['product_code'],f'{sale_number}; {qty} pz; € {refund:.2f}; {reason}')
+            db.commit(); flash('Reso registrato e articolo reinserito in magazzino.','success'); return redirect(url_for('enterprise_sales'))
+    body='''<div class="card" style="max-width:760px;margin:auto"><span class="eyebrow">RESO TRACCIATO</span><h1>{{sale_number}}</h1><form method="post"><label>Articolo</label><select name="sale_id" required>{% for x in items %}{% set available=x.quantity-(x.returned_quantity or 0) %}<option value="{{x.id}}" {% if available<=0 %}disabled{% endif %}>{{x.product_code}} · acquistati {{x.quantity}} · restituibili {{available}} · € {{'%.2f'|format(x.unit_price)}}</option>{% endfor %}</select><label>Quantità</label><input type="number" name="quantity" min="1" value="1" required><label>Motivo</label><textarea name="reason" required></textarea><button>Registra reso</button> <a class="secondary" href="{{url_for('enterprise_sales')}}">Annulla</a></form></div>'''
+    return page('Reso vendita',body,items=items,sale_number=sale_number)
+
+
+# ============================================================
+# v29.0 ENTERPRISE · Ordini clienti e fornitori
+# ============================================================
+def _v29_init():
+    with connect() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS suppliers(
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            contact_name TEXT,
+            email TEXT,
+            phone TEXT,
+            delivery_days TEXT,
+            notes TEXT,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS product_suppliers(
+            id INTEGER PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            supplier_id INTEGER NOT NULL,
+            supplier_code TEXT,
+            last_cost REAL DEFAULT 0,
+            preferred INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(product_id,supplier_id)
+        );
+        """)
+        ensure_column(db,'supplier_orders','supplier_id','INTEGER')
+        ensure_column(db,'supplier_orders','expected_at','TEXT')
+        ensure_column(db,'supplier_orders','notes','TEXT')
+        ensure_column(db,'supplier_order_items','received_quantity','INTEGER NOT NULL DEFAULT 0')
+        db.commit()
+_v29_init()
+
+@app.route('/enterprise/suppliers',methods=['GET','POST'])
+@login_required
+@role_required('admin','manager')
+def enterprise_suppliers():
+    with connect() as db:
+        if request.method=='POST':
+            name=request.form.get('name','').strip()
+            if not name:
+                flash('Inserisci il nome del fornitore.','error'); return redirect(request.url)
+            try:
+                db.execute('INSERT INTO suppliers(name,contact_name,email,phone,delivery_days,notes) VALUES(?,?,?,?,?,?)',(name,request.form.get('contact_name','').strip(),request.form.get('email','').strip(),request.form.get('phone','').strip(),request.form.get('delivery_days','').strip(),request.form.get('notes','').strip()))
+                db.commit(); flash('Fornitore inserito.','success')
+            except sqlite3.IntegrityError: flash('Fornitore già presente.','warning')
+            return redirect(request.url)
+        rows=db.execute('SELECT s.*,COUNT(ps.id) linked_products FROM suppliers s LEFT JOIN product_suppliers ps ON ps.supplier_id=s.id WHERE s.active=1 GROUP BY s.id ORDER BY s.name').fetchall()
+    body='''<div class="dash-head"><div><span class="eyebrow">V29 ENTERPRISE</span><h1>Fornitori</h1><p class="muted">Anagrafica essenziale per ordini multi-fornitore. Nessuna scheda cliente commerciale.</p></div></div><div class="card"><form method="post"><div class="grid"><div><label>Nome fornitore</label><input name="name" required></div><div><label>Referente</label><input name="contact_name"></div><div><label>Email</label><input name="email" type="email"></div><div><label>Telefono</label><input name="phone"></div><div><label>Tempi consegna</label><input name="delivery_days" placeholder="15–20 giorni"></div></div><label>Note</label><textarea name="notes"></textarea><button>Aggiungi fornitore</button></form></div><div class="grid">{% for s in rows %}<div class="card"><h3>{{s.name}}</h3><p>{{s.contact_name or ''}}{% if s.phone %}<br><a href="tel:{{s.phone}}">{{s.phone}}</a>{% endif %}{% if s.email %}<br>{{s.email}}{% endif %}</p><p><b>{{s.linked_products}}</b> articoli collegati</p><small class="muted">{{s.delivery_days or 'Tempi non indicati'}}</small></div>{% else %}<div class="card">Nessun fornitore registrato.</div>{% endfor %}</div>'''
+    return page('Fornitori Enterprise',body,rows=rows)
+
+@app.get('/enterprise/orders')
+@login_required
+@role_required('admin','manager')
+def enterprise_orders():
+    with connect() as db:
+        customer=db.execute("""SELECT * FROM supplier_catalog_requests
+             WHERE status NOT IN ('Consegnato','Rifiutato')
+             ORDER BY CASE status WHEN 'Da ordinare' THEN 0 WHEN 'Accettato' THEN 1 WHEN 'Ordinato' THEN 2 WHEN 'Arrivato parzialmente' THEN 3 WHEN 'Arrivato' THEN 4 WHEN 'Cliente avvisato' THEN 5 ELSE 6 END,id""").fetchall()
+        suppliers=db.execute("""SELECT o.*,s.name supplier_name,
+             COALESCE(SUM(i.quantity),0) ordered_qty,COALESCE(SUM(i.received_quantity),0) received_qty
+             FROM supplier_orders o LEFT JOIN suppliers s ON s.id=o.supplier_id
+             LEFT JOIN supplier_order_items i ON i.order_id=o.id
+             GROUP BY o.id ORDER BY o.id DESC LIMIT 100""").fetchall()
+        aggregate=db.execute("""SELECT supplier_code,brand_code,SUM(quantity) qty,COUNT(*) customers
+             FROM supplier_catalog_requests WHERE status='Accettato'
+             GROUP BY supplier_code,brand_code ORDER BY supplier_code""").fetchall()
+        counts=db.execute("""SELECT
+             SUM(CASE WHEN status IN ('Da ordinare','Nuovo') THEN 1 ELSE 0 END) new_count,
+             SUM(CASE WHEN status='Accettato' THEN 1 ELSE 0 END) accepted_count,
+             SUM(CASE WHEN status IN ('Ordinato','Arrivato parzialmente') THEN 1 ELSE 0 END) incoming_count,
+             SUM(CASE WHEN status IN ('Arrivato','Cliente avvisato') THEN 1 ELSE 0 END) ready_count
+             FROM supplier_catalog_requests""").fetchone()
+    body='''<div class="dash-head"><div><span class="eyebrow">V29 ENTERPRISE</span><h1>Centro ordini</h1><p class="muted">Richieste cliente separate dal PDF fornitore, quantità aggregate e ricezione pezzo per pezzo.</p></div><div><a class="secondary" href="{{url_for('enterprise_suppliers')}}">Fornitori</a> <a class="secondary" href="{{url_for('reorders')}}">Genera ordine</a></div></div>
+    <div class="kpi-grid"><div class="kpi"><strong>Nuovi</strong><div class="metric">{{counts.new_count or 0}}</div></div><div class="kpi"><strong>Da ordinare</strong><div class="metric">{{counts.accepted_count or 0}}</div></div><div class="kpi"><strong>In arrivo</strong><div class="metric">{{counts.incoming_count or 0}}</div></div><div class="kpi"><strong>Pronti</strong><div class="metric">{{counts.ready_count or 0}}</div></div></div>
+    <div class="card"><h2>Quantità da inviare al fornitore</h2><div class="table-wrap"><table><thead><tr><th>Codice fornitore</th><th>Codice brand</th><th>Quantità totale</th><th>Clienti in attesa</th></tr></thead><tbody>{% for a in aggregate %}<tr><td><b>{{a.supplier_code}}</b></td><td>{{a.brand_code}}</td><td>{{a.qty}}</td><td>{{a.customers}}</td></tr>{% else %}<tr><td colspan="4">Nessun articolo accettato da ordinare.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Clienti in attesa</h2><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Articolo</th><th>Qtà</th><th>Stato</th><th>Ricevuti</th></tr></thead><tbody>{% for x in customer %}<tr><td><b>{{x.customer_name}}</b><br><a href="tel:{{x.customer_phone}}">{{x.customer_phone}}</a></td><td>{{x.brand_code}}<br><small>{{x.supplier_code}}</small></td><td>{{x.quantity}}</td><td><span class="badge">{{x.status}}</span></td><td>{{x.received_quantity or 0}} / {{x.quantity}}</td></tr>{% else %}<tr><td colspan="5">Nessun cliente in attesa.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Ordini fornitori</h2>{% for o in suppliers %}<p><b>{{o.order_number}}</b> · {{o.supplier_name or 'Fornitore non assegnato'}} · {{o.status}}<br><small class="muted">Ricevuti {{o.received_qty}} / {{o.ordered_qty}} pezzi · {{o.created_at|rome_time}}</small></p>{% else %}<p class="muted">Nessun ordine fornitore.</p>{% endfor %}</div>'''
+    return page('Ordini Enterprise',body,customer=customer,suppliers=suppliers,aggregate=aggregate,counts=counts)
+
+
+# ============================================================
+# v30.0 ENTERPRISE · Business Intelligence gioielli
+# ============================================================
+def _v30_init():
+    with connect() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS enterprise_settings(
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT,
+            updated_by TEXT,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        db.commit()
+_v30_init()
+
+@app.get('/enterprise')
+@login_required
+@role_required('admin','manager')
+def enterprise_dashboard():
+    days=max(7,min(365,int(request.args.get('days','30') or 30)))
+    with connect() as db:
+        sales=db.execute("""SELECT COALESCE(SUM(s.quantity*s.unit_price),0) revenue,
+                 COALESCE(SUM(s.quantity*COALESCE(p.cost_price,0)),0) cost,
+                 COALESCE(SUM(s.quantity),0) pieces,COUNT(DISTINCT s.sale_number) receipts
+                 FROM sales s LEFT JOIN products p ON p.id=s.product_id
+                 WHERE COALESCE(s.status,'Confermata')='Confermata' AND datetime(s.created_at)>=datetime('now',?)""",(f'-{days} days',)).fetchone()
+        stock=db.execute("""SELECT COUNT(*) refs,COALESCE(SUM(quantity),0) pieces,
+                 COALESCE(SUM(quantity*COALESCE(cost_price,0)),0) cost_value,
+                 COALESCE(SUM(quantity*COALESCE(price,0)),0) sale_value,
+                 SUM(CASE WHEN quantity<=COALESCE(min_stock,1) THEN 1 ELSE 0 END) low
+                 FROM products WHERE active=1""").fetchone()
+        top=db.execute("""SELECT s.product_code,SUM(s.quantity) sold,SUM(s.quantity*s.unit_price) revenue,
+                 SUM(s.quantity*s.unit_price)-SUM(s.quantity*COALESCE(p.cost_price,0)) profit
+                 FROM sales s LEFT JOIN products p ON p.id=s.product_id
+                 WHERE COALESCE(s.status,'Confermata')='Confermata' AND datetime(s.created_at)>=datetime('now',?)
+                 GROUP BY s.product_id,s.product_code ORDER BY sold DESC,revenue DESC LIMIT 10""",(f'-{days} days',)).fetchall()
+        slow=db.execute("""SELECT p.*,MAX(s.created_at) last_sale,COALESCE(SUM(CASE WHEN datetime(s.created_at)>=datetime('now','-90 days') THEN s.quantity ELSE 0 END),0) sold90
+                 FROM products p LEFT JOIN sales s ON s.product_id=p.id AND COALESCE(s.status,'Confermata')='Confermata'
+                 WHERE p.active=1 AND p.quantity>0 GROUP BY p.id HAVING sold90=0 ORDER BY p.quantity*COALESCE(p.cost_price,0) DESC LIMIT 10""").fetchall()
+        reorder=db.execute("""SELECT p.*,
+                 COALESCE(SUM(CASE WHEN datetime(s.created_at)>=datetime('now','-60 days') THEN s.quantity ELSE 0 END),0) sold60
+                 FROM products p LEFT JOIN sales s ON s.product_id=p.id AND COALESCE(s.status,'Confermata')='Confermata'
+                 WHERE p.active=1 GROUP BY p.id
+                 HAVING p.quantity<=COALESCE(p.min_stock,1) OR (sold60>=4 AND p.quantity<=(sold60/2.0))
+                 ORDER BY sold60 DESC,p.quantity ASC LIMIT 20""").fetchall()
+        waiting=db.execute("SELECT COUNT(*) FROM supplier_catalog_requests WHERE status NOT IN ('Consegnato','Rifiutato')").fetchone()[0]
+        pending_discounts=db.execute("SELECT COUNT(*) FROM discount_requests WHERE status='In attesa'").fetchone()[0]
+        returns=db.execute("SELECT COALESCE(SUM(refund_amount),0) amount,COALESCE(SUM(quantity),0) pieces FROM sale_returns WHERE datetime(created_at)>=datetime('now',?)",(f'-{days} days',)).fetchone()
+    profit=float(sales['revenue'] or 0)-float(sales['cost'] or 0)
+    margin=(profit/float(sales['revenue'])*100) if sales['revenue'] else 0
+    suggestions=[]
+    if stock['low']: suggestions.append(f"Controlla {stock['low']} referenze sotto la scorta minima.")
+    if waiting: suggestions.append(f"Ci sono {waiting} ordini cliente ancora aperti.")
+    if pending_discounts: suggestions.append(f"Hai {pending_discounts} richieste sconto da valutare.")
+    if slow: suggestions.append(f"Valuta una promozione su {len(slow)} articoli senza vendite negli ultimi 90 giorni.")
+    if not suggestions: suggestions.append('Nessuna criticità rilevata: attività sotto controllo.')
+    body='''<div class="dash-head"><div><span class="eyebrow">V30 ENTERPRISE</span><h1>Controllo gioielli</h1><p class="muted">Business intelligence dedicata esclusivamente a vendita, magazzino e ordini di gioielli da piercing.</p></div><div><a class="secondary" href="{{url_for('enterprise_inventory')}}">Magazzino</a> <a class="secondary" href="{{url_for('enterprise_sales')}}">Vendite</a> <a class="secondary" href="{{url_for('enterprise_orders')}}">Ordini</a></div></div>
+    <div class="card"><form class="inline"><select name="days"><option value="7" {% if days==7 %}selected{% endif %}>7 giorni</option><option value="30" {% if days==30 %}selected{% endif %}>30 giorni</option><option value="90" {% if days==90 %}selected{% endif %}>90 giorni</option><option value="365" {% if days==365 %}selected{% endif %}>365 giorni</option></select><button>Aggiorna periodo</button></form></div>
+    <div class="kpi-grid"><div class="kpi"><strong>Incasso</strong><div class="metric">€ {{'%.2f'|format(sales.revenue)}}</div><small>{{sales.pieces}} pezzi</small></div><div class="kpi"><strong>Utile lordo</strong><div class="metric">€ {{'%.2f'|format(profit)}}</div><small>Margine {{'%.1f'|format(margin)}}%</small></div><div class="kpi"><strong>Valore magazzino</strong><div class="metric">€ {{'%.2f'|format(stock.cost_value)}}</div><small>al costo</small></div><div class="kpi"><strong>Ordini aperti</strong><div class="metric">{{waiting}}</div><small>clienti in attesa</small></div></div>
+    <div class="grid"><div class="card"><h2>Suggerimenti operativi</h2>{% for x in suggestions %}<p>◆ {{x}}</p>{% endfor %}</div><div class="card"><h2>Resi nel periodo</h2><div class="metric">€ {{'%.2f'|format(returns.amount)}}</div><p class="muted">{{returns.pieces}} pezzi restituiti</p></div></div>
+    <div class="grid"><div class="card"><h2>Articoli più venduti</h2>{% for x in top %}<p><b>{{loop.index}}. {{x.product_code}}</b> · {{x.sold}} pz<br><small class="muted">Incasso € {{'%.2f'|format(x.revenue)}} · utile € {{'%.2f'|format(x.profit)}}</small></p>{% else %}<p class="muted">Dati insufficienti.</p>{% endfor %}</div><div class="card"><h2>Riordino suggerito</h2>{% for x in reorder %}<p><b>{{x.brand_code}}</b> · disponibili {{x.quantity}}<br><small class="muted">Venduti 60 gg: {{x.sold60}} · minimo {{x.min_stock}}</small></p>{% else %}<p class="muted">Nessun riordino urgente.</p>{% endfor %}</div></div>
+    <div class="card"><h2>Capitale fermo</h2><p class="muted">Articoli disponibili senza vendite negli ultimi 90 giorni.</p><div class="table-wrap"><table><thead><tr><th>Codice</th><th>Quantità</th><th>Valore al costo</th><th>Ultima vendita</th></tr></thead><tbody>{% for x in slow %}<tr><td><b>{{x.brand_code}}</b></td><td>{{x.quantity}}</td><td>€ {{'%.2f'|format(x.quantity*(x.cost_price or 0))}}</td><td>{{x.last_sale|rome_time if x.last_sale else 'Mai venduto'}}</td></tr>{% else %}<tr><td colspan="4">Nessun articolo fermo rilevante.</td></tr>{% endfor %}</tbody></table></div></div>'''
+    return page('V30 Enterprise',body,days=days,sales=sales,stock=stock,top=top,slow=slow,reorder=reorder,waiting=waiting,pending_discounts=pending_discounts,returns=returns,profit=profit,margin=margin,suggestions=suggestions)
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
