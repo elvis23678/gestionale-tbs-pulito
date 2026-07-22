@@ -1,0 +1,18 @@
+TBS v37.1.0 LTS · Firebase Push Complete
+
+CARICARE SU GITHUB:
+1. app.py
+2. requirements.txt
+
+NON caricare su GitHub firebase-admin.json.
+Il file privato deve restare su Render in Secret Files con nome:
+firebase-admin.json
+
+Variabile Render richiesta:
+GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/firebase-admin.json
+
+Dopo il deploy:
+- accedere come Admin o Gestore;
+- premere "Attiva notifiche";
+- consentire le notifiche nel browser;
+- usare il test push dal gestionale/API predisposta.
