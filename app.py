@@ -2356,10 +2356,10 @@ def users():
 {% if u.id != session.get('user_id') %}<form method="post" action="{{url_for('toggle_user',user_id=u.id)}}"><button class="secondary">{% if u.active %}Disattiva{% else %}Riattiva{% endif %}</button></form>{% endif %}
 <form method="post" action="{{url_for('generate_user_badge',user_id=u.id)}}"><button class="success">{% if u.badge_token_hash %}Rigenera badge{% else %}Genera badge{% endif %}</button></form>
 {% if u.badge_token_hash %}<form method="post" action="{{url_for('revoke_user_badge',user_id=u.id)}}"><button class="danger">Revoca badge</button></form>{% endif %}
-<form method="post" action="{{url_for('reset_user_password',user_id=u.id')}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form>
+<form method="post" action="{{url_for('reset_user_password',user_id=u.id)}}" class="inline"><input name="password" type="password" minlength="8" placeholder="Nuova password" required><button>Reimposta password</button></form>
 </div>
 {% if u.role in ('admin','manager') %}<hr><h4>🔐 PIN rapido autorizzazioni</h4><form method="post" action="{{url_for('set_user_approval_pin',user_id=u.id)}}" class="inline"><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" placeholder="PIN da 4 a 6 cifre" required><button class="success">{% if u.approval_pin_hash %}Cambia PIN{% else %}Imposta PIN{% endif %}</button></form>{% if u.approval_pin_hash %}<form method="post" action="{{url_for('clear_user_approval_pin',user_id=u.id)}}" style="margin-top:8px"><button class="danger">Rimuovi PIN</button></form>{% endif %}{% endif %}
-</div>{% else %}<div class="card">Nessun utente.</div>{% endfor %>'''
+</div>{% else %}<div class="card">Nessun utente.</div>{% endfor %}'''
     return page("Utenti",body,rows=rows,roles=ROLE_LABELS)
 
 @app.post("/users/<int:user_id>/approval-pin")
