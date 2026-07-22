@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.1 ENTERPRISE · Login Hotfix"
+APP_VERSION = "v35.0.2 ENTERPRISE · Redirect Fix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -691,10 +691,19 @@ def login_page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(LOGIN_BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION)
 
+def role_landing_endpoint(role=None):
+    """Destinazione unica e sicura dopo login/sblocco o accesso negato."""
+    current_role = role or session.get("role")
+    return "pos" if current_role == "seller" else "dashboard"
+
+def role_landing_redirect(role=None):
+    # 303 evita che Safari ripeta una POST durante la catena di navigazione.
+    return redirect(url_for(role_landing_endpoint(role)), code=303)
+
 def login_required(fn):
     @wraps(fn)
     def wrapped(*a,**k):
-        return redirect(url_for("login")) if not session.get("user_id") else fn(*a,**k)
+        return redirect(url_for("login"), code=303) if not session.get("user_id") else fn(*a,**k)
     return wrapped
 
 def role_required(*roles):
@@ -702,10 +711,14 @@ def role_required(*roles):
         @wraps(fn)
         def wrapped(*a,**k):
             if not session.get("user_id"):
-                return redirect(url_for("login"))
+                return redirect(url_for("login"), code=303)
             if session.get("role") not in roles:
                 flash("Non hai i permessi per questa operazione.")
-                return redirect(url_for("home"))
+                target = role_landing_endpoint()
+                # Non redirigere mai verso la stessa route: è la protezione anti-loop.
+                if request.endpoint == target:
+                    return ("Accesso non autorizzato", 403)
+                return redirect(url_for(target), code=303)
             return fn(*a,**k)
         return wrapped
     return decorator
@@ -1781,13 +1794,13 @@ def login():
                 user=find_badge_user(db,badge_payload)
                 if user:
                     start_user_session(db,user,"Login badge")
-                    return redirect(url_for("home"))
+                    return role_landing_redirect(user["role"])
                 flash("Badge non valido, revocato o account disattivato.")
             else:
                 user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
                 if user and check_password_hash(user["password_hash"],request.form.get("password","")):
                     start_user_session(db,user,"Login")
-                    return redirect(url_for("home"))
+                    return role_landing_redirect(user["role"])
                 flash("Credenziali non corrette o account disattivato.")
     scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
     return login_page("Accesso · TBS Gestionale",'''<section class="login-intro"><h1>Benvenuto</h1><p>Inquadra il badge oppure accedi con le tue credenziali.</p></section>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:800;padding:4px 2px">Accedi con username e password</summary><form method="post" style="margin-top:16px"><p><input name="username" autocomplete="username" placeholder="Utente" required></p><p class="password-wrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required><button class="password-toggle" type="button" aria-label="Mostra password" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈'">👁</button></p><button class="login-submit">Accedi</button></form><p class="muted" style="text-align:center;margin-bottom:0">Blocco automatico dopo {{minutes}} minuti.</p></details>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
@@ -1819,7 +1832,9 @@ def unlock_register():
                     if restored: session["cart"]=restored[0]
                 log_action(db,"Sblocco cassa con badge" if badge_payload else "Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
-                return redirect(url_for("cart") if same_user and locked_cart_id else url_for("home"))
+                if same_user and locked_cart_id:
+                    return redirect(url_for("cart"), code=303)
+                return role_landing_redirect(user["role"])
         flash("Badge o credenziali non validi; account eventualmente disattivato.")
     scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True)
     return page("Cassa bloccata",'''<div style="max-width:560px;margin:22px auto;text-align:center"><div style="font-size:48px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Mostra il badge alla webcam.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
@@ -1833,10 +1848,8 @@ def logout():
 @app.get("/home")
 @login_required
 def home():
-    """Pagina iniziale in base al ruolo: Admin su Dashboard, Gestore e Venditore in Cassa."""
-    if session.get("role") == "seller":
-        return redirect(url_for("pos"))
-    return redirect(url_for("v35_release_center"))
+    """Pagina iniziale definitiva: Venditore → Cassa; Gestore/Admin → Dashboard."""
+    return role_landing_redirect()
 
 @app.get("/admin")
 @login_required
@@ -3541,8 +3554,11 @@ def enforce_v20_role_matrix():
     if not session.get('user_id') or request.endpoint is None:
         return None
     if session.get('role') == 'seller' and request.endpoint not in SELLER_ALLOWED_ENDPOINTS:
+        # /pos è sempre consentita: il controllo evita comunque ogni redirect riflessivo.
+        if request.endpoint == 'pos':
+            return None
         flash('Questa funzione non è disponibile per il ruolo Venditore.','error')
-        return redirect(url_for('pos'))
+        return redirect(url_for('pos'), code=303)
     return None
 
 
@@ -3556,6 +3572,10 @@ def v20_page_context():
 @app.after_request
 def v20_ui_headers(response):
     response.headers.setdefault('X-TBS-Version', APP_VERSION)
+    if request.endpoint in {'login','logout','home','lock_register','unlock_register'} or response.status_code in (301,302,303,307,308):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     return response
 
 
