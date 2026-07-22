@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.24.3 · Fotocamera iPad · Beta"
+APP_VERSION = "v20 rev.24.4 · Fotocamera iPad Hotfix · Beta"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2225,8 +2225,54 @@ function closeM(id){document.getElementById(id).classList.remove('open')}
 function openCash(){cashModal.classList.add('open');received.focus()}
 function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}
 let stream=null,running=false,scanFrameId=null,scannerSubmitted=false,jsQRPromise=null;
-const isIPadDevice=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isIPadDevice=(/iPad/i.test(navigator.userAgent))||
+  (navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1)||
+  (/Macintosh/i.test(navigator.userAgent)&&Number(navigator.maxTouchPoints||0)>1);
 let productFacingMode=isIPadDevice?'user':'environment';
+let productVideoDevices=[];
+let productCurrentDeviceId=null;
+
+function productCameraLabelMatches(label, facing){
+  const value=(label||'').toLowerCase();
+  if(facing==='user')return /(front|user|facetime|anteriore|frontal)/i.test(value);
+  return /(back|rear|environment|posteriore|traseira)/i.test(value);
+}
+async function refreshProductVideoDevices(){
+  const devices=await navigator.mediaDevices.enumerateDevices();
+  productVideoDevices=devices.filter(d=>d.kind==='videoinput');
+  return productVideoDevices;
+}
+async function getProductCameraStream(){
+  const preferred={audio:false,video:{facingMode:{exact:productFacingMode},width:{ideal:1280},height:{ideal:720}}};
+  try{
+    const selected=await navigator.mediaDevices.getUserMedia(preferred);
+    const track=selected.getVideoTracks()[0];
+    productCurrentDeviceId=track&&track.getSettings?track.getSettings().deviceId:null;
+    await refreshProductVideoDevices().catch(()=>[]);
+    return selected;
+  }catch(exactError){
+    // Safari su iPad può ignorare facingMode finché non ha ricevuto il permesso.
+    let permissionStream=null;
+    try{
+      permissionStream=await navigator.mediaDevices.getUserMedia({audio:false,video:true});
+      permissionStream.getTracks().forEach(t=>t.stop());
+    }catch(permissionError){
+      throw exactError;
+    }
+    const devices=await refreshProductVideoDevices();
+    let chosen=devices.find(d=>productCameraLabelMatches(d.label,productFacingMode));
+    if(!chosen&&isIPadDevice&&productFacingMode==='user'){
+      // Dopo il permesso, FaceTime/frontale è normalmente la prima camera di iPadOS.
+      chosen=devices[0];
+    }
+    if(!chosen&&devices.length)chosen=devices[productFacingMode==='environment'?devices.length-1:0];
+    if(chosen){
+      productCurrentDeviceId=chosen.deviceId;
+      return navigator.mediaDevices.getUserMedia({audio:false,video:{deviceId:{exact:chosen.deviceId},width:{ideal:1280},height:{ideal:720}}});
+    }
+    return navigator.mediaDevices.getUserMedia({audio:false,video:true});
+  }
+}
 function openAddProduct(){addProductModal.classList.add('open');setTimeout(()=>scanCode.focus(),120)}
 function loadProductJsQR(){
   if(window.jsQR)return Promise.resolve(window.jsQR);
@@ -2304,11 +2350,7 @@ async function startProductCamera(){
     camStatus.textContent='Caricamento lettore QR…';
     await loadProductJsQR();
     camStatus.textContent='Avvio fotocamera…';
-    let constraints={audio:false,video:{facingMode:{ideal:productFacingMode},width:{ideal:1280},height:{ideal:720}}};
-    try{stream=await navigator.mediaDevices.getUserMedia(constraints)}catch(first){
-      if(first&&(first.name==='OverconstrainedError'||first.name==='ConstraintNotSatisfiedError'))stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true});
-      else throw first;
-    }
+    stream=await getProductCameraStream();
     video.srcObject=stream;
     video.setAttribute('playsinline','');
     video.setAttribute('webkit-playsinline','');
