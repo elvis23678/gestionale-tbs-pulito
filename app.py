@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.24.1 · UI e Notifiche Hotfix · Beta"
+APP_VERSION = "v20 rev.24.2 · QR prodotti iMac Hotfix · Beta"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2217,7 +2217,98 @@ body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 
 <div id="addProductModal" class="modalwrap"><div class="modal"><h2 class="add-modal-title">Aggiungi articolo</h2><p class="add-modal-sub">Scansiona il QR oppure inserisci il codice del gioiello.</p><div class="scan-choice"><button type="button" class="goldbtn" onclick="startProductCamera()">📷 SCANSIONA QR</button><button type="button" class="mini" onclick="focusProductCode()">⌨️ INSERISCI CODICE</button></div><div id="camera" class="camera"><video id="video" playsinline></video><div class="notice" id="camStatus">Autorizza la fotocamera.</div></div><div class="scan-divider">oppure</div><form id="productScanForm" class="scan" method="post" action="{{url_for('pos_add_code')}}"><input id="scanCode" name="code" placeholder="Codice interno articolo" autocomplete="off" required><button class="goldbtn">AGGIUNGI</button></form><button type="button" class="mini" style="width:100%;margin-top:12px" onclick="closeAddProduct()">ANNULLA</button></div></div>
 <div id="priceModal" class="modalwrap"><div class="modal"><h2>Modifica prezzo</h2><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="pid" name="product_id"><input type="hidden" name="return_to" value="pos"><p id="ptitle"></p><label>Prezzo listino<input id="original" readonly></label><label>Nuovo prezzo<input id="newprice" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label><button class="goldbtn">CONFERMA</button><button type="button" class="mini" onclick="closeM('priceModal')">ANNULLA</button></form></div></div>
 <div id="cashModal" class="modalwrap"><div class="modal"><h2>Pagamento contanti</h2><p>Totale <b>€ {{'%.2f'|format(total)}}</b></p><label>Importo ricevuto<input id="received" type="number" step="0.01" oninput="changeCalc()"></label><p>Resto: <b id="change">€ 0,00</b></p><form method="post" action="{{url_for('checkout_cart')}}"><input type="hidden" name="payment_method" value="Contanti"><input type="hidden" name="channel" value="Negozio"><button class="goldbtn" style="width:100%">CONFERMA VENDITA</button></form><button class="mini" style="width:100%;margin-top:8px" onclick="closeM('cashModal')">ANNULLA</button></div></div>
-<script>let d='';function press(k){d+=k==='−'?'-':k;display.textContent=d||'0'}function openPrice(id,n,o,c){pid.value=id;ptitle.textContent=n;original.value='€ '+o.toFixed(2);newprice.value=c.toFixed(2);priceModal.classList.add('open')}function closeM(id){document.getElementById(id).classList.remove('open')}function openCash(){cashModal.classList.add('open');received.focus()}function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}let stream,running=false;function openAddProduct(){addProductModal.classList.add('open');setTimeout(()=>scanCode.focus(),120)}function stopProductCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}running=false;camera.style.display='none'}function closeAddProduct(){stopProductCamera();addProductModal.classList.remove('open')}function focusProductCode(){stopProductCamera();scanCode.focus()}async function startProductCamera(){camera.style.display='block';if(running)return;try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});video.srcObject=stream;await video.play();running=true;camStatus.textContent='Inquadra il QR del gioiello.';scan()}catch(e){running=false;camStatus.textContent='Fotocamera non disponibile: '+e.message}}async function scan(){if(!running)return;if('BarcodeDetector'in window){try{let r=await new BarcodeDetector({formats:['qr_code']}).detect(video);if(r.length){scanCode.value=r[0].rawValue;stopProductCamera();document.getElementById('productScanForm').submit();return}}catch(e){}}requestAnimationFrame(scan)}addProductModal.addEventListener('click',e=>{if(e.target===addProductModal)closeAddProduct()});</script>''',rows=rows,total=total,total_qty=total_qty)
+<script>
+let d='';
+function press(k){d+=k==='−'?'-':k;display.textContent=d||'0'}
+function openPrice(id,n,o,c){pid.value=id;ptitle.textContent=n;original.value='€ '+o.toFixed(2);newprice.value=c.toFixed(2);priceModal.classList.add('open')}
+function closeM(id){document.getElementById(id).classList.remove('open')}
+function openCash(){cashModal.classList.add('open');received.focus()}
+function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}
+let stream=null,running=false,scanFrameId=null,scannerSubmitted=false,jsQRPromise=null;
+const qrCanvas=document.createElement('canvas');
+const qrContext=qrCanvas.getContext('2d',{willReadFrequently:true});
+function openAddProduct(){addProductModal.classList.add('open');scannerSubmitted=false;setTimeout(()=>scanCode.focus(),120)}
+function stopProductCamera(){
+  running=false;
+  if(scanFrameId){cancelAnimationFrame(scanFrameId);scanFrameId=null}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  try{video.pause();video.srcObject=null}catch(e){}
+  camera.style.display='none';
+}
+function closeAddProduct(){stopProductCamera();addProductModal.classList.remove('open')}
+function focusProductCode(){stopProductCamera();scanCode.focus()}
+function loadJsQR(){
+  if(window.jsQR)return Promise.resolve(window.jsQR);
+  if(jsQRPromise)return jsQRPromise;
+  jsQRPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+    script.async=true;
+    script.onload=()=>window.jsQR?resolve(window.jsQR):reject(new Error('Lettore QR non disponibile'));
+    script.onerror=()=>reject(new Error('Impossibile caricare il lettore QR'));
+    document.head.appendChild(script);
+  });
+  return jsQRPromise;
+}
+function submitProductCode(value){
+  if(scannerSubmitted)return;
+  const clean=(value||'').trim();
+  if(!clean)return;
+  scannerSubmitted=true;
+  scanCode.value=clean;
+  camStatus.textContent='✓ QR letto: '+clean+'. Aggiunta al carrello…';
+  stopProductCamera();
+  document.getElementById('productScanForm').submit();
+}
+async function startProductCamera(){
+  camera.style.display='block';
+  if(running)return;
+  scannerSubmitted=false;
+  camStatus.textContent='Avvio fotocamera…';
+  try{
+    await loadJsQR();
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject=stream;
+    video.setAttribute('playsinline','');
+    video.muted=true;
+    await video.play();
+    running=true;
+    camStatus.textContent='Inquadra il QR del gioiello. Mantienilo fermo e ben illuminato.';
+    scanProductFrame();
+  }catch(e){
+    running=false;
+    camStatus.textContent='Fotocamera/lettore QR non disponibile: '+((e&&e.message)||e);
+  }
+}
+async function scanProductFrame(){
+  if(!running||scannerSubmitted)return;
+  if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
+    if('BarcodeDetector' in window){
+      try{
+        const detector=new BarcodeDetector({formats:['qr_code']});
+        const results=await detector.detect(video);
+        if(results.length&&results[0].rawValue){submitProductCode(results[0].rawValue);return}
+      }catch(e){}
+    }
+    if(window.jsQR&&qrContext){
+      const maxWidth=960;
+      const scale=Math.min(1,maxWidth/video.videoWidth);
+      qrCanvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+      qrCanvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+      qrContext.drawImage(video,0,0,qrCanvas.width,qrCanvas.height);
+      try{
+        const imageData=qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height);
+        const result=window.jsQR(imageData.data,imageData.width,imageData.height,{inversionAttempts:'attemptBoth'});
+        if(result&&result.data){submitProductCode(result.data);return}
+      }catch(e){}
+    }
+  }
+  scanFrameId=requestAnimationFrame(scanProductFrame);
+}
+addProductModal.addEventListener('click',e=>{if(e.target===addProductModal)closeAddProduct()});
+window.addEventListener('pagehide',stopProductCamera);
+window.addEventListener('beforeunload',stopProductCamera);
+</script>''',rows=rows,total=total,total_qty=total_qty)
 
 @app.post("/pos/add-code")
 @login_required
