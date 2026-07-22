@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0 ENTERPRISE · Jewelry Management"
+APP_VERSION = "v35.0.1 ENTERPRISE · Login Hotfix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1781,13 +1781,13 @@ def login():
                 user=find_badge_user(db,badge_payload)
                 if user:
                     start_user_session(db,user,"Login badge")
-                    return redirect(url_for("dashboard"))
+                    return redirect(url_for("home"))
                 flash("Badge non valido, revocato o account disattivato.")
             else:
                 user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
                 if user and check_password_hash(user["password_hash"],request.form.get("password","")):
                     start_user_session(db,user,"Login")
-                    return redirect(url_for("dashboard"))
+                    return redirect(url_for("home"))
                 flash("Credenziali non corrette o account disattivato.")
     scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
     return login_page("Accesso · TBS Gestionale",'''<section class="login-intro"><h1>Benvenuto</h1><p>Inquadra il badge oppure accedi con le tue credenziali.</p></section>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:800;padding:4px 2px">Accedi con username e password</summary><form method="post" style="margin-top:16px"><p><input name="username" autocomplete="username" placeholder="Utente" required></p><p class="password-wrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required><button class="password-toggle" type="button" aria-label="Mostra password" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈'">👁</button></p><button class="login-submit">Accedi</button></form><p class="muted" style="text-align:center;margin-bottom:0">Blocco automatico dopo {{minutes}} minuti.</p></details>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
@@ -1819,7 +1819,7 @@ def unlock_register():
                     if restored: session["cart"]=restored[0]
                 log_action(db,"Sblocco cassa con badge" if badge_payload else "Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
-                return redirect(url_for("cart") if same_user and locked_cart_id else url_for("dashboard"))
+                return redirect(url_for("cart") if same_user and locked_cart_id else url_for("home"))
         flash("Badge o credenziali non validi; account eventualmente disattivato.")
     scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True)
     return page("Cassa bloccata",'''<div style="max-width:560px;margin:22px auto;text-align:center"><div style="font-size:48px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Mostra il badge alla webcam.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
