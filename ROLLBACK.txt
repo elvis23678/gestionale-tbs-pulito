@@ -1,5 +1,4 @@
 ROLLBACK
-1. Conservare il database persistente senza eliminarlo.
-2. Sostituire app.py e requirements.txt con quelli della revisione stabile precedente.
-3. Riavviare il servizio Render.
-4. Verificare login, Cassa e una vendita di prova.
+
+Se la rev.8 presenta problemi, ripristinare i file app.py e requirements.txt della TBS Gestionale v20 rev.7 Dashboard Smart RC.
+Il database non viene modificato da questa revisione, quindi non è richiesta alcuna migrazione inversa.

@@ -1,13 +1,16 @@
-TBS Gestionale v20 rev.7 · STABLE RC
+TBS Gestionale v20 rev.8 · Stable
 
-Revisione cumulativa: contiene tutte le revisioni precedenti.
+Revisione cumulativa: include integralmente v20 rev.1–rev.7.
 
-NOVITÀ
-- Contiene integralmente rev.6.
-- Nuova Dashboard Smart per Admin e Gestore.
-- Incasso giornaliero, vendite, scorte basse, clienti in attesa e riordini aperti.
-- Sezione “Da fare” con collegamenti operativi.
-- Il Venditore continua ad aprire direttamente la Cassa.
+Novità rev.8 — Login Experience
+- Pagina di accesso completamente separata dall'interfaccia autenticata.
+- Rimossi menu inferiore, notifiche, blocco, cambio password e logout prima dell'accesso.
+- Header login dedicato TBS / Tattoo Beauty Saloon.
+- Versione installata mostrata in una pill compatta: v20 rev.8 · Stable.
+- Badge QR reso protagonista con layout premium nero, avorio e oro.
+- Accesso manuale ridisegnato.
+- Pulsante mostra/nascondi password.
+- Footer con versione e copyright.
+- Versione nell'header autenticato resa più compatta.
 
-STATO
-- Release Candidate cumulativa da collaudare su Render prima del congelamento.
+Nessuna modifica ai dati, alle vendite, agli ordini o ai flussi operativi.

@@ -1,12 +1,13 @@
-TEST COMPLETO
-[ ] Login e permessi dei tre ruoli.
-[ ] Dashboard Smart Admin/Gestore; Cassa iniziale Venditore.
-[ ] Vendita completa con tutti i pagamenti.
-[ ] Richiesta e autorizzazione sconto.
-[ ] Catalogo e catalogo ordinabile.
-[ ] Magazzino PRO e riordini.
-[ ] CRM Clienti.
-[ ] Tesoreria Admin/Gestore.
-[ ] Utenti/backup esclusivamente Admin.
-[ ] Notifiche personali, lettura e archivio.
-[ ] Test smartphone Android, iPhone/Safari e Mac/desktop.
+CHECKLIST TBS v20 rev.8
+
+[ ] Aprire /login da utente disconnesso: nessun menu inferiore o icona operativa.
+[ ] Aprire /login con una sessione ancora attiva: la pagina resta pulita e senza menu.
+[ ] Verificare visualizzazione v20 rev.8 · Stable.
+[ ] Verificare avvio automatico fotocamera e login con badge.
+[ ] Verificare login con username/password.
+[ ] Verificare mostra/nascondi password.
+[ ] Admin entra nella propria area.
+[ ] Gestore entra nella propria area.
+[ ] Venditore entra nella Cassa secondo i permessi configurati.
+[ ] Verificare logout e nuovo accesso.
+[ ] Verificare layout su smartphone, Mac e PC.
