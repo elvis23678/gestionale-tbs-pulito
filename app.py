@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.23 · Codici Professionali · Beta"
+APP_VERSION = "v20 rev.23.1.1 · Cassa Hotfix · Beta"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2149,43 +2149,45 @@ def normalize_product_qr(value):
         candidates.append(tail)
     return candidates
 
-def _find_product_by_scan(db, value):
-    """Cerca prodotti rispettando i permessi sui codici.
+def _normalize_scan_code(value):
+    """Normalizza codici digitati/scansionati senza alterarne il significato."""
+    text=(value or "").strip().upper()
+    # Uniforma i trattini copiati da PDF/telefono e rimuove spazi invisibili.
+    for dash in ("–", "—", "−", "‑"):
+        text=text.replace(dash, "-")
+    return "".join(text.split())
 
-    Venditore: solo codice interno, QR/ID interno.
-    Admin/Gestore: anche codice fornitore.
+
+def _find_product_by_scan(db, value):
+    """Trova un articolo da codice interno/QR.
+
+    Il Venditore può usare esclusivamente codice interno o ID interno.
+    Admin e Gestore possono usare anche il codice fornitore.
     """
-    can_use_supplier_code = session.get("role") in ("admin", "manager")
-    for candidate in normalize_product_qr(value):
-        candidate = (candidate or "").strip()
-        if not candidate:
-            continue
+    can_use_supplier_code=session.get("role") in ("admin", "manager")
+    candidates=[]
+    for raw in normalize_product_qr(value):
+        code=_normalize_scan_code(raw)
+        if code and code not in candidates:
+            candidates.append(code)
+    if not candidates:
+        return None
+
+    # Ricerca robusta in Python: evita problemi con spazi, maiuscole,
+    # trattini Unicode e valori active NULL presenti nei database precedenti.
+    rows=db.execute("SELECT * FROM products WHERE COALESCE(active,1)<>0").fetchall()
+    for candidate in candidates:
+        for row in rows:
+            if _normalize_scan_code(row["brand_code"]) == candidate:
+                return row
+        if candidate.isdigit():
+            for row in rows:
+                if str(row["id"]) == candidate:
+                    return row
         if can_use_supplier_code:
-            row=db.execute(
-                """SELECT * FROM products
-                   WHERE active=1 AND (
-                       UPPER(TRIM(brand_code))=UPPER(TRIM(?)) OR
-                       UPPER(TRIM(supplier_code))=UPPER(TRIM(?)) OR
-                       CAST(id AS TEXT)=?
-                   )
-                   ORDER BY CASE WHEN UPPER(TRIM(brand_code))=UPPER(TRIM(?)) THEN 0
-                                 WHEN UPPER(TRIM(supplier_code))=UPPER(TRIM(?)) THEN 1 ELSE 2 END
-                   LIMIT 1""",
-                (candidate,candidate,candidate,candidate,candidate)
-            ).fetchone()
-        else:
-            row=db.execute(
-                """SELECT * FROM products
-                   WHERE active=1 AND (
-                       UPPER(TRIM(brand_code))=UPPER(TRIM(?)) OR
-                       CAST(id AS TEXT)=?
-                   )
-                   ORDER BY CASE WHEN UPPER(TRIM(brand_code))=UPPER(TRIM(?)) THEN 0 ELSE 1 END
-                   LIMIT 1""",
-                (candidate,candidate,candidate)
-            ).fetchone()
-        if row:
-            return row
+            for row in rows:
+                if _normalize_scan_code(row["supplier_code"]) == candidate:
+                    return row
     return None
 
 @app.get("/pos")
@@ -2217,10 +2219,27 @@ body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 
 @app.post("/pos/add-code")
 @login_required
 def pos_add_code():
-    with connect() as db:p=_find_product_by_scan(db,request.form.get("code"))
-    if not p or p['quantity']<=0:flash("Codice non trovato o prodotto non disponibile.");return redirect(url_for("pos"))
-    cart=dict(session.get("cart",{}));cart[str(p['id'])]=min(int(cart.get(str(p['id']),0))+1,p['quantity']);session['cart']=cart;session.modified=True
-    flash(f"{p['brand_code']} aggiunto al carrello.");return redirect(url_for("pos"))
+    submitted=(request.form.get("code") or "").strip()
+    try:
+        with connect() as db:
+            p=_find_product_by_scan(db, submitted)
+    except Exception:
+        app.logger.exception("Errore ricerca articolo POS per codice %r", submitted)
+        flash("Errore durante la ricerca dell'articolo. Riprova.")
+        return redirect(url_for("pos"))
+    if not p:
+        flash("Codice interno non trovato.")
+        return redirect(url_for("pos"))
+    if int(p['quantity'] or 0)<=0:
+        flash(f"{p['brand_code']} è esaurito.")
+        return redirect(url_for("pos"))
+    cart=dict(session.get("cart",{}))
+    current=int(cart.get(str(p['id']),0) or 0)
+    cart[str(p['id'])]=min(current+1,int(p['quantity']))
+    session['cart']=cart
+    session.modified=True
+    flash(f"{p['brand_code']} aggiunto al carrello.")
+    return redirect(url_for("pos"))
 
 @app.post("/pos/set-price")
 @login_required
