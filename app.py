@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.23.1.1 · Cassa Hotfix · Beta"
+APP_VERSION = "v20 rev.23.2 · Permessi Cassa Hotfix · Beta"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3311,7 +3311,7 @@ def automatic_daily_closure():
 # --- v20 rev.2: matrice permessi definitiva ---
 SELLER_ALLOWED_ENDPOINTS = {
     'home','login','logout','lock_register','unlock_register','pos','price_check',
-    'products','product_detail','add_to_cart','cart','update_cart','remove_from_cart',
+    'products','product_detail','pos_add_code','add_to_cart','cart','update_cart','remove_from_cart',
     'clear_cart','checkout_cart','suspend_cart','suspended_carts','restore_suspended_cart_route',
     'pos_set_price','return_discount_to_cart','notification_center','notification_count',
     'notification_detail','archive_notification','universal_search','change_password',
