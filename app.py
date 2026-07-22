@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.2 ENTERPRISE · Redirect Fix"
+APP_VERSION = "v35.2.3 LTS · Notification Template Fix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1683,7 +1683,7 @@ def notification_center():
       {% if n.is_group %}
       <div class='notice-row {% if not n.read_at and view!="archive" %}unread{% elif view!="archive" %}read{% endif %}' data-href='{{url_for("notification_sales_group",seller=n.seller,minute=n.minute)}}'>
         <div style='font-size:28px'>💰</div>
-        <div class='notice-main'><b>{{n.seller}} · {{n.items|length}} vendite</b> <span class='group-pill'>RAGGRUPPATE</span>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVE</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTE</span>{% endif %}<br>Totale gruppo: <b>€ {{'%.2f'|format(n.group_total)}}</b><br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviate {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
+        <div class='notice-main'><b>{{n.seller}} · {{n["items"]|length}} vendite</b> <span class='group-pill'>RAGGRUPPATE</span>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVE</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTE</span>{% endif %}<br>Totale gruppo: <b>€ {{'%.2f'|format(n.group_total)}}</b><br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviate {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
         {% if view!='archive' %}<form method='post' action='{{url_for("archive_notification_group")}}' onsubmit="event.stopPropagation();return confirm('Archiviare tutte le notifiche di questo gruppo? Rimarranno nello storico.')"><input type='hidden' name='seller' value='{{n.seller}}'><input type='hidden' name='minute' value='{{n.minute}}'><button class='trash' type='submit'>🗑️</button></form>{% endif %}
       </div>
       {% else %}
