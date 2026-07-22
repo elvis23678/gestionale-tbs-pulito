@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v20 rev.18 · Development"
+APP_VERSION = "v20 rev.18.1 · Home Hotfix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3350,12 +3350,26 @@ def customers_crm():
 @login_required
 @role_required('admin','manager')
 def dashboard_smart():
+    # Dashboard tollerante: le tabelle/colonne delle funzioni PRO possono non
+    # essere ancora presenti in database creati con versioni precedenti.
     with connect() as db:
-        today=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) revenue,COUNT(DISTINCT COALESCE(sale_number,id)) receipts FROM sales WHERE status='Confermata' AND date(created_at,'localtime')=date('now','localtime')").fetchone()
-        low=db.execute("SELECT COUNT(*) FROM products WHERE active=1 AND quantity<=min_stock").fetchone()[0]
-        pending_reorders=db.execute("SELECT COUNT(*) FROM reorders WHERE status NOT IN ('Ricevuto','Annullato')").fetchone()[0]
-        try: waiting=db.execute("SELECT COUNT(*) FROM catalog_requests WHERE status NOT IN ('Consegnato','Rifiutato')").fetchone()[0]
-        except sqlite3.OperationalError: waiting=0
+        try:
+            today=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) revenue,COUNT(DISTINCT COALESCE(sale_number,id)) receipts FROM sales WHERE status='Confermata' AND date(created_at,'localtime')=date('now','localtime')").fetchone()
+        except sqlite3.OperationalError:
+            today={"revenue":0,"receipts":0}
+        try:
+            low=db.execute("SELECT COUNT(*) FROM products WHERE active=1 AND quantity<=COALESCE(min_stock,1)").fetchone()[0]
+        except sqlite3.OperationalError:
+            try: low=db.execute("SELECT COUNT(*) FROM products WHERE active=1 AND quantity<=1").fetchone()[0]
+            except sqlite3.OperationalError: low=0
+        try:
+            pending_reorders=db.execute("SELECT COUNT(*) FROM reorders WHERE status NOT IN ('Ricevuto','Annullato')").fetchone()[0]
+        except sqlite3.OperationalError:
+            pending_reorders=0
+        try:
+            waiting=db.execute("SELECT COUNT(*) FROM catalog_requests WHERE status NOT IN ('Consegnato','Rifiutato')").fetchone()[0]
+        except sqlite3.OperationalError:
+            waiting=0
         alerts=[]
         if low: alerts.append(('Scorte',f'{low} prodotti da riordinare',url_for('inventory_pro')))
         if waiting: alerts.append(('Clienti',f'{waiting} clienti in attesa',url_for('catalog_requests')))

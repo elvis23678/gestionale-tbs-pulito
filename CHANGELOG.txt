@@ -1,11 +1,6 @@
-TBS Gestionale v20 rev.18 · Development
+TBS Gestionale v20 rev.18.1 · Home Hotfix
 
-Revisione cumulativa: contiene integralmente la v20 rev.9 e la correzione del blocco automatico introdotta nella rev.10.
-
-Macro-obiettivo: Centro Operativo.
-
-STATO DEL PACCHETTO
-- Build cumulativa predisposta e numerata per la roadmap.
-- Eredita il motore e le funzioni già presenti nella base rev.9/rev.10.
-- Il macro-obiettivo indicato deve essere verificato pagina per pagina prima dell'uso in produzione.
-- Non è dichiarata Stable.
+- Corretto errore del pulsante Home/Dashboard.
+- La Dashboard Smart ora gestisce database provenienti da versioni precedenti,
+  anche quando alcune tabelle o colonne PRO non sono ancora presenti.
+- Nessuna modifica a prodotti, utenti, vendite o dati esistenti.
