@@ -85,7 +85,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v17.9 UI 2.0 COMPLETE · BASE v17.0 LTS"
+APP_VERSION = "v20 rev.7 · STABLE RC"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -282,7 +282,43 @@ button,a{ -webkit-tap-highlight-color:transparent}button:active,.actions a:activ
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 '''
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}</style></head><body>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>GESTIONALE · v19.0</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a><a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('main > .flash').forEach(function(el){el.style.transition='opacity .4s';el.style.opacity='0';setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('home')}}"><span>⌂</span>Home</a><a href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="dock-primary" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
+CSS += r'''
+
+/* v20 rev.3 — Cassa PRO */
+body.pos-page main{max-width:1500px}
+body.pos-page h1{margin-bottom:10px}
+body.pos-page .card{border-radius:18px}
+body.pos-page input,body.pos-page select,body.pos-page button{min-height:48px}
+body.pos-page .metric{font-size:clamp(34px,5vw,64px);letter-spacing:-.04em}
+body.pos-page .payment-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+body.pos-page .payment-buttons label span{min-height:58px;display:flex;align-items:center;justify-content:center;border-radius:14px;font-weight:900}
+@media(min-width:980px){
+ body.pos-page main{padding-left:28px;padding-right:28px}
+ body.pos-page .pos-desktop-hint{display:block}
+ body.pos-page .card{box-shadow:0 12px 34px rgba(15,23,42,.08)}
+ body.pos-page .payment-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:979px){body.pos-page .pos-desktop-hint{display:none}}
+
+'''
+
+
+CSS += r'''
+
+/* v20 rev.4 — Catalogo PRO */
+body.catalog-page main{max-width:1500px}
+body.catalog-page .grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+body.catalog-page .card{border-radius:18px;overflow:hidden;transition:transform .16s ease,box-shadow .16s ease}
+body.catalog-page .card:hover{transform:translateY(-2px);box-shadow:0 14px 35px rgba(15,23,42,.10)}
+body.catalog-page img{background:#fff}
+body.catalog-page .badge{border-radius:999px;padding:6px 10px}
+body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba(248,247,243,.94);backdrop-filter:blur(12px);padding:10px;border-radius:16px}
+@media(max-width:680px){body.catalog-page .grid{grid-template-columns:1fr 1fr;gap:10px}body.catalog-page .card{padding:12px}body.catalog-page h3{font-size:15px}}
+
+'''
+
+
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>GESTIONALE · {{ app_version }}</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};let timer;function reset(){clearTimeout(timer);timer=setTimeout(function(){window.location.href="{{ url_for('lock_register') }}?auto=1"},timeout)}['mousemove','mousedown','keydown','touchstart','scroll'].forEach(e=>document.addEventListener(e,reset,{passive:true}));reset();document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('main > .flash').forEach(function(el){el.style.transition='opacity .4s';el.style.opacity='0';setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a href="{{url_for('home')}}"><span>⌂</span>Home</a><a href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="dock-primary" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -1736,18 +1772,14 @@ def logout():
 @login_required
 def home():
     """Pagina iniziale in base al ruolo: Admin su Dashboard, Gestore e Venditore in Cassa."""
-    if session.get("role") in ("manager", "seller"):
+    if session.get("role") == "seller":
         return redirect(url_for("pos"))
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard_smart"))
 
 @app.get("/admin")
 @login_required
+@role_required("admin","manager")
 def dashboard():
-    # Venditore: accesso esclusivamente operativo alla vendita.
-    # Anche digitando direttamente /admin non può entrare nella dashboard gestionale.
-    if session.get("role") == "seller":
-        flash("Il profilo Venditore può accedere esclusivamente alle funzioni di vendita.")
-        return redirect(url_for("pos"))
     with connect() as db:
         r=db.execute("SELECT COUNT(*) FROM products WHERE active=1").fetchone()[0]
         p=db.execute("SELECT COALESCE(SUM(quantity),0) FROM products WHERE active=1").fetchone()[0]
@@ -3175,5 +3207,109 @@ def automatic_daily_closure():
     if request.endpoint and request.endpoint != "static":
         try: ensure_daily_closures()
         except sqlite3.Error as exc: app.logger.warning("Chiusura tesoreria non eseguita: %s",exc)
+
+
+
+# --- v20 rev.2: matrice permessi definitiva ---
+SELLER_ALLOWED_ENDPOINTS = {
+    'home','login','logout','lock_register','unlock_register','pos','price_check',
+    'products','product_detail','add_to_cart','cart','update_cart','remove_from_cart',
+    'clear_cart','checkout_cart','suspend_cart','suspended_carts','restore_suspended_cart_route',
+    'pos_set_price','return_discount_to_cart','notification_center','notification_count',
+    'notification_detail','archive_notification','universal_search','change_password',
+    'supplier_catalog','request_catalog_item','static'
+}
+
+@app.before_request
+def enforce_v20_role_matrix():
+    """Admin: negozio+software; Gestore: tutto il negozio; Venditore: vendita."""
+    if not session.get('user_id') or request.endpoint is None:
+        return None
+    if session.get('role') == 'seller' and request.endpoint not in SELLER_ALLOWED_ENDPOINTS:
+        flash('Questa funzione non è disponibile per il ruolo Venditore.')
+        return redirect(url_for('pos'))
+    return None
+
+
+
+
+# --- v20 rev.3: classi contestuali per layout POS ---
+@app.context_processor
+def v20_page_context():
+    return {'v20_current_path': request.path}
+
+@app.after_request
+def v20_ui_headers(response):
+    response.headers.setdefault('X-TBS-Version', APP_VERSION)
+    return response
+
+
+
+
+# --- v20 rev.5: Magazzino PRO ---
+@app.get('/inventory/pro')
+@login_required
+@role_required('admin','manager')
+def inventory_pro():
+    q=request.args.get('q','').strip()
+    with connect() as db:
+        where="WHERE active=1"
+        params=[]
+        if q:
+            where += " AND (brand_code LIKE ? OR supplier_code LIKE ? OR category LIKE ?)"
+            term=f"%{q}%"; params=[term,term,term]
+        rows=db.execute(f"SELECT * FROM products {where} ORDER BY (quantity<=min_stock) DESC, quantity ASC, brand_code",params).fetchall()
+        summary=db.execute("SELECT COUNT(*) products,COALESCE(SUM(quantity),0) pieces,SUM(CASE WHEN quantity<=min_stock THEN 1 ELSE 0 END) low FROM products WHERE active=1").fetchone()
+    body='''<div class="dash-head"><div><span class="eyebrow">CONTROLLO SCORTE</span><h1>Magazzino PRO</h1><p class="muted">Priorità automatiche in base alla scorta minima.</p></div></div><div class="kpi-grid"><div class="kpi"><strong>Referenze</strong><div class="metric">{{summary.products}}</div></div><div class="kpi"><strong>Pezzi</strong><div class="metric">{{summary.pieces}}</div></div><div class="kpi"><strong>Da riordinare</strong><div class="metric">{{summary.low}}</div></div></div><div class="card"><form class="inline"><input name="q" value="{{q}}" placeholder="Codice o categoria"><button>Cerca</button><a class="secondary" href="{{url_for('reorders')}}">Apri riordini</a></form></div><div class="card"><div class="table-wrap"><table><thead><tr><th>Codice</th><th>Categoria</th><th>Disponibili</th><th>Minimo</th><th>Stato</th><th></th></tr></thead><tbody>{% for p in rows %}<tr><td><b>{{p.brand_code}}</b><br><small>{{p.supplier_code}}</small></td><td>{{p.category}}</td><td>{{p.quantity}}</td><td>{{p.min_stock}}</td><td>{% if p.quantity<=p.min_stock %}<span class="badge" style="background:#fee2e2;color:#991b1b">RIORDINARE</span>{% else %}<span class="badge">OK</span>{% endif %}</td><td><a href="{{url_for('product_detail',product_id=p.id)}}">Apri</a></td></tr>{% endfor %}</tbody></table></div></div>'''
+    return page('Magazzino PRO',body,rows=rows,summary=summary,q=q)
+
+
+
+
+# --- v20 rev.6: CRM Clienti ---
+@app.get('/customers/crm')
+@login_required
+@role_required('admin','manager')
+def customers_crm():
+    q=request.args.get('q','').strip()
+    with connect() as db:
+        _ensure_catalog_requests(db)
+        # Unifica i clienti presenti negli ordini boutique e nelle richieste catalogo.
+        sql='''SELECT customer_name name, customer_phone phone, COUNT(*) orders,
+               MAX(created_at) last_activity, GROUP_CONCAT(DISTINCT status) statuses
+               FROM (SELECT customer_name,customer_phone,status,created_at FROM customer_orders
+                     UNION ALL
+                     SELECT customer_name,customer_phone,status,created_at FROM catalog_requests)
+               WHERE TRIM(COALESCE(customer_name,''))<>'''''
+        params=[]
+        if q:
+            sql += " AND (customer_name LIKE ? OR customer_phone LIKE ?)"; term=f"%{q}%"; params=[term,term]
+        sql += " GROUP BY lower(customer_name),customer_phone ORDER BY MAX(created_at) DESC"
+        try: rows=db.execute(sql,params).fetchall()
+        except sqlite3.OperationalError: rows=[]
+    body='''<div class="dash-head"><div><span class="eyebrow">RELAZIONI CLIENTI</span><h1>CRM Clienti</h1><p class="muted">Contatti e attività raccolti automaticamente dagli ordini.</p></div></div><div class="card"><form class="inline"><input name="q" value="{{q}}" placeholder="Nome o telefono"><button>Cerca</button></form></div><div class="grid">{% for c in rows %}<div class="card"><h3>{{c.name}}</h3><p><a href="tel:{{c.phone}}">{{c.phone or 'Telefono non indicato'}}</a></p><p><b>{{c.orders}}</b> attività registrate</p><p class="muted">Ultima: {{c.last_activity|rome_time}}</p><p><span class="badge">{{c.statuses or 'Storico'}}</span></p></div>{% else %}<div class="card">Nessun cliente trovato negli ordini.</div>{% endfor %}</div>'''
+    return page('CRM Clienti',body,rows=rows,q=q)
+
+
+
+
+# --- v20 rev.7: Dashboard Smart ---
+@app.get('/dashboard-smart')
+@login_required
+@role_required('admin','manager')
+def dashboard_smart():
+    with connect() as db:
+        today=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) revenue,COUNT(DISTINCT COALESCE(sale_number,id)) receipts FROM sales WHERE status='Confermata' AND date(created_at,'localtime')=date('now','localtime')").fetchone()
+        low=db.execute("SELECT COUNT(*) FROM products WHERE active=1 AND quantity<=min_stock").fetchone()[0]
+        pending_reorders=db.execute("SELECT COUNT(*) FROM reorders WHERE status NOT IN ('Ricevuto','Annullato')").fetchone()[0]
+        try: waiting=db.execute("SELECT COUNT(*) FROM catalog_requests WHERE status NOT IN ('Consegnato','Rifiutato')").fetchone()[0]
+        except sqlite3.OperationalError: waiting=0
+        alerts=[]
+        if low: alerts.append(('Scorte',f'{low} prodotti da riordinare',url_for('inventory_pro')))
+        if waiting: alerts.append(('Clienti',f'{waiting} clienti in attesa',url_for('catalog_requests')))
+        if pending_reorders: alerts.append(('Fornitori',f'{pending_reorders} riordini aperti',url_for('reorders')))
+    body='''<div class="dash-head"><div><span class="eyebrow">CENTRO OPERATIVO</span><h1>Bentornato, {{session.get('user')}}.</h1><p class="muted">Le priorità del negozio, in un colpo d'occhio.</p></div><div class="quick-actions"><a href="{{url_for('pos')}}"><span>€</span><b>Cassa</b><small>Nuova vendita</small></a><a href="{{url_for('inventory_pro')}}"><span>◇</span><b>Magazzino</b><small>Scorte e riordini</small></a><a href="{{url_for('customers_crm')}}"><span>◎</span><b>Clienti</b><small>Ordini e contatti</small></a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite</span></div><div class="kpi"><strong>Scorte basse</strong><div class="metric">{{low}}</div></div><div class="kpi"><strong>Clienti in attesa</strong><div class="metric">{{waiting}}</div></div><div class="kpi"><strong>Riordini aperti</strong><div class="metric">{{pending_reorders}}</div></div></div><h2>Da fare</h2><div class="grid">{% for kind,text,link in alerts %}<a class="card" href="{{link}}" style="text-decoration:none;color:inherit"><span class="eyebrow">{{kind}}</span><h3>{{text}}</h3><span>Apri →</span></a>{% else %}<div class="card"><h3>Tutto sotto controllo</h3><p class="muted">Non risultano priorità operative.</p></div>{% endfor %}</div>'''
+    return page('Dashboard Smart',body,today=today,low=low,waiting=waiting,pending_reorders=pending_reorders,alerts=alerts)
+
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))

@@ -1,0 +1,13 @@
+TBS Gestionale v20 rev.7 · STABLE RC
+
+Revisione cumulativa: contiene tutte le revisioni precedenti.
+
+NOVITÀ
+- Contiene integralmente rev.6.
+- Nuova Dashboard Smart per Admin e Gestore.
+- Incasso giornaliero, vendite, scorte basse, clienti in attesa e riordini aperti.
+- Sezione “Da fare” con collegamenti operativi.
+- Il Venditore continua ad aprire direttamente la Cassa.
+
+STATO
+- Release Candidate cumulativa da collaudare su Render prima del congelamento.
