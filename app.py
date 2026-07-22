@@ -1591,8 +1591,8 @@ def health():
 
 
 def _ensure_push_subscriptions(db):
-    """Crea e migra in modo non distruttivo la tabella dei dispositivi push."""
-    db.execute("""CREATE TABLE IF NOT EXISTS push_subscriptions(
+    """Crea o migra la tabella FCM senza modificare gli altri dati del gestionale."""
+    modern_schema = """CREATE TABLE IF NOT EXISTS push_subscriptions(
         id INTEGER PRIMARY KEY,
         user_id INTEGER NOT NULL,
         username TEXT,
@@ -1604,9 +1604,47 @@ def _ensure_push_subscriptions(db):
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         last_success_at TEXT,
         last_error TEXT
-    )""")
-    # Alcuni database esistenti possono contenere una prima versione incompleta
-    # della tabella. Aggiungiamo solo le colonne mancanti, senza cancellare dati.
+    )"""
+
+    existing = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='push_subscriptions'"
+    ).fetchone()
+    if existing:
+        columns = db.execute("PRAGMA table_info(push_subscriptions)").fetchall()
+        names = {row[1] for row in columns}
+        # Le prime versioni usavano Web Push classico e rendevano obbligatori
+        # endpoint/p256dh/auth. FCM usa invece un singolo token: SQLite non può
+        # rimuovere quei NOT NULL con ALTER TABLE, quindi ricreiamo solo questa
+        # tabella conservando gli eventuali token FCM già validi.
+        legacy_required = {
+            row[1] for row in columns
+            if row[1] in {'endpoint', 'p256dh', 'auth'} and int(row[3] or 0) == 1
+        }
+        if legacy_required:
+            db.execute("DROP TABLE IF EXISTS push_subscriptions_fcm_new")
+            db.execute(modern_schema.replace(
+                'CREATE TABLE IF NOT EXISTS push_subscriptions(',
+                'CREATE TABLE push_subscriptions_fcm_new('
+            ))
+            if 'token' in names:
+                selectable = [
+                    name for name in (
+                        'user_id','username','token','platform','user_agent','active',
+                        'created_at','updated_at','last_success_at','last_error'
+                    ) if name in names
+                ]
+                if 'user_id' in selectable and 'token' in selectable:
+                    cols = ','.join(selectable)
+                    db.execute(f"""INSERT OR IGNORE INTO push_subscriptions_fcm_new ({cols})
+                                   SELECT {cols} FROM push_subscriptions
+                                   WHERE token IS NOT NULL AND length(trim(token)) >= 40""")
+            db.execute("DROP TABLE push_subscriptions")
+            db.execute("ALTER TABLE push_subscriptions_fcm_new RENAME TO push_subscriptions")
+        else:
+            db.execute(modern_schema)
+    else:
+        db.execute(modern_schema)
+
     for name, definition in (
         ("user_id", "INTEGER"),
         ("username", "TEXT"),
