@@ -1,0 +1,1 @@
+In caso di errore, ridistribuire il pacchetto congelato v17.9 UI 2.0 e mantenere lo stesso database persistente. Prima di ogni deploy eseguire un backup.
