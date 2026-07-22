@@ -1,15 +1,11 @@
-TBS Gestionale v20 rev.9 · Stable
-Revisione cumulativa: include integralmente le revisioni v20 rev.1–rev.8.
+TBS Gestionale v20 rev.18 · Development
 
-UI POLISH
-- Versione installata aggiornata e visibile come v20 rev.9 · Stable.
-- Saluto Admin personalizzato: “Bentornato, Elvis”.
-- Header più compatto e meglio proporzionato su smartphone.
-- Tipografia e gerarchia visiva della dashboard rifinite.
-- Card operative e KPI uniformati per altezza, raggi e spaziature.
-- Numeri KPI più leggibili e descrizioni più discrete.
-- Dock inferiore alleggerito e pulsante Catalogo abbassato.
-- Margine inferiore aumentato per evitare contenuti coperti dal dock.
-- Micro-feedback al tocco e rispetto dell’opzione “riduci movimento”.
+Revisione cumulativa: contiene integralmente la v20 rev.9 e la correzione del blocco automatico introdotta nella rev.10.
 
-Nessuna modifica a database, vendite, ordini, permessi o flussi operativi.
+Macro-obiettivo: Centro Operativo.
+
+STATO DEL PACCHETTO
+- Build cumulativa predisposta e numerata per la roadmap.
+- Eredita il motore e le funzioni già presenti nella base rev.9/rev.10.
+- Il macro-obiettivo indicato deve essere verificato pagina per pagina prima dell'uso in produzione.
+- Non è dichiarata Stable.
