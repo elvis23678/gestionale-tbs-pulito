@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v40.1.0 LTS · TBS One App Experience"
+APP_VERSION = "v42.0.0 LTS · Dual App Install Fix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -4967,7 +4967,7 @@ def pwa_manifest():
 @app.get("/manifest-tbs-one.webmanifest")
 def pwa_manifest_gestionale():
     manifest = {
-        "id": "/tbs-one-gestionale",
+        "id": "/tbs-one-gestionale-v42",
         "name": "TBS One Gestionale",
         "short_name": "TBS One",
         "description": "Gestionale operativo TBS One per personale autorizzato",
@@ -5000,7 +5000,7 @@ def pwa_manifest_gestionale():
 @app.get("/manifest-tbs-jewelry.webmanifest")
 def pwa_manifest_jewelry():
     manifest = {
-        "id": "/tbs-jewelry-boutique",
+        "id": "/tbs-jewelry-boutique-v42",
         "name": "TBS Jewelry",
         "short_name": "TBS Jewelry",
         "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
@@ -5066,12 +5066,17 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v41-1-0';
+const CACHE_NAME = 'tbs-one-dual-app-v42-0-0';
 const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
 self.addEventListener('install', event => {{
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
+  event.waitUntil((async () => {{
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.all(STATIC_ASSETS.map(async asset => {{
+      try {{ await cache.add(asset); }} catch (err) {{ console.warn('Asset PWA non memorizzato:', asset, err); }}
+    }}));
+  }})());
   self.skipWaiting();
 }});
 self.addEventListener('activate', event => {{
