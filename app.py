@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v42.0.0 LTS · Dual App Install Fix"
+APP_VERSION = "v43.1.0 DEV · Dual App PWA"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -4955,6 +4955,11 @@ def app_gestionale_start():
 def app_jewelry_start():
     return redirect(url_for("boutique"))
 
+
+@app.get("/healthz")
+def healthz():
+    return jsonify({"ok": True, "version": APP_VERSION, "database": DB_PATH, "ephemeral": DB_IS_EPHEMERAL})
+
 # ============================================================
 # v35.4 PWA FOUNDATION
 # ============================================================
@@ -4967,7 +4972,7 @@ def pwa_manifest():
 @app.get("/manifest-tbs-one.webmanifest")
 def pwa_manifest_gestionale():
     manifest = {
-        "id": "/tbs-one-gestionale-v42",
+        "id": "/tbs-one-gestionale",
         "name": "TBS One Gestionale",
         "short_name": "TBS One",
         "description": "Gestionale operativo TBS One per personale autorizzato",
@@ -4975,6 +4980,7 @@ def pwa_manifest_gestionale():
         "start_url": "/app/gestionale/start?source=pwa",
         "scope": "/",
         "display": "standalone",
+        "prefer_related_applications": False,
         "orientation": "any",
         "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
         "launch_handler": {"client_mode": ["navigate-existing", "auto"]},
@@ -5000,7 +5006,7 @@ def pwa_manifest_gestionale():
 @app.get("/manifest-tbs-jewelry.webmanifest")
 def pwa_manifest_jewelry():
     manifest = {
-        "id": "/tbs-jewelry-boutique-v42",
+        "id": "/tbs-jewelry-boutique",
         "name": "TBS Jewelry",
         "short_name": "TBS Jewelry",
         "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
@@ -5008,6 +5014,7 @@ def pwa_manifest_jewelry():
         "start_url": "/app/jewelry/start?source=pwa",
         "scope": "/",
         "display": "standalone",
+        "prefer_related_applications": False,
         "orientation": "any",
         "categories": ["shopping", "lifestyle"],
         "shortcuts": [
@@ -5066,7 +5073,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v42-0-0';
+const CACHE_NAME = 'tbs-one-dual-app-v43-1-0';
 const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
@@ -5074,7 +5081,12 @@ self.addEventListener('install', event => {{
   event.waitUntil((async () => {{
     const cache = await caches.open(CACHE_NAME);
     await Promise.all(STATIC_ASSETS.map(async asset => {{
-      try {{ await cache.add(asset); }} catch (err) {{ console.warn('Asset PWA non memorizzato:', asset, err); }}
+      try {{
+        const response = await fetch(asset, {{cache:'reload'}});
+        if (response.ok) await cache.put(asset, response.clone());
+      }} catch (error) {{
+        console.warn('Risorsa PWA non precaricata:', asset, error);
+      }}
     }}));
   }})());
   self.skipWaiting();
