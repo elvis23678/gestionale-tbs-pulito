@@ -417,7 +417,7 @@ body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba
 '''
 
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest-tbs-one.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
@@ -856,7 +856,7 @@ def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
 
-LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest-tbs-one.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
 body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#111722 0 180px,#f7f5ef 180px 100%);color:#111722}
 .login-only .login-top{height:180px;padding:24px 26px;display:flex;align-items:flex-start;justify-content:space-between;color:#fff;border-bottom:1px solid rgba(210,174,76,.7)}
 .login-only .login-brand strong{display:block;font-size:38px;line-height:1;letter-spacing:.04em}.login-only .login-brand span{display:block;margin-top:8px;color:#d8b75c;font:700 12px Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase}
@@ -1357,7 +1357,7 @@ PUBLIC_CSS = """
 @media(max-width:760px){.bottom-nav{grid-template-columns:repeat(5,1fr)}.favorite-btn{font-size:18px!important}.instant-search input{font-size:16px}}
 
 """
-PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#080c14'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><meta name='mobile-web-app-capable' content='yes'><meta name='apple-mobile-web-app-capable' content='yes'><meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'><meta name='apple-mobile-web-app-title' content='TBS One'><link rel='manifest' href='/manifest.webmanifest'><link rel='apple-touch-icon' href='/pwa-icon-192.png'><title>{{title}}</title><style>{{css}}.tbs-launch{display:none;position:fixed;inset:0;z-index:99999;background:#080c14;align-items:center;justify-content:center;padding:28px;transition:opacity .3s ease,visibility .3s ease}.tbs-launch.hide{opacity:0;visibility:hidden;pointer-events:none}.tbs-launch-inner{width:min(64vw,240px);max-width:240px;text-align:center}.tbs-launch img{display:block;width:100%;height:auto;object-fit:contain;margin:0 auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.16em;margin-top:18px;font-size:11px;font-weight:700;line-height:1.5}@media (display-mode:standalone){.tbs-launch{display:flex}}@media (max-width:420px){.tbs-launch-inner{width:min(58vw,205px)}}</style></head><body><div id='tbsLaunch' class='tbs-launch' aria-hidden='true'><div class='tbs-launch-inner'><img src='/pwa-icon-512.png' alt='TBS One'><small>BUSINESS OPERATING SYSTEM</small></div></div><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>(function(){const launch=document.getElementById('tbsLaunch');if(!launch)return;const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;if(!standalone){launch.remove();return}launch.setAttribute('aria-hidden','false');const hide=()=>{launch.classList.add('hide');setTimeout(()=>launch.remove(),350)};window.addEventListener('load',()=>setTimeout(hide,420),{once:true});setTimeout(hide,1800)})();document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
+PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><link rel='manifest' href='/manifest-tbs-jewelry.webmanifest'><link rel='apple-touch-icon' href='/jewelry-icon-192.png'><style>{{css}}</style></head><body><div id='tbsLaunch' class='tbs-launch'><div><img src='/pwa-icon-512.png' alt='TBS One'><small>BUSINESS OPERATING SYSTEM</small></div></div><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
 const favKey='tbs_boutique_favorites';const getFav=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(e){return[]}};const setFav=x=>localStorage.setItem(favKey,JSON.stringify(x));function syncFav(){const fav=getFav();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=fav.includes(b.dataset.key);b.classList.toggle('is-favorite',on);b.textContent=on?'♥ Preferito':'♡ Preferito';b.setAttribute('aria-pressed',on?'true':'false')});const c=document.getElementById('favoriteCount');if(c)c.textContent=fav.length;applyFavoriteFilter()};let favoritesOnly=false;function applyFavoriteFilter(){const fav=getFav();document.querySelectorAll('.shop-product').forEach(card=>card.classList.toggle('hidden-by-favorite',favoritesOnly&&!fav.includes(card.dataset.productKey)));const empty=document.getElementById('favoritesEmpty');if(empty)empty.classList.toggle('visible',favoritesOnly&&!document.querySelector('.shop-product:not(.hidden-by-favorite):not(.hidden-by-search)'));updateVisibleCount()};document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(b){e.preventDefault();let fav=getFav();fav=fav.includes(b.dataset.key)?fav.filter(x=>x!==b.dataset.key):[...fav,b.dataset.key];setFav(fav);syncFav()}if(e.target.closest('#favoritesTop,#favoritesBottom')){e.preventDefault();favoritesOnly=!favoritesOnly;document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});applyFavoriteFilter()}});function updateVisibleCount(){const cards=[...document.querySelectorAll('.shop-product')];const n=cards.filter(c=>!c.classList.contains('hidden-by-search')&&!c.classList.contains('hidden-by-favorite')).length;const el=document.getElementById('liveResultCount');if(el)el.textContent=n+' proposte visualizzate'}const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.classList.toggle('hidden-by-search',q&&!c.dataset.search.includes(q)));applyFavoriteFilter()});syncFav();updateVisibleCount()</script></body></html>"""
 def public_page(title, body, **ctx):
     count=sum(int(q) for q in session.get("client_cart",{}).values())
@@ -4934,25 +4934,31 @@ def app_install():
 # ============================================================
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
+    # Compatibilità con installazioni precedenti: il manifest storico ora punta al gestionale.
+    return pwa_manifest_gestionale()
+
+
+@app.get("/manifest-tbs-one.webmanifest")
+def pwa_manifest_gestionale():
     manifest = {
-        "id": "/",
-        "name": "TBS One",
+        "id": "/tbs-one-gestionale",
+        "name": "TBS One Gestionale",
         "short_name": "TBS One",
-        "description": "TBS One · Business Operating System multipiattaforma",
+        "description": "Gestionale operativo TBS One per personale autorizzato",
         "lang": "it-IT",
-        "start_url": "/",
+        "start_url": "/login?source=pwa",
         "scope": "/",
         "display": "standalone",
         "orientation": "any",
         "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
         "launch_handler": {"client_mode": ["navigate-existing", "auto"]},
-        "categories": ["business", "productivity", "shopping"],
+        "categories": ["business", "productivity"],
         "shortcuts": [
             {"name":"Cassa","short_name":"Cassa","url":"/pos","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
-            {"name":"Catalogo","short_name":"Catalogo","url":"/products","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
+            {"name":"Magazzino","short_name":"Magazzino","url":"/products","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
             {"name":"Ordini","short_name":"Ordini","url":"/catalog-requests","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]}
         ],
-        "background_color": "#111722",
+        "background_color": "#080c14",
         "theme_color": "#111722",
         "icons": [
             {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
@@ -4961,7 +4967,37 @@ def pwa_manifest():
     }
     response = jsonify(manifest)
     response.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-    response.headers["Cache-Control"] = "public, max-age=3600"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
+@app.get("/manifest-tbs-jewelry.webmanifest")
+def pwa_manifest_jewelry():
+    manifest = {
+        "id": "/tbs-jewelry-boutique",
+        "name": "TBS Jewelry",
+        "short_name": "TBS Jewelry",
+        "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
+        "lang": "it-IT",
+        "start_url": "/boutique?source=pwa",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "categories": ["shopping", "lifestyle"],
+        "shortcuts": [
+            {"name":"Boutique","short_name":"Boutique","url":"/boutique","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]},
+            {"name":"Carrello","short_name":"Carrello","url":"/client-cart","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]}
+        ],
+        "background_color": "#050505",
+        "theme_color": "#050505",
+        "icons": [
+            {"src": "/jewelry-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/jewelry-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+        ]
+    }
+    response = jsonify(manifest)
+    response.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
 
@@ -4978,6 +5014,14 @@ def pwa_icon_192():
 @app.get("/pwa-icon-512.png")
 def pwa_icon_512():
     return _pwa_icon_file("pwa-icon-512.png")
+
+@app.get("/jewelry-icon-192.png")
+def jewelry_icon_192():
+    return _pwa_icon_file("jewelry-icon-192.png")
+
+@app.get("/jewelry-icon-512.png")
+def jewelry_icon_512():
+    return _pwa_icon_file("jewelry-icon-512.png")
 
 @app.get("/pwa-icon.svg")
 def pwa_icon_svg():
@@ -4996,8 +5040,8 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-app-v40-1-0';
-const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
+const CACHE_NAME = 'tbs-one-dual-app-v41-0-0';
+const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
 self.addEventListener('install', event => {{
