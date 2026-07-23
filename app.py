@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v38.3.0 LTS · Tesoreria completa"
+APP_VERSION = "v40.0.0 LTS · TBS One App Foundation"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -417,7 +417,7 @@ body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba
 '''
 
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS Gestionale"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
@@ -856,7 +856,7 @@ def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
 
-LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS Gestionale"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}
+LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}
 body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#111722 0 180px,#f7f5ef 180px 100%);color:#111722}
 .login-only .login-top{height:180px;padding:24px 26px;display:flex;align-items:flex-start;justify-content:space-between;color:#fff;border-bottom:1px solid rgba(210,174,76,.7)}
 .login-only .login-brand strong{display:block;font-size:38px;line-height:1;letter-spacing:.04em}.login-only .login-brand span{display:block;margin-top:8px;color:#d8b75c;font:700 12px Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase}
@@ -4361,7 +4361,7 @@ SELLER_ALLOWED_ENDPOINTS = {
     'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart',
     'notification_center','notification_count','notification_poll','notification_sales_group','archive_notification_group',
     'notification_detail','archive_notification','universal_search','change_password',
-    'supplier_catalog','request_catalog_item','catalog_requests','cancel_own_catalog_request','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker','push_config','push_status','push_subscribe','push_unsubscribe'
+    'supplier_catalog','request_catalog_item','catalog_requests','cancel_own_catalog_request','app_install','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker','push_config','push_status','push_subscribe','push_unsubscribe'
 }
 
 @app.before_request
@@ -4907,20 +4907,51 @@ def v35_release_center():
 
 
 # ============================================================
+# v40.0 TBS ONE APP FOUNDATION
+# ============================================================
+@app.get("/app")
+def app_install():
+    body = r"""
+    <div class='dash-head'><div><span class='eyebrow'>TBS ONE APP</span><h1>Installa TBS One</h1><p class='muted'>La stessa piattaforma operativa su Mac, Android, iPhone, iPad e Windows.</p></div></div>
+    <div class='grid'>
+      <div class='card'><h2>📱 Smartphone e tablet</h2><p>Apri questa pagina in Chrome o Safari e scegli <b>Aggiungi alla schermata Home</b>.</p><button id='installApp' style='width:100%'>Installa TBS One</button><p id='installHelp' class='muted' style='margin-top:12px'>Il pulsante si attiva quando il dispositivo consente l'installazione.</p></div>
+      <div class='card'><h2>💻 Mac e Windows</h2><p>In Chrome o Edge usa l'icona <b>Installa</b> nella barra degli indirizzi. Su Safari Mac usa <b>File → Aggiungi al Dock</b>.</p><a class='button' href='/' style='display:block;text-align:center;text-decoration:none'>Apri TBS One</a></div>
+    </div>
+    <div class='card'><h2>Un sistema, ovunque tu sia</h2><p>Stessi dati, stessi ruoli e stesse funzioni. Mac resta pienamente operativo; smartphone e tablet aggiungono notifiche, fotocamera e scanner.</p><div class='kpi-grid'><div class='kpi'><strong>macOS</strong><div class='metric'>Completo</div></div><div class='kpi'><strong>Windows</strong><div class='metric'>Completo</div></div><div class='kpi'><strong>Android</strong><div class='metric'>App</div></div><div class='kpi'><strong>iPhone / iPad</strong><div class='metric'>App</div></div></div></div>
+    <script>
+    let deferredPrompt=null;
+    const btn=document.getElementById('installApp');
+    const help=document.getElementById('installHelp');
+    window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;btn.disabled=false;help.textContent='Installazione disponibile su questo dispositivo.';});
+    btn.addEventListener('click',async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;return;}help.textContent='Apri il menu del browser e scegli “Aggiungi alla schermata Home” o “Installa app”.';});
+    window.addEventListener('appinstalled',()=>{help.textContent='TBS One installata correttamente.';});
+    </script>
+    """
+    return page("Installa TBS One", body)
+
+# ============================================================
 # v35.4 PWA FOUNDATION
 # ============================================================
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
     manifest = {
         "id": "/",
-        "name": "TBS Gestionale",
+        "name": "TBS One",
         "short_name": "TBS",
-        "description": "Gestionale operativo Tattoo Beauty Saloon",
+        "description": "TBS One · Business Operating System multipiattaforma",
         "lang": "it-IT",
         "start_url": "/",
         "scope": "/",
         "display": "standalone",
-        "orientation": "portrait-primary",
+        "orientation": "any",
+        "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+        "launch_handler": {"client_mode": ["navigate-existing", "auto"]},
+        "categories": ["business", "productivity", "shopping"],
+        "shortcuts": [
+            {"name":"Cassa","short_name":"Cassa","url":"/pos","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
+            {"name":"Catalogo","short_name":"Catalogo","url":"/products","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
+            {"name":"Ordini","short_name":"Ordini","url":"/catalog-requests","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]}
+        ],
         "background_color": "#111722",
         "theme_color": "#111722",
         "icons": [
@@ -4963,7 +4994,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-3-7';
+const CACHE_NAME = 'tbs-one-app-v40-0-0';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
