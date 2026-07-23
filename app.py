@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.3.3 LTS · Push senza Webpush link"
+APP_VERSION = "v37.3.4 LTS · Ricezione push foreground/background"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -448,7 +448,7 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
     if(!cfgResp.ok) throw new Error('Configurazione push non raggiungibile');
     const settings=await cfgResp.json();
     if(!settings.enabled){const b=showButton('⚠️ Firebase da configurare');b.onclick=()=>alert('Controlla le variabili Firebase su Render.');return;}
-    const [{initializeApp,getApps},{getMessaging,getToken,deleteToken,isSupported}]=await Promise.all([
+    const [{initializeApp,getApps},{getMessaging,getToken,deleteToken,isSupported,onMessage}]=await Promise.all([
       import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')
     ]);
@@ -457,6 +457,17 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
     const messaging=getMessaging(firebaseApp);
     const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
     await navigator.serviceWorker.ready;
+    onMessage(messaging,function(payload){
+      try{
+        const data=payload.data||{};
+        const title=data.title||(payload.notification&&payload.notification.title)||'TBS One';
+        const body=data.body||(payload.notification&&payload.notification.body)||'';
+        if(Notification.permission==='granted'){
+          const n=new Notification(title,{body:body,icon:'/pwa-icon-192.png',badge:'/pwa-icon-192.png',tag:data.kind?'tbs-'+data.kind+'-'+(data.reference_id||''):'tbs-push',requireInteraction:data.kind==='discount_request',data:{url:data.url||'/notifications'}});
+          n.onclick=function(){window.focus();location.href=(data.url||'/notifications');};
+        }
+      }catch(err){console.warn('Visualizzazione push in primo piano fallita',err);}
+    });
     async function registerToken(){
       if(Notification.permission==='denied'){blockedHelp();throw new Error('Permesso notifiche bloccato');}
       const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
@@ -1753,9 +1764,10 @@ def _send_push_for_user(db, user_id, title, message, kind='notification', refere
     push_body=str(message or '')
     for row in tokens:
         try:
+            # Messaggio solo-data: il service worker mostra sempre la notifica in background,
+            # mentre onMessage la mostra quando il gestionale è aperto in primo piano.
             msg=messaging.Message(
                 token=row['token'],
-                notification=messaging.Notification(title=push_title,body=push_body),
                 data={
                     'title':push_title,
                     'body':push_body,
@@ -1766,15 +1778,6 @@ def _send_push_for_user(db, user_id, title, message, kind='notification', refere
                 },
                 webpush=messaging.WebpushConfig(
                     headers={'Urgency':'high','TTL':'300'},
-                    notification=messaging.WebpushNotification(
-                        title=push_title,
-                        body=push_body,
-                        icon='/pwa-icon-192.png',
-                        badge='/pwa-icon-192.png',
-                        tag=f"tbs-{kind}-{reference_id or user_id}",
-                        require_interaction=(kind == 'discount_request'),
-                        data={'url':target_url},
-                    ),
                 ),
             )
             firebase_message_id=messaging.send(msg)
@@ -4789,7 +4792,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-3-0';
+const CACHE_NAME = 'tbs-pwa-v37-3-4';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 self.addEventListener('install', event => {{
@@ -4818,7 +4821,6 @@ if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
   const messaging=firebase.messaging();
   messaging.onBackgroundMessage(payload => {{
     const data=payload.data || {{}};
-    if(payload.notification) return;
     const title=data.title || 'TBS One';
     const options={{
       body:data.body || '',
