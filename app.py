@@ -1357,7 +1357,7 @@ PUBLIC_CSS = """
 @media(max-width:760px){.bottom-nav{grid-template-columns:repeat(5,1fr)}.favorite-btn{font-size:18px!important}.instant-search input{font-size:16px}}
 
 """
-PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><link rel='manifest' href='/manifest-tbs-jewelry.webmanifest'><link rel='apple-touch-icon' href='/jewelry-icon-192.png'><style>{{css}}</style></head><body><div id='tbsLaunch' class='tbs-launch'><div><img src='/pwa-icon-512.png' alt='TBS One'><small>BUSINESS OPERATING SYSTEM</small></div></div><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
+PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><link rel='manifest' href='/manifest-tbs-jewelry.webmanifest'><link rel='apple-touch-icon' href='/jewelry-icon-192.png'><style>{{css}}</style></head><body><div id='tbsLaunch' class='tbs-launch'><div><img src='/jewelry-icon-512.png' alt='TBS Jewelry'><small>JEWELRY ATELIER</small></div></div><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
 const favKey='tbs_boutique_favorites';const getFav=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(e){return[]}};const setFav=x=>localStorage.setItem(favKey,JSON.stringify(x));function syncFav(){const fav=getFav();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=fav.includes(b.dataset.key);b.classList.toggle('is-favorite',on);b.textContent=on?'♥ Preferito':'♡ Preferito';b.setAttribute('aria-pressed',on?'true':'false')});const c=document.getElementById('favoriteCount');if(c)c.textContent=fav.length;applyFavoriteFilter()};let favoritesOnly=false;function applyFavoriteFilter(){const fav=getFav();document.querySelectorAll('.shop-product').forEach(card=>card.classList.toggle('hidden-by-favorite',favoritesOnly&&!fav.includes(card.dataset.productKey)));const empty=document.getElementById('favoritesEmpty');if(empty)empty.classList.toggle('visible',favoritesOnly&&!document.querySelector('.shop-product:not(.hidden-by-favorite):not(.hidden-by-search)'));updateVisibleCount()};document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(b){e.preventDefault();let fav=getFav();fav=fav.includes(b.dataset.key)?fav.filter(x=>x!==b.dataset.key):[...fav,b.dataset.key];setFav(fav);syncFav()}if(e.target.closest('#favoritesTop,#favoritesBottom')){e.preventDefault();favoritesOnly=!favoritesOnly;document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});applyFavoriteFilter()}});function updateVisibleCount(){const cards=[...document.querySelectorAll('.shop-product')];const n=cards.filter(c=>!c.classList.contains('hidden-by-search')&&!c.classList.contains('hidden-by-favorite')).length;const el=document.getElementById('liveResultCount');if(el)el.textContent=n+' proposte visualizzate'}const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.classList.toggle('hidden-by-search',q&&!c.dataset.search.includes(q)));applyFavoriteFilter()});syncFav();updateVisibleCount()</script></body></html>"""
 def public_page(title, body, **ctx):
     count=sum(int(q) for q in session.get("client_cart",{}).values())
@@ -4911,23 +4911,49 @@ def v35_release_center():
 # ============================================================
 @app.get("/app")
 def app_install():
-    body = r"""
-    <div class='dash-head'><div><span class='eyebrow'>TBS ONE APP</span><h1>Installa TBS One</h1><p class='muted'>La stessa piattaforma operativa su Mac, Android, iPhone, iPad e Windows.</p></div></div>
-    <div class='grid'>
-      <div class='card'><h2>📱 Smartphone e tablet</h2><p>Apri questa pagina in Chrome o Safari e scegli <b>Aggiungi alla schermata Home</b>.</p><button id='installApp' style='width:100%'>Installa TBS One</button><p id='installHelp' class='muted' style='margin-top:12px'>Il pulsante si attiva quando il dispositivo consente l'installazione.</p></div>
-      <div class='card'><h2>💻 Mac e Windows</h2><p>In Chrome o Edge usa l'icona <b>Installa</b> nella barra degli indirizzi. Su Safari Mac usa <b>File → Aggiungi al Dock</b>.</p><a class='button' href='/' style='display:block;text-align:center;text-decoration:none'>Apri TBS One</a></div>
-    </div>
-    <div class='card'><h2>Un sistema, ovunque tu sia</h2><p>Stessi dati, stessi ruoli e stesse funzioni. Mac resta pienamente operativo; smartphone e tablet aggiungono notifiche, fotocamera e scanner.</p><div class='kpi-grid'><div class='kpi'><strong>macOS</strong><div class='metric'>Completo</div></div><div class='kpi'><strong>Windows</strong><div class='metric'>Completo</div></div><div class='kpi'><strong>Android</strong><div class='metric'>App</div></div><div class='kpi'><strong>iPhone / iPad</strong><div class='metric'>App</div></div></div></div>
-    <script>
-    let deferredPrompt=null;
-    const btn=document.getElementById('installApp');
-    const help=document.getElementById('installHelp');
-    window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;btn.disabled=false;help.textContent='Installazione disponibile su questo dispositivo.';});
-    btn.addEventListener('click',async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;return;}help.textContent='Apri il menu del browser e scegli “Aggiungi alla schermata Home” o “Installa app”.';});
-    window.addEventListener('appinstalled',()=>{help.textContent='TBS One installata correttamente.';});
-    </script>
-    """
-    return page("Installa TBS One", body)
+    """Hub pubblico per installare separatamente le due applicazioni TBS."""
+    html = r"""<!doctype html><html lang="it"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080c14"><title>TBS One - Scegli applicazione</title>
+<style>
+:root{--bg:#080c14;--card:#121925;--gold:#d8b75c;--text:#f8f5ec;--muted:#aeb5c1}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#202938 0,#080c14 52%);color:var(--text);font-family:Inter,system-ui,sans-serif;padding:28px 18px}.wrap{max-width:900px;margin:auto}.brand{text-align:center;margin:22px 0 34px}.brand h1{font-family:Georgia,serif;font-size:48px;margin:0;color:var(--gold)}.brand p{color:var(--muted);font-size:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}.card{background:rgba(18,25,37,.95);border:1px solid rgba(216,183,92,.28);border-radius:24px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.32)}.icon{width:82px;height:82px;border-radius:20px;display:block;margin-bottom:18px}.card h2{font-family:Georgia,serif;font-size:30px;margin:0 0 10px}.card p{color:var(--muted);line-height:1.55;min-height:72px}.btn{display:block;padding:15px 18px;border-radius:14px;text-align:center;text-decoration:none;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#111722}.note{text-align:center;color:var(--muted);margin-top:28px;line-height:1.5}
+</style></head><body><div class="wrap"><div class="brand"><h1>TBS ONE</h1><p>Due applicazioni separate, un unico sistema.</p></div><div class="grid">
+<div class="card"><img class="icon" src="/pwa-icon-192.png"><h2>TBS One Gestionale</h2><p>Per Admin, Gestore e Venditore: cassa, magazzino, ordini, tesoreria e sistema.</p><a class="btn" href="/app/gestionale">Installa Gestionale</a></div>
+<div class="card"><img class="icon" src="/jewelry-icon-192.png"><h2>TBS Jewelry</h2><p>Per i clienti: boutique, collezione, carrello e richieste d'ordine.</p><a class="btn" href="/app/jewelry">Installa Boutique</a></div>
+</div><p class="note">Apri ciascuna pagina in Chrome e installa le due app una alla volta.</p></div></body></html>"""
+    return render_template_string(html)
+
+
+def _install_page(app_name, subtitle, manifest_url, icon_url, open_url, theme):
+    html = r"""<!doctype html><html lang="it"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="{{theme}}"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes"><title>Installa {{app_name}}</title>
+<link rel="manifest" href="{{manifest_url}}"><link rel="apple-touch-icon" href="{{icon_url}}">
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at top,#202938,#080c14 58%);color:#f8f5ec;font-family:Inter,system-ui,sans-serif;padding:20px}.box{width:min(520px,100%);background:#121925;border:1px solid rgba(216,183,92,.35);border-radius:26px;padding:30px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.38)}img{width:112px;height:112px;border-radius:26px}.eyebrow{color:#d8b75c;letter-spacing:.16em;font-weight:900;font-size:12px}.box h1{font-family:Georgia,serif;font-size:38px;margin:14px 0 8px}.box p{color:#b9c0cb;line-height:1.55}.btn{width:100%;border:0;border-radius:15px;padding:16px;margin-top:12px;font-size:17px;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#101722;cursor:pointer}.secondary{display:block;color:#ead18a;text-decoration:none;margin-top:18px;font-weight:800}.help{font-size:13px;min-height:42px}</style></head><body><main class="box"><img src="{{icon_url}}" alt=""><div class="eyebrow">APPLICAZIONE INSTALLABILE</div><h1>{{app_name}}</h1><p>{{subtitle}}</p><button class="btn" id="installBtn">Installa sul dispositivo</button><p class="help" id="help">Attendi qualche secondo. Se il pulsante non si attiva, usa il menu di Chrome e scegli Installa app.</p><a class="secondary" href="{{open_url}}">Apri senza installare</a><a class="secondary" href="/app">Torna alle due app</a></main>
+<script>let promptEvent=null;const btn=document.getElementById('installBtn'),help=document.getElementById('help');window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;help.textContent='Applicazione pronta per essere installata.'});btn.onclick=async()=>{if(promptEvent){promptEvent.prompt();const r=await promptEvent.userChoice;help.textContent=r.outcome==='accepted'?'Installazione avviata.':'Installazione annullata.';promptEvent=null}else{help.textContent='Apri il menu di Chrome e premi Installa app oppure Aggiungi a schermata Home.'}};window.addEventListener('appinstalled',()=>help.textContent='Installazione completata correttamente.');if('serviceWorker'in navigator){navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'}).catch(()=>{});}</script></body></html>"""
+    return render_template_string(html, app_name=app_name, subtitle=subtitle, manifest_url=manifest_url, icon_url=icon_url, open_url=open_url, theme=theme)
+
+
+@app.get("/app/gestionale")
+def app_install_gestionale():
+    return _install_page("TBS One Gestionale", "Accesso riservato al personale TBS.", "/manifest-tbs-one.webmanifest", "/pwa-icon-192.png", "/app/gestionale/start", "#111722")
+
+
+@app.get("/app/jewelry")
+def app_install_jewelry():
+    return _install_page("TBS Jewelry", "Boutique clienti per catalogo, carrello e ordini.", "/manifest-tbs-jewelry.webmanifest", "/jewelry-icon-192.png", "/app/jewelry/start", "#050505")
+
+
+@app.get("/app/gestionale/start")
+def app_gestionale_start():
+    return redirect(url_for("home") if session.get("user_id") else url_for("login"))
+
+
+@app.get("/app/jewelry/start")
+def app_jewelry_start():
+    return redirect(url_for("boutique"))
 
 # ============================================================
 # v35.4 PWA FOUNDATION
@@ -4946,7 +4972,7 @@ def pwa_manifest_gestionale():
         "short_name": "TBS One",
         "description": "Gestionale operativo TBS One per personale autorizzato",
         "lang": "it-IT",
-        "start_url": "/login?source=pwa",
+        "start_url": "/app/gestionale/start?source=pwa",
         "scope": "/",
         "display": "standalone",
         "orientation": "any",
@@ -4979,14 +5005,14 @@ def pwa_manifest_jewelry():
         "short_name": "TBS Jewelry",
         "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
         "lang": "it-IT",
-        "start_url": "/boutique?source=pwa",
+        "start_url": "/app/jewelry/start?source=pwa",
         "scope": "/",
         "display": "standalone",
         "orientation": "any",
         "categories": ["shopping", "lifestyle"],
         "shortcuts": [
             {"name":"Boutique","short_name":"Boutique","url":"/boutique","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]},
-            {"name":"Carrello","short_name":"Carrello","url":"/client-cart","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]}
+            {"name":"Carrello","short_name":"Carrello","url":"/boutique/carrello","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]}
         ],
         "background_color": "#050505",
         "theme_color": "#050505",
@@ -5040,7 +5066,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v41-0-0';
+const CACHE_NAME = 'tbs-one-dual-app-v41-1-0';
 const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
