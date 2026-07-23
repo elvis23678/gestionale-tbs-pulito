@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.3.7 LTS · Apertura notifiche"
+APP_VERSION = "v38.1.0 LTS · Backup e ripristino"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -2525,7 +2525,24 @@ def price_check():
         by_id={x["id"]:x for x in found}
         recent_rows=[by_id[x] for x in recent_ids if x in by_id]
     is_manager=session.get("role") in ("admin","manager")
-    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><a class="view" href="{{url_for(\'scan_product\',mode=\'assistant\')}}" style="display:flex;align-items:center;justify-content:center;margin-top:10px;padding:13px;border-radius:10px;text-decoration:none;color:white;font-weight:900">📷 SCANSIONA QR PRODOTTO</a><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
+    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><a class="view" href="{{url_for(\'scan_assistant_product\')}}" style="display:flex;align-items:center;justify-content:center;margin-top:10px;padding:13px;border-radius:10px;text-decoration:none;color:white;font-weight:900">📷 SCANSIONA QR PRODOTTO</a><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
+
+@app.route("/price-check/scan", methods=["GET", "POST"])
+@login_required
+def scan_assistant_product():
+    if request.method == "POST":
+        scanned = (request.form.get("badge_payload") or request.form.get("code") or "").strip()
+        if not scanned:
+            flash("Nessun codice QR rilevato.")
+            return redirect(url_for("scan_assistant_product"))
+        with connect() as db:
+            product = _find_product_by_scan(db, scanned)
+        if not product:
+            flash(f"Nessun prodotto trovato per il codice: {scanned}")
+            return redirect(url_for("scan_assistant_product"))
+        return redirect(url_for("price_check", q=product["brand_code"]))
+    scanner = product_scanner_html(url_for("scan_assistant_product"))
+    return page("Scanner Assistente Banco", """<p><a href="{{url_for('price_check')}}">← Assistente Banco</a></p><h1>Scansiona QR prodotto</h1><p class="muted">La scansione apre esclusivamente prezzo e disponibilità nell'Assistente Banco.</p>""" + scanner)
 
 @app.route("/products/scan",methods=["GET","POST"])
 @login_required
@@ -3934,67 +3951,80 @@ def reset_user_password(user_id):
 @app.get("/admin/backup")
 @role_required("admin")
 def backup_database():
-    if not os.path.exists(DB_PATH):
-        flash("Database non trovato.")
-        return redirect(url_for("dashboard"))
-    stamp = now_rome().strftime("%Y%m%d_%H%M%S")
-    backup_path = os.path.join(BACKUP_DIR, f"gestionale_tbs_backup_{stamp}.db")
-    make_consistent_backup(backup_path)
-    with connect() as db:
-        log_action(db, "Backup database", details=os.path.basename(backup_path))
-        db.commit()
-    return send_file(backup_path, as_attachment=True, download_name=os.path.basename(backup_path), mimetype="application/octet-stream")
+    try:
+        backup_path = create_verified_backup("manuale")
+        with connect() as db:
+            log_action(db, "Backup database", details=os.path.basename(backup_path)); db.commit()
+        return send_file(backup_path, as_attachment=True, download_name=os.path.basename(backup_path), mimetype="application/octet-stream")
+    except Exception as exc:
+        flash(f"Backup non riuscito: {exc}")
+        return redirect(url_for("system_status"))
+
+@app.get("/admin/backups/<path:filename>")
+@role_required("admin")
+def download_saved_backup(filename):
+    safe=os.path.basename(filename); path=os.path.join(BACKUP_DIR,safe)
+    if not safe.endswith(".db") or not os.path.isfile(path):
+        flash("Backup non trovato."); return redirect(url_for("system_status"))
+    return send_file(path,as_attachment=True,download_name=safe,mimetype="application/octet-stream")
+
+@app.post("/admin/backups/<path:filename>/restore")
+@role_required("admin")
+def restore_saved_backup(filename):
+    safe=os.path.basename(filename); source=os.path.join(BACKUP_DIR,safe)
+    if not safe.endswith(".db") or not os.path.isfile(source):
+        flash("Backup non trovato."); return redirect(url_for("system_status"))
+    valid,detail=database_integrity(source)
+    if not valid:
+        flash(f"Ripristino annullato: backup non valido ({detail})."); return redirect(url_for("system_status"))
+    safety=create_verified_backup("prima_ripristino")
+    temp=DB_PATH+".restore.tmp"; shutil.copy2(source,temp); os.replace(temp,DB_PATH); init_db()
+    flash(f"Backup {safe} ripristinato. Copia di sicurezza: {os.path.basename(safety)}")
+    return redirect(url_for("system_status"))
+
+@app.post("/admin/backups/<path:filename>/delete")
+@role_required("admin")
+def delete_saved_backup(filename):
+    safe=os.path.basename(filename); path=os.path.join(BACKUP_DIR,safe)
+    if safe.endswith(".db") and os.path.isfile(path):
+        os.remove(path); flash("Backup eliminato.")
+    else: flash("Backup non trovato.")
+    return redirect(url_for("system_status"))
 
 @app.route("/admin/system-status", methods=["GET", "POST"])
 @role_required("admin")
 def system_status():
     if request.method == "POST":
-        upload = request.files.get("database")
+        upload=request.files.get("database")
         if not upload or not upload.filename:
-            flash("Seleziona un file .db da ripristinare.")
-            return redirect(url_for("system_status"))
-        temp_fd, temp_path = tempfile.mkstemp(prefix="tbs_restore_", suffix=".db")
-        os.close(temp_fd)
+            flash("Seleziona un file .db da ripristinare."); return redirect(url_for("system_status"))
+        fd,temp_path=tempfile.mkstemp(prefix="tbs_restore_",suffix=".db"); os.close(fd)
         try:
-            upload.save(temp_path)
-            valid, detail = database_integrity(temp_path)
+            upload.save(temp_path); valid,detail=database_integrity(temp_path)
             if not valid:
-                flash(f"Ripristino annullato: database non valido ({detail}).")
-                return redirect(url_for("system_status"))
-            safety = os.path.join(BACKUP_DIR, f"prima_ripristino_{now_rome().strftime('%Y%m%d_%H%M%S')}.db")
-            if os.path.exists(DB_PATH):
-                make_consistent_backup(safety)
-            os.replace(temp_path, DB_PATH)
-            init_db()
-            flash("Database ripristinato correttamente. È stato creato anche un backup di sicurezza.")
+                flash(f"Ripristino annullato: database non valido ({detail})."); return redirect(url_for("system_status"))
+            safety=create_verified_backup("prima_ripristino") if os.path.exists(DB_PATH) else None
+            os.replace(temp_path,DB_PATH); init_db()
+            flash("Database ripristinato correttamente." + (f" Backup di sicurezza: {os.path.basename(safety)}." if safety else ""))
             return redirect(url_for("system_status"))
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-    valid, integrity = database_integrity(DB_PATH)
+            if os.path.exists(temp_path): os.remove(temp_path)
+    valid,integrity=database_integrity(DB_PATH)
     with connect() as db:
-        counts = {}
-        for table in ("users", "products", "sales", "customer_orders", "supplier_orders", "supplier_catalog"):
-            try:
-                counts[table] = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            except sqlite3.Error:
-                counts[table] = 0
-    backups = sorted(Path(BACKUP_DIR).glob("*.db"), key=lambda x: x.stat().st_mtime, reverse=True)
-    last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime, tz=ROME_TZ).strftime("%d/%m/%Y %H:%M") if backups else None
-    size_mb = os.path.getsize(DB_PATH) / (1024 * 1024) if os.path.exists(DB_PATH) else 0
-    storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
-    body = '''<h1>Stato del sistema</h1>
-    <div class="grid">
-      <div class="card"><div class="muted">Database</div><div class="metric">{{ "OK" if valid else "ERRORE" }}</div><p>{{ integrity }}</p></div>
-      <div class="card"><div class="muted">Archiviazione</div><div class="metric" style="font-size:22px">{{ storage }}</div><p class="muted">{{ db_path }}</p></div>
-      <div class="card"><div class="muted">Versione</div><div class="metric" style="font-size:22px">{{ version }}</div><p>{{ "%.2f"|format(size_mb) }} MB</p></div>
-      <div class="card"><div class="muted">Ultimo backup locale</div><div class="metric" style="font-size:22px">{{ last_backup or "Non presente" }}</div></div>
-    </div>
-    <div class="card"><h3>Contenuto</h3><p>Utenti: <b>{{ counts.users }}</b> · Prodotti: <b>{{ counts.products }}</b> · Vendite: <b>{{ counts.sales }}</b> · Ordini clienti: <b>{{ counts.customer_orders }}</b> · Ordini fornitore: <b>{{ counts.supplier_orders }}</b> · Catalogo: <b>{{ counts.supplier_catalog }}</b></p></div>
-    {% if ephemeral %}<div class="card" style="border-left:5px solid #b45309"><h3>Intervento necessario</h3><p>Il database si trova in <code>/tmp</code>: Render può cancellarlo durante riavvii o deploy. Prima di usare questa versione in produzione configura un disco persistente montato su <code>/var/data</code>, oppure imposta <code>DATABASE_PATH</code> verso uno spazio persistente.</p></div>{% endif %}
-    <div class="card"><h3>Backup e ripristino</h3>{% if not ephemeral %}<p><b>Protezione attiva:</b> database e backup locali sono salvati sul disco persistente.</p>{% endif %}<p><a href="{{ url_for('backup_database') }}">Scarica backup verificato</a></p><form method="post" enctype="multipart/form-data" onsubmit="return confirm('Confermi il ripristino? Il database attuale sarà salvato prima della sostituzione.')"><label>Ripristina un backup SQLite</label><input type="file" name="database" accept=".db,.sqlite,.sqlite3" required><button class="secondary">Verifica e ripristina</button></form></div>'''
-    return page("Stato sistema", body, valid=valid, integrity=integrity, storage=storage, db_path=DB_PATH, version=APP_VERSION, size_mb=size_mb, last_backup=last_backup, counts=counts, ephemeral=DB_IS_EPHEMERAL)
+        counts={}
+        for table in ("users","products","sales","customer_orders","supplier_orders","supplier_catalog"):
+            try: counts[table]=db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            except sqlite3.Error: counts[table]=0
+    files=sorted(Path(BACKUP_DIR).glob("*.db"),key=lambda x:x.stat().st_mtime,reverse=True)
+    backups=[]
+    for item in files[:50]:
+        ok,detail=database_integrity(str(item))
+        backups.append({"name":item.name,"date":datetime.fromtimestamp(item.stat().st_mtime,tz=ROME_TZ).strftime("%d/%m/%Y %H:%M"),"size":item.stat().st_size/(1024*1024),"valid":ok,"kind":"Automatico" if item.name.startswith("automatico_") else "Pre-ripristino" if item.name.startswith("prima_ripristino_") else "Manuale"})
+    last_backup=backups[0]["date"] if backups else None
+    size_mb=os.path.getsize(DB_PATH)/(1024*1024) if os.path.exists(DB_PATH) else 0
+    storage="Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
+    body="""<h1>💾 Backup e stato del sistema</h1><div class='grid'><div class='card'><div class='muted'>Database</div><div class='metric'>{{'OK' if valid else 'ERRORE'}}</div><p>{{integrity}}</p></div><div class='card'><div class='muted'>Archiviazione</div><div class='metric' style='font-size:22px'>{{storage}}</div><p class='muted'>{{db_path}}</p></div><div class='card'><div class='muted'>Versione</div><div class='metric' style='font-size:22px'>{{version}}</div><p>{{'%.2f'|format(size_mb)}} MB</p></div><div class='card'><div class='muted'>Ultimo backup</div><div class='metric' style='font-size:22px'>{{last_backup or 'Non presente'}}</div><p>Automatico giornaliero · conservazione {{retention}} giorni</p></div></div>{% if ephemeral %}<div class='card' style='border-left:5px solid #b45309'><h3>Attenzione</h3><p>Il database è in /tmp: configura il disco persistente Render.</p></div>{% endif %}<div class='grid'><div class='card'><h3>Crea backup</h3><p>Copia verificata e pronta da scaricare.</p><a class='view' style='display:inline-block;padding:12px 16px;border-radius:9px;text-decoration:none;color:white;font-weight:900' href='{{url_for("backup_database")}}'>⬇️ Crea e scarica backup</a></div><div class='card'><h3>Ripristina da file</h3><form method='post' enctype='multipart/form-data' onsubmit="return confirm('Confermi il ripristino?')"><input type='file' name='database' accept='.db,.sqlite,.sqlite3' required><button class='secondary'>Verifica e ripristina</button></form></div></div><div class='card'><h3>Storico backup</h3>{% if backups %}<div style='overflow-x:auto'><table><thead><tr><th>Tipo</th><th>Data</th><th>Dimensione</th><th>Integrità</th><th>Azioni</th></tr></thead><tbody>{% for b in backups %}<tr><td><b>{{b.kind}}</b><br><small>{{b.name}}</small></td><td>{{b.date}}</td><td>{{'%.2f'|format(b.size)}} MB</td><td>{{'OK' if b.valid else 'ERRORE'}}</td><td><div class='inline'><a href='{{url_for("download_saved_backup",filename=b.name)}}'>Scarica</a><form method='post' action='{{url_for("restore_saved_backup",filename=b.name)}}' onsubmit="return confirm('Ripristinare questo backup?')"><button class='secondary'>Ripristina</button></form><form method='post' action='{{url_for("delete_saved_backup",filename=b.name)}}' onsubmit="return confirm('Eliminare questo backup?')"><button class='danger'>Elimina</button></form></div></td></tr>{% endfor %}</tbody></table></div>{% else %}<p>Nessun backup presente.</p>{% endif %}</div>"""
+    return page("Backup e stato sistema",body,valid=valid,integrity=integrity,storage=storage,db_path=DB_PATH,version=APP_VERSION,size_mb=size_mb,last_backup=last_backup,counts=counts,ephemeral=DB_IS_EPHEMERAL,backups=backups,retention=_BACKUP_RETENTION_DAYS)
 
 @app.get("/sales")
 @role_required("admin","manager")
