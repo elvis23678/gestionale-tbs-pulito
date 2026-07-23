@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.3.1 LTS · Diagnostica Notifiche"
+APP_VERSION = "v37.3.3 LTS · Push senza Webpush link"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -1663,11 +1663,28 @@ def _ensure_push_subscriptions(db):
 
 
 def _push_url_for(kind, reference_type=None, reference_id=None):
+    """Restituisce sempre un URL HTTPS assoluto, richiesto da Firebase Web Push."""
     if kind == 'discount_request':
-        return '/discount-approvals'
-    if kind in ('customer_order','catalog_request','order_arrived'):
-        return '/customer-orders'
-    return '/notifications'
+        path = '/discount-approvals'
+    elif kind in ('customer_order','catalog_request','order_arrived'):
+        path = '/customer-orders'
+    else:
+        path = '/notifications'
+
+    # Su Render RENDER_EXTERNAL_URL è l'origine pubblica del servizio.
+    # APP_BASE_URL consente un eventuale dominio personalizzato futuro.
+    base_url = (os.environ.get('APP_BASE_URL') or
+                os.environ.get('RENDER_EXTERNAL_URL') or
+                request.host_url or '').strip().rstrip('/')
+
+    if not base_url:
+        base_url = 'https://gestionale-tbs-pulito.onrender.com'
+    elif base_url.startswith('http://'):
+        base_url = 'https://' + base_url[len('http://'):]
+    elif not base_url.startswith('https://'):
+        base_url = 'https://' + base_url.lstrip('/')
+
+    return f"{base_url}{path}"
 
 
 def _ensure_push_delivery_log(db):
@@ -1758,7 +1775,6 @@ def _send_push_for_user(db, user_id, title, message, kind='notification', refere
                         require_interaction=(kind == 'discount_request'),
                         data={'url':target_url},
                     ),
-                    fcm_options=messaging.WebpushFCMOptions(link=target_url),
                 ),
             )
             firebase_message_id=messaging.send(msg)
