@@ -16,7 +16,7 @@ import tempfile
 import json
 import threading
 
-from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response
+from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response, make_response
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.1.0 DEV · Dual App PWA"
+APP_VERSION = "v43.2.0 DEV · Dual App Install Ready"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -4926,14 +4926,35 @@ def app_install():
 
 
 def _install_page(app_name, subtitle, manifest_url, icon_url, open_url, theme):
+    """Pagina dedicata all'installazione di una singola PWA.
+
+    Ogni pagina espone un solo manifest: Chrome può quindi distinguere
+    TBS One Gestionale e TBS Jewelry anche se condividono lo stesso dominio.
+    """
     html = r"""<!doctype html><html lang="it"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="{{theme}}"><meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes"><title>Installa {{app_name}}</title>
-<link rel="manifest" href="{{manifest_url}}"><link rel="apple-touch-icon" href="{{icon_url}}">
-<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at top,#202938,#080c14 58%);color:#f8f5ec;font-family:Inter,system-ui,sans-serif;padding:20px}.box{width:min(520px,100%);background:#121925;border:1px solid rgba(216,183,92,.35);border-radius:26px;padding:30px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.38)}img{width:112px;height:112px;border-radius:26px}.eyebrow{color:#d8b75c;letter-spacing:.16em;font-weight:900;font-size:12px}.box h1{font-family:Georgia,serif;font-size:38px;margin:14px 0 8px}.box p{color:#b9c0cb;line-height:1.55}.btn{width:100%;border:0;border-radius:15px;padding:16px;margin-top:12px;font-size:17px;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#101722;cursor:pointer}.secondary{display:block;color:#ead18a;text-decoration:none;margin-top:18px;font-weight:800}.help{font-size:13px;min-height:42px}</style></head><body><main class="box"><img src="{{icon_url}}" alt=""><div class="eyebrow">APPLICAZIONE INSTALLABILE</div><h1>{{app_name}}</h1><p>{{subtitle}}</p><button class="btn" id="installBtn">Installa sul dispositivo</button><p class="help" id="help">Attendi qualche secondo. Se il pulsante non si attiva, usa il menu di Chrome e scegli Installa app.</p><a class="secondary" href="{{open_url}}">Apri senza installare</a><a class="secondary" href="/app">Torna alle due app</a></main>
-<script>let promptEvent=null;const btn=document.getElementById('installBtn'),help=document.getElementById('help');window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;help.textContent='Applicazione pronta per essere installata.'});btn.onclick=async()=>{if(promptEvent){promptEvent.prompt();const r=await promptEvent.userChoice;help.textContent=r.outcome==='accepted'?'Installazione avviata.':'Installazione annullata.';promptEvent=null}else{help.textContent='Apri il menu di Chrome e premi Installa app oppure Aggiungi a schermata Home.'}};window.addEventListener('appinstalled',()=>help.textContent='Installazione completata correttamente.');if('serviceWorker'in navigator){navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'}).catch(()=>{});}</script></body></html>"""
-    return render_template_string(html, app_name=app_name, subtitle=subtitle, manifest_url=manifest_url, icon_url=icon_url, open_url=open_url, theme=theme)
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="application-name" content="{{app_name}}"><meta name="apple-mobile-web-app-title" content="{{app_name}}">
+<meta name="description" content="{{subtitle}}"><title>Installa {{app_name}}</title>
+<link rel="manifest" href="{{manifest_url}}?v=4320"><link rel="icon" type="image/png" sizes="192x192" href="{{icon_url}}?v=4320"><link rel="apple-touch-icon" href="{{icon_url}}?v=4320">
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at top,#202938,#080c14 58%);color:#f8f5ec;font-family:Inter,system-ui,sans-serif;padding:20px}.box{width:min(520px,100%);background:#121925;border:1px solid rgba(216,183,92,.35);border-radius:26px;padding:30px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.38)}img{width:112px;height:112px;border-radius:26px}.eyebrow{color:#d8b75c;letter-spacing:.16em;font-weight:900;font-size:12px}.box h1{font-family:Georgia,serif;font-size:38px;margin:14px 0 8px}.box p{color:#b9c0cb;line-height:1.55}.btn{width:100%;border:0;border-radius:15px;padding:16px;margin-top:12px;font-size:17px;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#101722;cursor:pointer}.btn[disabled]{opacity:.62;cursor:wait}.secondary{display:block;color:#ead18a;text-decoration:none;margin-top:18px;font-weight:800}.help{font-size:14px;min-height:46px}.status{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:8px 12px;background:#0c1320;color:#d8b75c;font-size:12px;font-weight:800;margin:4px 0 8px}.dot{width:8px;height:8px;border-radius:50%;background:#d8b75c;box-shadow:0 0 12px rgba(216,183,92,.8)}</style></head><body><main class="box"><img src="{{icon_url}}?v=4320" alt=""><div class="eyebrow">APPLICAZIONE INSTALLABILE</div><h1>{{app_name}}</h1><p>{{subtitle}}</p><div class="status"><span class="dot"></span><span id="statusText">Preparazione installazione…</span></div><button class="btn" id="installBtn" disabled>Attendi…</button><p class="help" id="help">Chrome sta verificando manifest, icone e service worker.</p><a class="secondary" href="{{open_url}}">Apri senza installare</a><a class="secondary" href="/app">Torna alle due app</a></main>
+<script>
+let promptEvent=null;
+const btn=document.getElementById('installBtn');
+const help=document.getElementById('help');
+const statusText=document.getElementById('statusText');
+const isStandalone=window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+function readyFallback(){btn.disabled=false;btn.textContent='Installa sul dispositivo';statusText.textContent='Pronta';help.textContent='Premi il pulsante. Se Chrome non mostra la finestra, usa il menu ⋮ e scegli Installa app.';}
+if(isStandalone){btn.disabled=true;btn.textContent='App già installata';statusText.textContent='Installata';help.textContent='Questa applicazione è già aperta in modalità app.';}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;btn.disabled=false;btn.textContent='Installa sul dispositivo';statusText.textContent='Installazione disponibile';help.textContent='Premi il pulsante per installare questa app con la sua icona dedicata.';});
+btn.addEventListener('click',async()=>{if(isStandalone)return;if(promptEvent){promptEvent.prompt();const result=await promptEvent.userChoice;help.textContent=result.outcome==='accepted'?'Installazione avviata. Cerca l’icona nella schermata Home.':'Installazione annullata: puoi riprovare quando vuoi.';promptEvent=null;}else{help.textContent='Nel menu ⋮ di Chrome premi “Installa app”. Se appare “Apri TBS One”, disinstalla prima la vecchia app e ricarica questa pagina.';}});
+window.addEventListener('appinstalled',()=>{btn.disabled=true;btn.textContent='Installazione completata';statusText.textContent='Installata';help.textContent='Applicazione installata correttamente.';});
+(async()=>{if(isStandalone)return;try{if(!('serviceWorker' in navigator))throw new Error('Service worker non supportato');const reg=await navigator.serviceWorker.register('/service-worker.js?v=4320',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;await reg.update();statusText.textContent='Service worker attivo';setTimeout(()=>{if(!promptEvent)readyFallback();},1200);}catch(err){btn.disabled=false;btn.textContent='Apri istruzioni';statusText.textContent='Controllo manuale';help.textContent='Ricarica la pagina. Se necessario usa il menu ⋮ di Chrome e scegli Installa app.';console.warn(err);}})();
+</script></body></html>"""
+    response = make_response(render_template_string(html, app_name=app_name, subtitle=subtitle, manifest_url=manifest_url, icon_url=icon_url, open_url=open_url, theme=theme))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.get("/app/gestionale")
@@ -4972,12 +4993,12 @@ def pwa_manifest():
 @app.get("/manifest-tbs-one.webmanifest")
 def pwa_manifest_gestionale():
     manifest = {
-        "id": "/tbs-one-gestionale",
+        "id": "/app/gestionale",
         "name": "TBS One Gestionale",
         "short_name": "TBS One",
         "description": "Gestionale operativo TBS One per personale autorizzato",
         "lang": "it-IT",
-        "start_url": "/app/gestionale/start?source=pwa",
+        "start_url": "/app/gestionale/start?source=pwa&v=4320",
         "scope": "/",
         "display": "standalone",
         "prefer_related_applications": False,
@@ -5006,12 +5027,12 @@ def pwa_manifest_gestionale():
 @app.get("/manifest-tbs-jewelry.webmanifest")
 def pwa_manifest_jewelry():
     manifest = {
-        "id": "/tbs-jewelry-boutique",
+        "id": "/app/jewelry",
         "name": "TBS Jewelry",
         "short_name": "TBS Jewelry",
         "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
         "lang": "it-IT",
-        "start_url": "/app/jewelry/start?source=pwa",
+        "start_url": "/app/jewelry/start?source=pwa&v=4320",
         "scope": "/",
         "display": "standalone",
         "prefer_related_applications": False,
@@ -5073,7 +5094,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v43-1-0';
+const CACHE_NAME = 'tbs-one-dual-app-v43-2-0';
 const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
