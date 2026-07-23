@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.2.2 STABLE · Persistent Database Fix"
+APP_VERSION = "v43.2.3 STABLE · Firebase Admin Auto-Detect"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -106,6 +106,8 @@ FIREBASE_WEB_CONFIG = {
 }
 _FIREBASE_ADMIN_READY = False
 _FIREBASE_ADMIN_ERROR = None
+_FIREBASE_ADMIN_CREDENTIAL_SOURCE = None
+_FIREBASE_ADMIN_CHECKED_PATHS = []
 _FIREBASE_LOCK = threading.Lock()
 
 def firebase_web_ready():
@@ -113,38 +115,100 @@ def firebase_web_ready():
                 FIREBASE_WEB_CONFIG.get("projectId") and FIREBASE_WEB_CONFIG.get("messagingSenderId") and
                 FIREBASE_WEB_CONFIG.get("appId"))
 
+def _firebase_admin_candidate_paths():
+    """Restituisce i possibili percorsi delle credenziali Firebase Admin su Render."""
+    candidates = []
+
+    def add(path):
+        path = (path or "").strip()
+        if path:
+            path = os.path.abspath(path)
+            if path not in candidates:
+                candidates.append(path)
+
+    # Percorso esplicito, se configurato.
+    add(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""))
+
+    # Secret File Render: il file viene montato qui a runtime.
+    add("/etc/secrets/firebase-admin.json")
+    add("/etc/secrets/firebase_admin.json")
+
+    # Fallback utili in locale o in repository.
+    add(os.path.join(os.getcwd(), "firebase-admin.json"))
+    add(os.path.join(os.getcwd(), "firebase_admin.json"))
+    add(os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-admin.json"))
+    add(os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase_admin.json"))
+    return candidates
+
+
 def init_firebase_admin():
-    """Inizializza Firebase Admin senza mai inserire credenziali private nel repository."""
+    """Inizializza Firebase Admin da JSON env o Secret File Render."""
     global _FIREBASE_ADMIN_READY, _FIREBASE_ADMIN_ERROR
+    global _FIREBASE_ADMIN_CREDENTIAL_SOURCE, _FIREBASE_ADMIN_CHECKED_PATHS
+
     if _FIREBASE_ADMIN_READY:
         return True
+
     with _FIREBASE_LOCK:
         if _FIREBASE_ADMIN_READY:
             return True
         try:
             import firebase_admin
             from firebase_admin import credentials
+
             if firebase_admin._apps:
                 _FIREBASE_ADMIN_READY = True
+                _FIREBASE_ADMIN_ERROR = None
+                _FIREBASE_ADMIN_CREDENTIAL_SOURCE = "Firebase Admin già inizializzato"
                 return True
+
             cred = None
+            source = None
+            _FIREBASE_ADMIN_CHECKED_PATHS = []
+
             raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
             if raw_json:
-                cred = credentials.Certificate(json.loads(raw_json))
+                # Accetta anche un eventuale BOM iniziale.
+                parsed = json.loads(raw_json.lstrip("\ufeff"))
+                cred = credentials.Certificate(parsed)
+                source = "FIREBASE_SERVICE_ACCOUNT_JSON"
             else:
-                credential_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-                if credential_path and os.path.isfile(credential_path):
-                    cred = credentials.Certificate(credential_path)
+                for credential_path in _firebase_admin_candidate_paths():
+                    _FIREBASE_ADMIN_CHECKED_PATHS.append(credential_path)
+                    if not os.path.isfile(credential_path):
+                        continue
+                    if os.path.getsize(credential_path) <= 2:
+                        continue
+                    # Leggiamo e validiamo il JSON per restituire un errore chiaro.
+                    with open(credential_path, "r", encoding="utf-8-sig") as handle:
+                        parsed = json.load(handle)
+                    cred = credentials.Certificate(parsed)
+                    source = credential_path
+                    break
+
             if cred is None:
-                _FIREBASE_ADMIN_ERROR = "Credenziali Firebase Admin non configurate"
+                checked = ", ".join(_FIREBASE_ADMIN_CHECKED_PATHS) or "nessun percorso"
+                _FIREBASE_ADMIN_ERROR = (
+                    "Credenziali Firebase Admin non trovate. "
+                    f"Percorsi controllati: {checked}"
+                )
+                _FIREBASE_ADMIN_CREDENTIAL_SOURCE = None
                 return False
-            firebase_admin.initialize_app(cred, {"projectId": FIREBASE_WEB_CONFIG.get("projectId")})
+
+            options = {}
+            project_id = FIREBASE_WEB_CONFIG.get("projectId")
+            if project_id:
+                options["projectId"] = project_id
+            firebase_admin.initialize_app(cred, options or None)
             _FIREBASE_ADMIN_READY = True
             _FIREBASE_ADMIN_ERROR = None
+            _FIREBASE_ADMIN_CREDENTIAL_SOURCE = source
+            print(f"Firebase Admin pronto da: {source}")
             return True
         except Exception as exc:
-            _FIREBASE_ADMIN_ERROR = str(exc)
-            print(f"Firebase Admin non disponibile: {exc}")
+            _FIREBASE_ADMIN_READY = False
+            _FIREBASE_ADMIN_ERROR = f"{type(exc).__name__}: {exc}"
+            print(f"Firebase Admin non disponibile: {_FIREBASE_ADMIN_ERROR}")
             return False
 
 def _directory_is_writable(path):
