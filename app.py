@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.3.6 LTS · Apertura notifiche"
+APP_VERSION = "v37.3.7 LTS · Apertura notifiche"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -422,7 +422,7 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
 (function(){
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("/service-worker.js", {scope:"/"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
+      navigator.serviceWorker.register("/service-worker.js", {scope:"/",updateViaCache:"none"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
     });
   }
 })();
@@ -455,7 +455,7 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
     if(!(await isSupported())){const b=showButton('⚠️ Push non supportate');b.onclick=()=>alert('Firebase Messaging non è supportato su questo browser.');return;}
     const firebaseApp=getApps().length?getApps()[0]:initializeApp(settings.config);
     const messaging=getMessaging(firebaseApp);
-    const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});
+    const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});
     await registration.update();
     await navigator.serviceWorker.ready;
     onMessage(messaging,function(payload){
@@ -823,7 +823,7 @@ body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#11
 (function(){
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("/service-worker.js", {scope:"/"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
+      navigator.serviceWorker.register("/service-worker.js", {scope:"/",updateViaCache:"none"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
     });
   }
 })();
@@ -2164,7 +2164,7 @@ def push_diagnostics_page():
         const cfg=await (await fetch('/api/push/config',{cache:'no-store'})).json();
         if(!cfg.enabled) throw new Error('Configurazione Firebase Web incompleta su Render');
         const [{initializeApp,getApps},{getMessaging,getToken}]=await Promise.all([import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')]);
-        const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/'});await navigator.serviceWorker.ready;
+        const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;
         const app=getApps().length?getApps()[0]:initializeApp(cfg.config);
         const token=await getToken(getMessaging(app),{vapidKey:cfg.vapidKey,serviceWorkerRegistration:reg});
         if(!token) throw new Error('Firebase non ha restituito un token');
@@ -4796,17 +4796,54 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-3-6';
+const CACHE_NAME = 'tbs-pwa-v37-3-7';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
+
 self.addEventListener('install', event => {{
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 }});
 self.addEventListener('activate', event => {{
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
-  self.clients.claim();
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))),
+    self.clients.claim()
+  ]));
 }});
+
+/*
+ * IMPORTANTE: il listener del click va registrato PRIMA delle librerie Firebase.
+ * Firebase Messaging può installare un proprio notificationclick e intercettare il click
+ * se il listener personalizzato viene dichiarato dopo importScripts().
+ */
+self.addEventListener('notificationclick', event => {{
+  event.stopImmediatePropagation();
+  event.notification.close();
+  const payloadData=(event.notification && event.notification.data) || {{}};
+  const rawTarget=payloadData.url || payloadData.link || '/notifications';
+  let target;
+  try {{
+    target=new URL(rawTarget, self.location.origin).href;
+  }} catch (_err) {{
+    target=self.location.origin + '/notifications';
+  }}
+  if(!target.startsWith(self.location.origin)) target=self.location.origin + '/notifications';
+
+  event.waitUntil((async () => {{
+    const windows=await self.clients.matchAll({{type:'window',includeUncontrolled:true}});
+    for(const client of windows) {{
+      try {{
+        if('navigate' in client && client.url !== target) await client.navigate(target);
+        if('focus' in client) {{
+          await client.focus();
+          return;
+        }}
+      }} catch (_err) {{}}
+    }}
+    if(self.clients.openWindow) await self.clients.openWindow(target);
+  }})());
+}});
+
 self.addEventListener('fetch', event => {{
   const req=event.request;
   if(req.method!=='GET') return;
@@ -4818,6 +4855,7 @@ self.addEventListener('fetch', event => {{
   }}
   event.respondWith(fetch(req));
 }});
+
 if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
   importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
   importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
@@ -4826,32 +4864,21 @@ if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
   messaging.onBackgroundMessage(payload => {{
     const data=payload.data || {{}};
     const title=data.title || (payload.notification && payload.notification.title) || 'TBS One';
-    const target=new URL(data.url || '/notifications', self.location.origin).href;
+    let target;
+    try {{ target=new URL(data.url || '/notifications', self.location.origin).href; }}
+    catch (_err) {{ target=self.location.origin + '/notifications'; }}
     const options={{
       body:data.body || (payload.notification && payload.notification.body) || '',
-      icon:'/pwa-icon-192.png', badge:'/pwa-icon-192.png',
+      icon:'/pwa-icon-192.png',
+      badge:'/pwa-icon-192.png',
       tag:data.kind ? 'tbs-'+data.kind+'-'+(data.reference_id||'') : 'tbs-push',
       requireInteraction:data.kind==='discount_request',
-      data:{{url:target}}
+      renotify:true,
+      data:{{url:target,kind:data.kind||'',reference_id:data.reference_id||''}}
     }};
-    self.registration.showNotification(title,options);
+    return self.registration.showNotification(title,options);
   }});
 }}
-self.addEventListener('notificationclick', event => {{
-  event.notification.close();
-  const rawTarget=(event.notification.data && event.notification.data.url) || '/notifications';
-  const target=new URL(rawTarget, self.location.origin).href;
-  event.waitUntil((async () => {{
-    const list=await clients.matchAll({{type:'window',includeUncontrolled:true}});
-    for(const client of list) {{
-      try {{
-        if('navigate' in client) await client.navigate(target);
-        if('focus' in client) return await client.focus();
-      }} catch(_err) {{}}
-    }}
-    return clients.openWindow ? clients.openWindow(target) : undefined;
-  }})());
-}});
 """
     return Response(script, mimetype="application/javascript", headers={
         "Cache-Control":"no-cache, no-store, must-revalidate",
