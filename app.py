@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.3.5 LTS · Push Android compatibile"
+APP_VERSION = "v37.3.6 LTS · Apertura notifiche"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -1775,20 +1775,13 @@ def _send_push_for_user(db, user_id, title, message, kind='notification', refere
                 'reference_type':str(reference_type or ''),
                 'reference_id':str(reference_id or ''),
             }
+            # Messaggio data-only: il Service Worker crea direttamente la notifica.
+            # In questo modo il click conserva sempre l'URL e apre la pagina corretta.
             msg=messaging.Message(
                 token=row['token'],
                 data=push_data,
                 webpush=messaging.WebpushConfig(
                     headers={'Urgency':'high','TTL':'300'},
-                    notification=messaging.WebpushNotification(
-                        title=push_title,
-                        body=push_body,
-                        icon='/pwa-icon-192.png',
-                        badge='/pwa-icon-192.png',
-                        tag=f"tbs-{kind}-{reference_id or user_id}",
-                        require_interaction=(kind == 'discount_request'),
-                        data={'url':target_url},
-                    ),
                 ),
             )
             firebase_message_id=messaging.send(msg)
@@ -4803,7 +4796,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-3-5';
+const CACHE_NAME = 'tbs-pwa-v37-3-6';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 self.addEventListener('install', event => {{
@@ -4831,27 +4824,33 @@ if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
   firebase.initializeApp(FIREBASE_CONFIG);
   const messaging=firebase.messaging();
   messaging.onBackgroundMessage(payload => {{
-    // I messaggi con payload notification sono già mostrati automaticamente da FCM.
-    if(payload.notification) return;
     const data=payload.data || {{}};
-    const title=data.title || 'TBS One';
+    const title=data.title || (payload.notification && payload.notification.title) || 'TBS One';
+    const target=new URL(data.url || '/notifications', self.location.origin).href;
     const options={{
-      body:data.body || '',
+      body:data.body || (payload.notification && payload.notification.body) || '',
       icon:'/pwa-icon-192.png', badge:'/pwa-icon-192.png',
       tag:data.kind ? 'tbs-'+data.kind+'-'+(data.reference_id||'') : 'tbs-push',
       requireInteraction:data.kind==='discount_request',
-      data:{{url:data.url || '/notifications'}}
+      data:{{url:target}}
     }};
     self.registration.showNotification(title,options);
   }});
 }}
 self.addEventListener('notificationclick', event => {{
   event.notification.close();
-  const target=(event.notification.data && event.notification.data.url) || '/notifications';
-  event.waitUntil(clients.matchAll({{type:'window',includeUncontrolled:true}}).then(list => {{
-    for(const client of list) {{ if('focus' in client) {{ client.navigate(target); return client.focus(); }} }}
+  const rawTarget=(event.notification.data && event.notification.data.url) || '/notifications';
+  const target=new URL(rawTarget, self.location.origin).href;
+  event.waitUntil((async () => {{
+    const list=await clients.matchAll({{type:'window',includeUncontrolled:true}});
+    for(const client of list) {{
+      try {{
+        if('navigate' in client) await client.navigate(target);
+        if('focus' in client) return await client.focus();
+      }} catch(_err) {{}}
+    }}
     return clients.openWindow ? clients.openWindow(target) : undefined;
-  }}));
+  }})());
 }});
 """
     return Response(script, mimetype="application/javascript", headers={
