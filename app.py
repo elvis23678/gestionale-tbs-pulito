@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v38.2.0 LTS · Ordini clienti"
+APP_VERSION = "v38.2.1 LTS · Ordini fornitore riservati"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -4198,10 +4198,18 @@ def reorders():
         flash("Quantità aggiornate."); return redirect(url_for("reorders"))
     with connect() as db:
         rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.quantity AS stock,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
-        customer_rows=db.execute("SELECT supplier_code,brand_code,SUM(quantity) reorder_qty,COUNT(*) customers FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
+        customer_rows=db.execute("SELECT supplier_code,SUM(quantity) reorder_qty FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code ORDER BY supplier_code").fetchall()
+        preview={}
+        for x in rows:
+            code=x['supplier_code'] or 'CODICE MANCANTE'
+            preview[code]=preview.get(code,0)+int(x['reorder_qty'] or 0)
+        for x in customer_rows:
+            code=x['supplier_code'] or 'CODICE MANCANTE'
+            preview[code]=preview.get(code,0)+int(x['reorder_qty'] or 0)
+        supplier_preview=[{'supplier_code':code,'quantity':qty} for code,qty in sorted(preview.items()) if qty>0]
         history=db.execute("SELECT o.*,COUNT(i.id) lines,COALESCE(SUM(i.quantity),0) pieces,COALESCE(SUM(i.received_quantity),0) received FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
-    body="""<h1>🚚 Riordini fornitore</h1><div class='card'><h2>Prossimo PDF</h2><p class='muted'>Comprende scorte da reintegrare e ordini cliente accettati. Dopo la generazione, gli ordini cliente passano a “Ordinato” e non saranno duplicati.</p>{% for x in rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · magazzino {{x.stock}} · <b>{{x.reorder_qty}} pz</b></p>{% endfor %}{% for x in customer_rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · <b>{{x.reorder_qty}} pz clienti</b> · {{x.customers}} richieste</p>{% endfor %}{% if rows or customer_rows %}<form method='post' action='{{url_for("generate_reorder_pdf")}}' onsubmit='return confirm("Generare e archiviare il PDF?")'><button class='success'>📄 Genera PDF e segna ordinato</button></form>{% else %}<p>Nessun articolo da ordinare.</p>{% endif %}</div><div class='card'><h2>Storico fornitori e ricezioni</h2>{% for o in history %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><b>{{o.order_number}}</b> · {{o.status}} · {{o.received}}/{{o.pieces}} pezzi · {{o.created_at|rome_time}}{% if o.status!='Ricevuto' %}<p><a class='secondary' style='display:inline-block;text-decoration:none;padding:9px 12px;border-radius:8px' href='{{url_for("receive_order_detail",order_id=o.id)}}'>Spunta merce arrivata</a></p>{% endif %}</div>{% else %}<p>Nessun ordine generato.</p>{% endfor %}</div>"""
-    return page("Riordini",body,rows=rows,customer_rows=customer_rows,history=history)
+    body="""<h1>🚚 Riordini fornitore</h1><div class='card'><h2>Prossimo PDF</h2><p class='muted'>Anteprima identica ai dati destinati al fornitore: esclusivamente codice fornitore e quantità totale. Codici brand, clienti, telefoni e note restano interni a TBS One.</p><div class='table-wrap'><table><thead><tr><th>Codice fornitore</th><th>Quantità</th></tr></thead><tbody>{% for x in supplier_preview %}<tr><td><b>{{x.supplier_code}}</b></td><td><b>{{x.quantity}}</b></td></tr>{% else %}<tr><td colspan='2'>Nessun articolo da ordinare.</td></tr>{% endfor %}</tbody></table></div>{% if supplier_preview %}<form method='post' action='{{url_for("generate_reorder_pdf")}}' onsubmit='return confirm("Generare e archiviare il PDF?")'><button class='success'>📄 Genera PDF e segna ordinato</button></form>{% endif %}</div><div class='card'><h2>Storico fornitori e ricezioni</h2>{% for o in history %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><b>{{o.order_number}}</b> · {{o.status}} · {{o.received}}/{{o.pieces}} pezzi · {{o.created_at|rome_time}}{% if o.status!='Ricevuto' %}<p><a class='secondary' style='display:inline-block;text-decoration:none;padding:9px 12px;border-radius:8px' href='{{url_for("receive_order_detail",order_id=o.id)}}'>Spunta merce arrivata</a></p>{% endif %}</div>{% else %}<p>Nessun ordine generato.</p>{% endfor %}</div>"""
+    return page("Riordini",body,supplier_preview=supplier_preview,history=history)
 
 @app.post("/reorders/pdf")
 @role_required("admin","manager")
@@ -4659,9 +4667,9 @@ def enterprise_orders():
              FROM supplier_orders o LEFT JOIN suppliers s ON s.id=o.supplier_id
              LEFT JOIN supplier_order_items i ON i.order_id=o.id
              GROUP BY o.id ORDER BY o.id DESC LIMIT 100""").fetchall()
-        aggregate=db.execute("""SELECT supplier_code,brand_code,SUM(quantity) qty,COUNT(*) customers
+        aggregate=db.execute("""SELECT supplier_code,SUM(quantity) qty
              FROM supplier_catalog_requests WHERE status='Accettato'
-             GROUP BY supplier_code,brand_code ORDER BY supplier_code""").fetchall()
+             GROUP BY supplier_code ORDER BY supplier_code""").fetchall()
         counts=db.execute("""SELECT
              SUM(CASE WHEN status IN ('Da ordinare','Nuovo') THEN 1 ELSE 0 END) new_count,
              SUM(CASE WHEN status='Accettato' THEN 1 ELSE 0 END) accepted_count,
@@ -4670,7 +4678,7 @@ def enterprise_orders():
              FROM supplier_catalog_requests""").fetchone()
     body='''<div class="dash-head"><div><span class="eyebrow">V29 ENTERPRISE</span><h1>Centro ordini</h1><p class="muted">Richieste cliente separate dal PDF fornitore, quantità aggregate e ricezione pezzo per pezzo.</p></div><div><a class="secondary" href="{{url_for('enterprise_suppliers')}}">Fornitori</a> <a class="secondary" href="{{url_for('reorders')}}">Genera ordine</a></div></div>
     <div class="kpi-grid"><div class="kpi"><strong>Nuovi</strong><div class="metric">{{counts.new_count or 0}}</div></div><div class="kpi"><strong>Da ordinare</strong><div class="metric">{{counts.accepted_count or 0}}</div></div><div class="kpi"><strong>In arrivo</strong><div class="metric">{{counts.incoming_count or 0}}</div></div><div class="kpi"><strong>Pronti</strong><div class="metric">{{counts.ready_count or 0}}</div></div></div>
-    <div class="card"><h2>Quantità da inviare al fornitore</h2><div class="table-wrap"><table><thead><tr><th>Codice fornitore</th><th>Codice brand</th><th>Quantità totale</th><th>Clienti in attesa</th></tr></thead><tbody>{% for a in aggregate %}<tr><td><b>{{a.supplier_code}}</b></td><td>{{a.brand_code}}</td><td>{{a.qty}}</td><td>{{a.customers}}</td></tr>{% else %}<tr><td colspan="4">Nessun articolo accettato da ordinare.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Quantità da inviare al fornitore</h2><p class="muted">Vista riservata al documento fornitore: vengono mostrati solo il codice del fornitore e la quantità totale.</p><div class="table-wrap"><table><thead><tr><th>Codice fornitore</th><th>Quantità totale</th></tr></thead><tbody>{% for a in aggregate %}<tr><td><b>{{a.supplier_code}}</b></td><td><b>{{a.qty}}</b></td></tr>{% else %}<tr><td colspan="2">Nessun articolo accettato da ordinare.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Clienti in attesa</h2><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Articolo</th><th>Qtà</th><th>Stato</th><th>Ricevuti</th></tr></thead><tbody>{% for x in customer %}<tr><td><b>{{x.customer_name}}</b><br><a href="tel:{{x.customer_phone}}">{{x.customer_phone}}</a></td><td>{{x.brand_code}}<br><small>{{x.supplier_code}}</small></td><td>{{x.quantity}}</td><td><span class="badge">{{x.status}}</span></td><td>{{x.received_quantity or 0}} / {{x.quantity}}</td></tr>{% else %}<tr><td colspan="5">Nessun cliente in attesa.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Ordini fornitori</h2>{% for o in suppliers %}<p><b>{{o.order_number}}</b> · {{o.supplier_name or 'Fornitore non assegnato'}} · {{o.status}}<br><small class="muted">Ricevuti {{o.received_qty}} / {{o.ordered_qty}} pezzi · {{o.created_at|rome_time}}</small></p>{% else %}<p class="muted">Nessun ordine fornitore.</p>{% endfor %}</div>'''
     return page('Ordini Enterprise',body,customer=customer,suppliers=suppliers,aggregate=aggregate,counts=counts)
