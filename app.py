@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.2.3 STABLE · Firebase Admin Auto-Detect"
+APP_VERSION = "v43.3.0 DEV · Release 1 integrata"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -5093,7 +5093,7 @@ def pwa_manifest_gestionale():
         "short_name": "TBS One",
         "description": "Gestionale operativo TBS One per personale autorizzato",
         "lang": "it-IT",
-        "start_url": "/app/gestionale/start?source=pwa&v=4320",
+        "start_url": "/app/gestionale/start?source=pwa&v=4330",
         "scope": "/",
         "display": "standalone",
         "prefer_related_applications": False,
@@ -5127,7 +5127,7 @@ def pwa_manifest_jewelry():
         "short_name": "TBS Jewelry",
         "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
         "lang": "it-IT",
-        "start_url": "/app/jewelry/start?source=pwa&v=4320",
+        "start_url": "/app/jewelry/start?source=pwa&v=4330",
         "scope": "/",
         "display": "standalone",
         "prefer_related_applications": False,
