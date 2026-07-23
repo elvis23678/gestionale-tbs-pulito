@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v38.1.0 LTS · Backup e ripristino"
+APP_VERSION = "v38.1.1 LTS · Backup e ripristino"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -161,6 +161,9 @@ os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 DB_IS_EPHEMERAL = os.path.abspath(DB_PATH).startswith("/tmp/")
 BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
+_BACKUP_RETENTION_DAYS = max(1, int(os.environ.get("BACKUP_RETENTION_DAYS", "30")))
+_BACKUP_LOCK = threading.Lock()
+_LAST_DAILY_BACKUP_CHECK = None
 
 def bootstrap_database_file():
     """Inizializza il database senza sovrascrivere mai quello persistente."""
@@ -521,6 +524,50 @@ def database_integrity(path):
 def make_consistent_backup(destination):
     with connect() as source, sqlite3.connect(destination) as target:
         source.backup(target)
+
+
+def _cleanup_old_backups():
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_BACKUP_RETENTION_DAYS)
+    for item in Path(BACKUP_DIR).glob("*.db"):
+        try:
+            modified = datetime.fromtimestamp(item.stat().st_mtime, timezone.utc)
+            if modified < cutoff:
+                item.unlink()
+        except OSError as exc:
+            app.logger.warning("Impossibile eliminare il backup %s: %s", item, exc)
+
+
+def create_verified_backup(kind="manuale"):
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    stamp = now_rome().strftime("%Y%m%d_%H%M%S")
+    safe_kind = "".join(ch for ch in str(kind).lower() if ch.isalnum() or ch == "_") or "manuale"
+    destination = os.path.join(BACKUP_DIR, f"{safe_kind}_{stamp}.db")
+    temporary = destination + ".tmp"
+    with _BACKUP_LOCK:
+        try:
+            make_consistent_backup(temporary)
+            valid, detail = database_integrity(temporary)
+            if not valid:
+                raise RuntimeError(f"verifica integrità non superata: {detail}")
+            os.replace(temporary, destination)
+            _cleanup_old_backups()
+            return destination
+        finally:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+
+
+def ensure_daily_backup():
+    global _LAST_DAILY_BACKUP_CHECK
+    today = now_rome().date()
+    if _LAST_DAILY_BACKUP_CHECK == today:
+        return
+    _LAST_DAILY_BACKUP_CHECK = today
+    prefix = f"automatico_{today.strftime('%Y%m%d')}_"
+    if any(item.name.startswith(prefix) for item in Path(BACKUP_DIR).glob("automatico_*.db")):
+        _cleanup_old_backups()
+        return
+    create_verified_backup("automatico")
 
 CATALOG_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'supplier_catalog_enriched.csv')
 
@@ -4213,6 +4260,8 @@ def automatic_daily_closure():
     if request.endpoint and request.endpoint != "static":
         try: ensure_daily_closures()
         except sqlite3.Error as exc: app.logger.warning("Chiusura tesoreria non eseguita: %s",exc)
+        try: ensure_daily_backup()
+        except Exception as exc: app.logger.warning("Backup automatico non eseguito: %s", exc)
 
 
 
