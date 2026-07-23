@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.4.0 DEV · Release 2 Operativa"
+APP_VERSION = "v43.5.0 DEV · Release 3 Completa"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -516,7 +516,7 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>TATTOO BEAUTY SALOON</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') == 'seller' %}<a href="{{ url_for('catalog_requests') }}">📦 I miei ordini clienti</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a><a href="{{ url_for('enterprise_inventory') }}">Inventario e rettifiche</a><a href="{{ url_for('enterprise_sales') }}">Vendite, resi e marginalità</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria PRO</a><a href="{{ url_for('recycle_bin') }}">Cestino intelligente</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics_page') }}">🔔 Diagnostica notifiche</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});let tbsLatestNotificationId=Number(sessionStorage.getItem('tbsLatestNotificationId')||0);function tbsBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.12,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.22);o.start();o.stop(c.currentTime+.24)}catch(e){}}function tbsLiveToast(title,message,url){const stack=document.getElementById('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast toast-info';el.innerHTML='<b></b><br><span></span>';el.querySelector('b').textContent=title||'Nuova notifica';el.querySelector('span').textContent=message||'';el.style.cursor='pointer';el.onclick=()=>{if(url)location.href=url};stack.appendChild(el);setTimeout(()=>{el.classList.add('toast-hide');setTimeout(()=>el.remove(),450)},7000)}async function checkLiveNotifications(){try{const r=await fetch("{{url_for('notification_poll')}}",{cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(b){if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex'}else b.style.display='none'}if(d.latest&&Number(d.latest.id)>tbsLatestNotificationId){const firstRun=tbsLatestNotificationId===0;tbsLatestNotificationId=Number(d.latest.id);sessionStorage.setItem('tbsLatestNotificationId',String(tbsLatestNotificationId));if(!firstRun){tbsBeep();tbsLiveToast(d.latest.title,d.latest.message,d.latest.url);if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('TBS · '+d.latest.title,{body:d.latest.message||'',tag:'tbs-'+d.latest.id});n.onclick=()=>{window.focus();location.href=d.latest.url}}}}}catch(e){}}checkLiveNotifications();setInterval(checkLiveNotifications,4000);{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}{% if session.get('role') == 'seller' %}{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/catalogo-ordinabili/richieste') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}<script>
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>TATTOO BEAUTY SALOON</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') == 'seller' %}<a href="{{ url_for('catalog_requests') }}">📦 I miei ordini clienti</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a><a href="{{ url_for('label_print_center') }}">Stampa etichette QR</a><a href="{{ url_for('enterprise_inventory') }}">Inventario e rettifiche</a><a href="{{ url_for('enterprise_sales') }}">Vendite, resi e marginalità</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('orders_pro') }}">Ordini PRO</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria PRO</a><a href="{{ url_for('cash_session') }}">Apertura / chiusura cassa</a><a href="{{ url_for('recycle_bin') }}">Cestino intelligente</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics_page') }}">🔔 Diagnostica notifiche</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});let tbsLatestNotificationId=Number(sessionStorage.getItem('tbsLatestNotificationId')||0);function tbsBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.12,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.22);o.start();o.stop(c.currentTime+.24)}catch(e){}}function tbsLiveToast(title,message,url){const stack=document.getElementById('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast toast-info';el.innerHTML='<b></b><br><span></span>';el.querySelector('b').textContent=title||'Nuova notifica';el.querySelector('span').textContent=message||'';el.style.cursor='pointer';el.onclick=()=>{if(url)location.href=url};stack.appendChild(el);setTimeout(()=>{el.classList.add('toast-hide');setTimeout(()=>el.remove(),450)},7000)}async function checkLiveNotifications(){try{const r=await fetch("{{url_for('notification_poll')}}",{cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(b){if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex'}else b.style.display='none'}if(d.latest&&Number(d.latest.id)>tbsLatestNotificationId){const firstRun=tbsLatestNotificationId===0;tbsLatestNotificationId=Number(d.latest.id);sessionStorage.setItem('tbsLatestNotificationId',String(tbsLatestNotificationId));if(!firstRun){tbsBeep();tbsLiveToast(d.latest.title,d.latest.message,d.latest.url);if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('TBS · '+d.latest.title,{body:d.latest.message||'',tag:'tbs-'+d.latest.id});n.onclick=()=>{window.focus();location.href=d.latest.url}}}}}catch(e){}}checkLiveNotifications();setInterval(checkLiveNotifications,4000);{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}{% if session.get('role') == 'seller' %}{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/catalogo-ordinabili/richieste') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}<script>
 (function(){
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function(){
@@ -4776,7 +4776,7 @@ def enterprise_sales():
     margin=(totals['gross_profit']/totals['revenue']*100) if totals['revenue'] else 0
     body='''<div class="dash-head"><div><span class="eyebrow">V28 ENTERPRISE</span><h1>Vendite e marginalità</h1><p class="muted">Controllo economico, resi tracciati e ripristino automatico delle scorte.</p></div></div><div class="card"><form class="inline"><select name="days"><option value="7" {% if days==7 %}selected{% endif %}>7 giorni</option><option value="30" {% if days==30 %}selected{% endif %}>30 giorni</option><option value="90" {% if days==90 %}selected{% endif %}>90 giorni</option><option value="365" {% if days==365 %}selected{% endif %}>365 giorni</option></select><button>Aggiorna</button></form></div>
     <div class="kpi-grid"><div class="kpi"><strong>Incasso</strong><div class="metric">€ {{'%.2f'|format(totals.revenue)}}</div></div><div class="kpi"><strong>Utile lordo</strong><div class="metric">€ {{'%.2f'|format(totals.gross_profit)}}</div></div><div class="kpi"><strong>Margine</strong><div class="metric">{{'%.1f'|format(margin)}}%</div></div><div class="kpi"><strong>Scontrini</strong><div class="metric">{{totals.receipts}}</div></div></div>
-    <div class="card"><div class="table-wrap"><table><thead><tr><th>Vendita</th><th>Data</th><th>Operatore</th><th>Pagamento</th><th>Pezzi</th><th>Totale</th><th>Utile</th><th></th></tr></thead><tbody>{% for s in rows %}<tr><td><b>{{s.sale_number or 'Senza numero'}}</b></td><td>{{s.created_at|rome_time}}</td><td>{{s.username}}</td><td>{{s.payment_method}}</td><td>{{s.pieces}}</td><td>€ {{'%.2f'|format(s.total)}}</td><td>€ {{'%.2f'|format(s.profit)}}</td><td>{% if s.sale_number %}<a href="{{url_for('enterprise_sale_return',sale_number=s.sale_number)}}">Reso</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8">Nessuna vendita nel periodo.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Vendita</th><th>Data</th><th>Operatore</th><th>Pagamento</th><th>Pezzi</th><th>Totale</th><th>Utile</th><th></th></tr></thead><tbody>{% for s in rows %}<tr><td><b>{{s.sale_number or 'Senza numero'}}</b></td><td>{{s.created_at|rome_time}}</td><td>{{s.username}}</td><td>{{s.payment_method}}</td><td>{{s.pieces}}</td><td>€ {{'%.2f'|format(s.total)}}</td><td>€ {{'%.2f'|format(s.profit)}}</td><td>{% if s.sale_number %}<a href="{{url_for('enterprise_sale_return',sale_number=s.sale_number)}}">Reso</a> · <a href="{{url_for('warranty_label_pdf',sale_number=s.sale_number)}}">Garanzia</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8">Nessuna vendita nel periodo.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Ultimi resi</h2>{% for r in returns %}<p><b>{{r.product_code}}</b> · {{r.quantity}} pz · rimborso € {{'%.2f'|format(r.refund_amount)}}<br><small class="muted">{{r.created_at|rome_time}} · {{r.username}} · {{r.reason}}</small></p>{% else %}<p class="muted">Nessun reso registrato.</p>{% endfor %}</div>'''
     return page('Vendite Enterprise',body,totals=totals,rows=rows,returns=returns,margin=margin,days=days)
 
@@ -5351,5 +5351,237 @@ if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
         "Cache-Control":"no-cache, no-store, must-revalidate",
         "Service-Worker-Allowed":"/"
     })
+
+# ============================================================
+# v43.5.0 DEV · RELEASE 3 COMPLETA
+# Magazzino PRO, etichette QR, cassa, ordini e garanzie
+# ============================================================
+def _v435_init():
+    with connect() as db:
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS cash_sessions(
+            id INTEGER PRIMARY KEY,
+            business_date TEXT NOT NULL,
+            opening_amount REAL NOT NULL DEFAULT 0,
+            opening_username TEXT NOT NULL,
+            opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            closing_counted REAL,
+            closing_theoretical REAL,
+            closing_difference REAL,
+            closing_notes TEXT,
+            closing_username TEXT,
+            closed_at TEXT,
+            status TEXT NOT NULL DEFAULT 'Aperta'
+        );
+        CREATE TABLE IF NOT EXISTS warranty_prints(
+            id INTEGER PRIMARY KEY,
+            sale_number TEXT NOT NULL,
+            product_code TEXT NOT NULL,
+            username TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS order_item_receipts(
+            id INTEGER PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            source_id INTEGER NOT NULL,
+            product_code TEXT NOT NULL,
+            expected_quantity INTEGER NOT NULL DEFAULT 1,
+            received_quantity INTEGER NOT NULL DEFAULT 0,
+            username TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(source_type,source_id,product_code)
+        );
+        """)
+        db.commit()
+_v435_init()
+
+
+def _draw_qr(c, value, x, y, size):
+    widget=qr.QrCodeWidget(str(value))
+    bounds=widget.getBounds()
+    width=bounds[2]-bounds[0]; height=bounds[3]-bounds[1]
+    drawing=Drawing(size,size,transform=[size/width,0,0,size/height,0,0])
+    drawing.add(widget)
+    renderPDF.draw(drawing,c,x,y)
+
+
+def _label_products(mode='available', selected_ids=None):
+    selected_ids=selected_ids or []
+    with connect() as db:
+        sql="SELECT * FROM products WHERE COALESCE(active,1)=1"
+        args=[]
+        if mode=='available': sql += " AND COALESCE(quantity,0)>0"
+        elif mode=='new': sql += " AND COALESCE(is_new,0)=1"
+        elif mode=='selected' and selected_ids:
+            marks=','.join('?' for _ in selected_ids); sql += f" AND id IN ({marks})"; args.extend(selected_ids)
+        sql += " ORDER BY brand_code"
+        return db.execute(sql,args).fetchall()
+
+@app.get('/inventory/labels')
+@login_required
+@role_required('admin','manager')
+def label_print_center():
+    with connect() as db:
+        rows=db.execute("SELECT id,brand_code,category,quantity FROM products WHERE COALESCE(active,1)=1 ORDER BY brand_code").fetchall()
+        total_pieces=sum(max(0,int(x['quantity'] or 0)) for x in rows)
+    body='''<div class="dash-head"><div><span class="eyebrow">RELEASE 3</span><h1>Stampa etichette QR</h1><p class="muted">Etichette reali 35 × 15 mm, QR ad alto contrasto e codice interno grande.</p></div></div>
+    <div class="kpi-grid"><div class="kpi"><strong>Referenze</strong><div class="metric">{{rows|length}}</div></div><div class="kpi"><strong>Pezzi disponibili</strong><div class="metric">{{total_pieces}}</div></div></div>
+    <div class="grid"><div class="card"><h2>Stampa rapida</h2><p><a class="view" href="{{url_for('product_labels_pdf',mode='available',copies='pieces')}}">Tutti i pezzi disponibili</a></p><p><a href="{{url_for('product_labels_pdf',mode='available',copies='one')}}">Una per ogni referenza disponibile</a></p><p><a href="{{url_for('product_labels_pdf',mode='all',copies='one')}}">Tutte le referenze</a></p><p><a href="{{url_for('product_labels_pdf',mode='new',copies='pieces')}}">Solo ultimi inserimenti</a></p></div>
+    <div class="card"><h2>Selezione manuale</h2><form method="post" action="{{url_for('product_labels_selected_pdf')}}"><div style="max-height:430px;overflow:auto">{% for p in rows %}<label style="display:flex;gap:10px;align-items:center;border-bottom:1px solid #eee;padding:8px 0"><input type="checkbox" name="product_ids" value="{{p.id}}" style="width:auto"><b>{{p.brand_code}}</b><span class="muted">{{p.category or 'Altro'}} · {{p.quantity}} pz</span></label>{% endfor %}</div><label>Copie</label><select name="copies"><option value="one">Una per referenza</option><option value="pieces">Una per ogni pezzo disponibile</option></select><button>Genera PDF selezione</button></form></div></div>'''
+    return page('Stampa etichette QR',body,rows=rows,total_pieces=total_pieces)
+
+
+def _build_product_labels_pdf(products,copies_mode='one'):
+    items=[]
+    for p in products:
+        copies=max(1,int(p['quantity'] or 0)) if copies_mode=='pieces' else 1
+        for _ in range(copies): items.append(p)
+    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4)
+    label_w,label_h=35*mm,15*mm
+    cols,rows_per_page=6,19
+    x0=(A4[0]-cols*label_w)/2; y_top=(A4[1]+rows_per_page*label_h)/2
+    for i,p in enumerate(items):
+        slot=i%(cols*rows_per_page)
+        if i and slot==0: c.showPage()
+        col=slot%cols; row=slot//cols
+        x=x0+col*label_w; y=y_top-(row+1)*label_h
+        c.setStrokeColor(colors.Color(.75,.75,.75)); c.setLineWidth(.25); c.rect(x,y,label_w,label_h)
+        qr_size=13*mm
+        _draw_qr(c,p['brand_code'],x+1*mm,y+1*mm,qr_size)
+        c.setFillColor(colors.black); c.setFont('Helvetica-Bold',10)
+        code=str(p['brand_code'] or '')
+        c.drawString(x+15*mm,y+8.2*mm,code[:15])
+        c.setFont('Helvetica',5.5)
+        c.drawString(x+15*mm,y+4.8*mm,str(p['category'] or 'Gioiello')[:22])
+        c.setFont('Helvetica',4.5); c.drawString(x+15*mm,y+2.1*mm,'TBS · CODICE INTERNO')
+    c.save(); out.seek(0); return out,len(items)
+
+@app.get('/inventory/labels.pdf')
+@login_required
+@role_required('admin','manager')
+def product_labels_pdf():
+    mode=request.args.get('mode','available'); copies=request.args.get('copies','one')
+    products=_label_products(mode)
+    pdf,count=_build_product_labels_pdf(products,copies)
+    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'TBS_etichette_{count}_{mode}.pdf')
+
+@app.post('/inventory/labels/selected.pdf')
+@login_required
+@role_required('admin','manager')
+def product_labels_selected_pdf():
+    ids=[]
+    for raw in request.form.getlist('product_ids'):
+        try: ids.append(int(raw))
+        except ValueError: pass
+    if not ids:
+        flash('Seleziona almeno un prodotto.','warning'); return redirect(url_for('label_print_center'))
+    products=_label_products('selected',ids)
+    pdf,count=_build_product_labels_pdf(products,request.form.get('copies','one'))
+    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'TBS_etichette_selezione_{count}.pdf')
+
+@app.get('/inventory/labels/product/<int:product_id>.pdf')
+@login_required
+@role_required('admin','manager')
+def single_product_label_pdf(product_id):
+    with connect() as db: p=db.execute('SELECT * FROM products WHERE id=?',(product_id,)).fetchone()
+    if not p: flash('Prodotto non trovato.','error'); return redirect(url_for('products'))
+    pdf,_=_build_product_labels_pdf([p],'one')
+    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'etichetta_{p["brand_code"]}.pdf')
+
+@app.get('/sales/<sale_number>/warranty.pdf')
+@login_required
+def warranty_label_pdf(sale_number):
+    with connect() as db:
+        items=db.execute("""SELECT s.product_code,s.created_at,p.material,p.brand_code
+                            FROM sales s LEFT JOIN products p ON p.id=s.product_id
+                            WHERE s.sale_number=? AND COALESCE(s.status,'Confermata')='Confermata' ORDER BY s.id""",(sale_number,)).fetchall()
+        if not items:
+            flash('Vendita non trovata.','error'); return redirect(url_for('sales_log'))
+        for x in items: db.execute('INSERT INTO warranty_prints(sale_number,product_code,username) VALUES(?,?,?)',(sale_number,x['product_code'],session.get('user')))
+        db.commit()
+    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4)
+    w,h=70*mm,35*mm; cols=2; x0=(A4[0]-cols*w)/2; y_top=A4[1]-20*mm
+    for i,x in enumerate(items):
+        col=i%2; row=i//2; px=x0+col*w; py=y_top-(row+1)*h
+        if py<15*mm: c.showPage(); row=0; py=y_top-h
+        c.setLineWidth(.6); c.roundRect(px,py,w,h,3*mm)
+        _draw_qr(c,f'VENDITA:{sale_number}|PRODOTTO:{x["product_code"]}',px+3*mm,py+5*mm,25*mm)
+        c.setFont('Helvetica-Bold',10); c.drawString(px+31*mm,py+26*mm,'TBS · GARANZIA')
+        c.setFont('Helvetica-Bold',9); c.drawString(px+31*mm,py+20*mm,str(x['product_code']))
+        c.setFont('Helvetica',7); c.drawString(px+31*mm,py+15*mm,f"Materiale: {x['material'] or 'Non indicato'}")
+        c.drawString(px+31*mm,py+10.5*mm,f"Vendita: {sale_number}")
+        c.drawString(px+31*mm,py+6*mm,f"Data: {format_rome(x['created_at'],'%d/%m/%Y')}")
+    c.save(); out.seek(0)
+    return send_file(out,mimetype='application/pdf',as_attachment=True,download_name=f'garanzia_{sale_number}.pdf')
+
+@app.route('/treasury/cash-session',methods=['GET','POST'])
+@login_required
+@role_required('admin','manager')
+def cash_session():
+    today=now_rome().date().isoformat()
+    with connect() as db:
+        current=db.execute("SELECT * FROM cash_sessions WHERE business_date=? ORDER BY id DESC LIMIT 1",(today,)).fetchone()
+        if request.method=='POST':
+            action=request.form.get('action')
+            if action=='open':
+                if current and current['status']=='Aperta': flash('La cassa di oggi è già aperta.','warning')
+                else:
+                    amount=max(0,float(request.form.get('opening_amount','0') or 0))
+                    db.execute('INSERT INTO cash_sessions(business_date,opening_amount,opening_username) VALUES(?,?,?)',(today,amount,session.get('user')))
+                    log_action(db,'Apertura cassa',details=f'Fondo iniziale € {amount:.2f}'); db.commit(); flash('Cassa aperta.','success')
+                return redirect(request.url)
+            if action=='close' and current and current['status']=='Aperta':
+                counted=max(0,float(request.form.get('counted_amount','0') or 0))
+                theoretical=float(current['opening_amount'] or 0)+float(treasury_cash_balance(db) or 0)
+                diff=counted-theoretical; notes=request.form.get('notes','').strip()
+                db.execute("UPDATE cash_sessions SET closing_counted=?,closing_theoretical=?,closing_difference=?,closing_notes=?,closing_username=?,closed_at=CURRENT_TIMESTAMP,status='Chiusa' WHERE id=?",(counted,theoretical,diff,notes,session.get('user'),current['id']))
+                log_action(db,'Chiusura cassa',details=f'Teorico € {theoretical:.2f}; contato € {counted:.2f}; differenza € {diff:.2f}'); db.commit(); flash('Cassa chiusa e differenza registrata.','success'); return redirect(request.url)
+        history=db.execute('SELECT * FROM cash_sessions ORDER BY id DESC LIMIT 30').fetchall()
+    body='''<div class="dash-head"><div><span class="eyebrow">TESORERIA PRO</span><h1>Apertura e chiusura cassa</h1><p class="muted">Riconciliazione del contante con differenza tracciata.</p></div></div>{% if not current or current.status!='Aperta' %}<div class="card"><h2>Apri la cassa di oggi</h2><form method="post"><input type="hidden" name="action" value="open"><label>Fondo cassa iniziale</label><input type="number" step="0.01" min="0" name="opening_amount" value="0" required><button>Apri cassa</button></form></div>{% else %}<div class="card"><h2>Cassa aperta</h2><p>Fondo iniziale: <b>€ {{'%.2f'|format(current.opening_amount)}}</b><br>Aperta da {{current.opening_username}} · {{current.opened_at|rome_time}}</p><form method="post"><input type="hidden" name="action" value="close"><label>Contante realmente contato</label><input type="number" step="0.01" min="0" name="counted_amount" required><label>Nota</label><textarea name="notes"></textarea><button class="danger" onclick="return confirm('Confermi la chiusura della cassa?')">Chiudi e riconcilia</button></form></div>{% endif %}<div class="card"><h2>Ultime chiusure</h2><div class="table-wrap"><table><thead><tr><th>Giorno</th><th>Apertura</th><th>Teorico</th><th>Contato</th><th>Differenza</th><th>Stato</th></tr></thead><tbody>{% for x in history %}<tr><td>{{x.business_date}}</td><td>€ {{'%.2f'|format(x.opening_amount)}}</td><td>{% if x.closing_theoretical is not none %}€ {{'%.2f'|format(x.closing_theoretical)}}{% else %}-{% endif %}</td><td>{% if x.closing_counted is not none %}€ {{'%.2f'|format(x.closing_counted)}}{% else %}-{% endif %}</td><td>{% if x.closing_difference is not none %}€ {{'%.2f'|format(x.closing_difference)}}{% else %}-{% endif %}</td><td>{{x.status}}</td></tr>{% endfor %}</tbody></table></div></div>'''
+    return page('Apertura e chiusura cassa',body,current=current,history=history)
+
+@app.get('/orders/pro')
+@login_required
+@role_required('admin','manager')
+def orders_pro():
+    with connect() as db:
+        catalog=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY CASE status WHEN 'Da ordinare' THEN 1 WHEN 'Ordinato' THEN 2 WHEN 'Arrivato' THEN 3 ELSE 4 END,id DESC").fetchall()
+        boutique=db.execute("SELECT * FROM customer_orders ORDER BY CASE status WHEN 'Nuovo' THEN 1 WHEN 'Ordinato' THEN 2 WHEN 'Arrivato' THEN 3 ELSE 4 END,id DESC LIMIT 200").fetchall()
+        pending=db.execute("SELECT supplier_code,brand_code,SUM(quantity) quantity,COUNT(*) customers FROM supplier_catalog_requests WHERE status IN ('Da ordinare','Ordinato') GROUP BY supplier_code,brand_code ORDER BY brand_code").fetchall()
+    body='''<div class="dash-head"><div><span class="eyebrow">ORDINI PRO</span><h1>Ordini e clienti in attesa</h1><p class="muted">Quantità aggregate, arrivi articolo per articolo e consegne tracciate.</p></div><div><a class="view" href="{{url_for('orders_pro_supplier_pdf')}}">PDF fornitore</a></div></div><div class="kpi-grid"><div class="kpi"><strong>Referenze da gestire</strong><div class="metric">{{pending|length}}</div></div><div class="kpi"><strong>Clienti catalogo</strong><div class="metric">{{catalog|length}}</div></div><div class="kpi"><strong>Ordini boutique</strong><div class="metric">{{boutique|length}}</div></div></div><div class="card"><h2>Riepilogo fornitore</h2><div class="table-wrap"><table><thead><tr><th>Codice interno</th><th>Codice fornitore</th><th>Quantità</th><th>Clienti</th></tr></thead><tbody>{% for x in pending %}<tr><td><b>{{x.brand_code}}</b></td><td>{{x.supplier_code}}</td><td>{{x.quantity}}</td><td>{{x.customers}}</td></tr>{% else %}<tr><td colspan="4">Nessun riordino aperto.</td></tr>{% endfor %}</tbody></table></div></div><div class="card"><h2>Clienti in attesa</h2>{% for x in catalog %}<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid #eee;padding:10px 0"><div><b>{{x.customer_name}}</b> · {{x.customer_phone}}<br><span>{{x.brand_code}} · {{x.quantity}} pz · {{x.status}}</span></div><form method="post" action="{{url_for('orders_pro_status',request_id=x.id)}}"><select name="status"><option>Da ordinare</option><option>Ordinato</option><option>Arrivato</option><option>Cliente contattato</option><option>Consegnato</option></select><button>Aggiorna</button></form></div>{% else %}<p>Nessun cliente in attesa.</p>{% endfor %}</div>'''
+    return page('Ordini PRO',body,catalog=catalog,boutique=boutique,pending=pending)
+
+@app.post('/orders/pro/catalog/<int:request_id>/status')
+@login_required
+@role_required('admin','manager')
+def orders_pro_status(request_id):
+    status=request.form.get('status','').strip()
+    allowed={'Da ordinare','Ordinato','Arrivato','Cliente contattato','Consegnato'}
+    if status not in allowed: flash('Stato non valido.','error'); return redirect(url_for('orders_pro'))
+    with connect() as db:
+        row=db.execute('SELECT * FROM supplier_catalog_requests WHERE id=?',(request_id,)).fetchone()
+        if not row: flash('Ordine non trovato.','error'); return redirect(url_for('orders_pro'))
+        db.execute('UPDATE supplier_catalog_requests SET status=? WHERE id=?',(status,request_id))
+        db.execute('INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)',(request_id,status,session.get('user'),f'{row["brand_code"]} · {row["customer_name"]}'))
+        log_action(db,'Stato ordine cliente',details=f'{row["request_number"]}: {status}'); db.commit()
+    flash('Stato ordine aggiornato.','success'); return redirect(url_for('orders_pro'))
+
+@app.get('/orders/pro/supplier.pdf')
+@login_required
+@role_required('admin','manager')
+def orders_pro_supplier_pdf():
+    with connect() as db:
+        rows=db.execute("SELECT supplier_code,brand_code,SUM(quantity) quantity FROM supplier_catalog_requests WHERE status IN ('Da ordinare','Ordinato') GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
+    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4); y=A4[1]-22*mm
+    c.setFont('Helvetica-Bold',16); c.drawString(18*mm,y,'TBS · ORDINE FORNITORE'); y-=10*mm
+    c.setFont('Helvetica',9); c.drawString(18*mm,y,f'Generato il {now_rome().strftime("%d/%m/%Y %H:%M")}'); y-=10*mm
+    c.setFont('Helvetica-Bold',9); c.drawString(18*mm,y,'CODICE FORNITORE'); c.drawString(90*mm,y,'CODICE INTERNO'); c.drawRightString(190*mm,y,'Q.TÀ'); y-=5*mm
+    c.line(18*mm,y,190*mm,y); y-=6*mm
+    c.setFont('Helvetica',9)
+    for r in rows:
+        if y<20*mm: c.showPage(); y=A4[1]-20*mm
+        c.drawString(18*mm,y,str(r['supplier_code'])); c.drawString(90*mm,y,str(r['brand_code'])); c.drawRightString(190*mm,y,str(r['quantity'])); y-=7*mm
+    c.save(); out.seek(0)
+    return send_file(out,mimetype='application/pdf',as_attachment=True,download_name=f'ordine_fornitore_{now_rome().strftime("%Y%m%d")}.pdf')
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
