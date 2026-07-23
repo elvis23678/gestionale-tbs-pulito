@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v37.2.0 LTS · Push Activation Fix"
+APP_VERSION = "v37.3.0 LTS · Push Delivery Diagnostics"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -1670,44 +1670,119 @@ def _push_url_for(kind, reference_type=None, reference_id=None):
     return '/notifications'
 
 
+def _ensure_push_delivery_log(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS push_delivery_log(
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        username TEXT,
+        subscription_id INTEGER,
+        token_suffix TEXT,
+        kind TEXT,
+        title TEXT,
+        reference_type TEXT,
+        reference_id INTEGER,
+        status TEXT NOT NULL,
+        firebase_message_id TEXT,
+        error_text TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_push_delivery_user ON push_delivery_log(user_id,created_at)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_push_delivery_status ON push_delivery_log(status,created_at)")
+
+
+def _log_push_delivery(db, user_id, username, subscription_id, token, kind, title,
+                       reference_type, reference_id, status, firebase_message_id=None, error_text=None):
+    _ensure_push_delivery_log(db)
+    db.execute("""INSERT INTO push_delivery_log(
+        user_id,username,subscription_id,token_suffix,kind,title,
+        reference_type,reference_id,status,firebase_message_id,error_text
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(
+        user_id,username,subscription_id,(token or '')[-12:],kind,title,
+        reference_type,reference_id,status,firebase_message_id,
+        (str(error_text)[:1000] if error_text else None)
+    ))
+
+
 def _send_push_for_user(db, user_id, title, message, kind='notification', reference_type=None, reference_id=None):
-    """Invia una push a tutti i dispositivi attivi dell'utente. Gli errori non bloccano il gestionale."""
+    """Invia una push a tutti i dispositivi attivi dell'utente e registra ogni tentativo."""
     _ensure_push_subscriptions(db)
-    tokens=db.execute("SELECT id,token FROM push_subscriptions WHERE user_id=? AND active=1",(user_id,)).fetchall()
-    if not tokens or not init_firebase_admin():
+    _ensure_push_delivery_log(db)
+    user=db.execute("SELECT id,username FROM users WHERE id=?",(user_id,)).fetchone()
+    username=user['username'] if user else None
+    tokens=db.execute("""SELECT id,token,username,platform,last_error
+                         FROM push_subscriptions
+                         WHERE user_id=? AND active=1""",(user_id,)).fetchall()
+    if not tokens:
+        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
+                           'no_device',error_text='Nessun dispositivo attivo associato all’utente')
+        app.logger.warning("Push non inviata: nessun dispositivo per user_id=%s username=%s kind=%s",
+                           user_id,username,kind)
+        return 0
+    if not init_firebase_admin():
+        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
+                           'admin_not_ready',error_text=_FIREBASE_ADMIN_ERROR or 'Firebase Admin non inizializzato')
+        app.logger.error("Push non inviata: Firebase Admin non pronto: %s",_FIREBASE_ADMIN_ERROR)
         return 0
     try:
         from firebase_admin import messaging
     except Exception as exc:
-        print(f"Firebase messaging non disponibile: {exc}")
+        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
+                           'import_error',error_text=exc)
+        app.logger.exception("Firebase messaging non disponibile")
         return 0
     sent=0
     target_url=_push_url_for(kind,reference_type,reference_id)
+    push_title=str(f"TBS One · {title}")
+    push_body=str(message or '')
     for row in tokens:
         try:
             msg=messaging.Message(
                 token=row['token'],
+                notification=messaging.Notification(title=push_title,body=push_body),
                 data={
-                    'title':str(f"TBS · {title}"),
-                    'body':str(message or ''),
+                    'title':push_title,
+                    'body':push_body,
                     'url':target_url,
                     'kind':str(kind or 'notification'),
                     'reference_type':str(reference_type or ''),
                     'reference_id':str(reference_id or ''),
                 },
                 webpush=messaging.WebpushConfig(
-                    headers={'Urgency':'high'},
+                    headers={'Urgency':'high','TTL':'300'},
+                    notification=messaging.WebpushNotification(
+                        title=push_title,
+                        body=push_body,
+                        icon='/pwa-icon-192.png',
+                        badge='/pwa-icon-192.png',
+                        tag=f"tbs-{kind}-{reference_id or user_id}",
+                        require_interaction=(kind == 'discount_request'),
+                        data={'url':target_url},
+                    ),
                     fcm_options=messaging.WebpushFCMOptions(link=target_url),
                 ),
             )
-            messaging.send(msg)
-            db.execute("UPDATE push_subscriptions SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
+            firebase_message_id=messaging.send(msg)
+            db.execute("""UPDATE push_subscriptions
+                          SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+                          WHERE id=?""",(row['id'],))
+            _log_push_delivery(db,user_id,row['username'] or username,row['id'],row['token'],kind,title,
+                               reference_type,reference_id,'sent',firebase_message_id=firebase_message_id)
+            app.logger.info("Push Firebase inviata user_id=%s sub_id=%s message_id=%s kind=%s",
+                            user_id,row['id'],firebase_message_id,kind)
             sent += 1
         except Exception as exc:
-            error_text=str(exc)[:500]
-            deactivate=any(x in error_text.lower() for x in ('not registered','registration-token-not-registered','unregistered','invalid registration'))
-            db.execute("UPDATE push_subscriptions SET active=?,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(0 if deactivate else 1,error_text,row['id']))
-            print(f"Invio push fallito token #{row['id']}: {error_text}")
+            error_text=str(exc)[:1000]
+            deactivate=any(x in error_text.lower() for x in (
+                'not registered','registration-token-not-registered','unregistered',
+                'invalid registration','requested entity was not found'
+            ))
+            db.execute("""UPDATE push_subscriptions
+                          SET active=?,last_error=?,updated_at=CURRENT_TIMESTAMP
+                          WHERE id=?""",(0 if deactivate else 1,error_text,row['id']))
+            _log_push_delivery(db,user_id,row['username'] or username,row['id'],row['token'],kind,title,
+                               reference_type,reference_id,'failed',error_text=error_text)
+            app.logger.exception("Invio push fallito user_id=%s sub_id=%s kind=%s",
+                                 user_id,row['id'],kind)
     return sent
 
 
@@ -1765,7 +1840,14 @@ def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=
 
 def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
     placeholders=','.join('?' for _ in roles)
-    users=db.execute(f"SELECT id,username FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
+    users=db.execute(f"SELECT id,username,role FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
+    app.logger.info("Notifica ruoli kind=%s reference=%s:%s destinatari=%s",
+                    kind,reference_type,reference_id,
+                    [(u['id'],u['username'],u['role']) for u in users])
+    if not users:
+        _ensure_push_delivery_log(db)
+        _log_push_delivery(db,None,None,None,'',kind,title,reference_type,reference_id,
+                           'no_recipient',error_text=f"Nessun utente attivo nei ruoli: {roles}")
     for user in users:
         user_event_key=f"{event_key}:user:{user['id']}" if event_key else None
         _notify_user(db,user['id'],kind,title,message,reference_type,reference_id,user_event_key,user['username'])
@@ -1938,11 +2020,56 @@ def push_unsubscribe():
 @role_required('admin','manager')
 def push_test():
     with connect() as db:
-        sent=_send_push_for_user(db,session.get('user_id'),'Test notifiche push','Le notifiche TBS funzionano anche a gestionale chiuso.','push_test')
+        sent=_send_push_for_user(
+            db,session.get('user_id'),
+            'Test notifiche push',
+            'Le notifiche di TBS One funzionano anche con il gestionale chiuso.',
+            'push_test'
+        )
+        rows=db.execute("""SELECT status,firebase_message_id,error_text,created_at
+                           FROM push_delivery_log
+                           WHERE user_id=? AND kind='push_test'
+                           ORDER BY id DESC LIMIT 5""",(session.get('user_id'),)).fetchall()
         db.commit()
-    if sent:
-        return jsonify({'ok':True,'sent':sent})
-    return jsonify({'ok':False,'sent':0,'error':_FIREBASE_ADMIN_ERROR or 'Nessun dispositivo registrato'}),400
+    payload={'ok':bool(sent),'sent':sent,'attempts':[dict(r) for r in rows],
+             'adminReady':init_firebase_admin(),'adminError':_FIREBASE_ADMIN_ERROR}
+    return jsonify(payload),(200 if sent else 400)
+
+
+@app.get('/api/push/diagnostics')
+@login_required
+@role_required('admin','manager')
+def push_diagnostics():
+    with connect() as db:
+        _ensure_push_subscriptions(db)
+        _ensure_push_delivery_log(db)
+        users=db.execute("""SELECT u.id,u.username,u.role,
+                            SUM(CASE WHEN p.active=1 THEN 1 ELSE 0 END) AS active_devices,
+                            COUNT(p.id) AS total_devices
+                            FROM users u
+                            LEFT JOIN push_subscriptions p ON p.user_id=u.id
+                            WHERE u.active=1 AND u.role IN ('admin','manager')
+                            GROUP BY u.id,u.username,u.role
+                            ORDER BY u.role,u.username""").fetchall()
+        devices=db.execute("""SELECT id,user_id,username,platform,active,
+                                     substr(token,-12) AS token_suffix,
+                                     last_success_at,last_error,updated_at
+                              FROM push_subscriptions
+                              ORDER BY updated_at DESC,id DESC LIMIT 50""").fetchall()
+        deliveries=db.execute("""SELECT id,user_id,username,subscription_id,token_suffix,kind,title,
+                                        reference_type,reference_id,status,firebase_message_id,error_text,created_at
+                                 FROM push_delivery_log
+                                 ORDER BY id DESC LIMIT 100""").fetchall()
+        db.commit()
+    return jsonify({
+        'ok':True,
+        'webConfigured':firebase_web_ready(),
+        'adminReady':init_firebase_admin(),
+        'adminError':_FIREBASE_ADMIN_ERROR,
+        'staff':[dict(r) for r in users],
+        'devices':[dict(r) for r in devices],
+        'deliveries':[dict(r) for r in deliveries],
+    })
 
 
 @app.get("/notifications/count")
@@ -4555,7 +4682,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-pwa-v37-2-1';
+const CACHE_NAME = 'tbs-pwa-v37-3-0';
 const STATIC_ASSETS = ['/manifest.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 self.addEventListener('install', event => {{
@@ -4584,12 +4711,13 @@ if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
   const messaging=firebase.messaging();
   messaging.onBackgroundMessage(payload => {{
     const data=payload.data || {{}};
-    const notification=payload.notification || {{}};
-    const title=notification.title || data.title || 'TBS Gestionale';
+    if(payload.notification) return;
+    const title=data.title || 'TBS One';
     const options={{
-      body:notification.body || data.body || '',
+      body:data.body || '',
       icon:'/pwa-icon-192.png', badge:'/pwa-icon-192.png',
       tag:data.kind ? 'tbs-'+data.kind+'-'+(data.reference_id||'') : 'tbs-push',
+      requireInteraction:data.kind==='discount_request',
       data:{{url:data.url || '/notifications'}}
     }};
     self.registration.showNotification(title,options);
