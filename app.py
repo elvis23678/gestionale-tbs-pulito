@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.2.1 DEV · Firebase Auto-Detect"
+APP_VERSION = "v43.2.2 STABLE · Persistent Database Fix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -106,43 +106,16 @@ FIREBASE_WEB_CONFIG = {
 }
 _FIREBASE_ADMIN_READY = False
 _FIREBASE_ADMIN_ERROR = None
-_FIREBASE_ADMIN_SOURCE = None
-_FIREBASE_ADMIN_ATTEMPTS = []
 _FIREBASE_LOCK = threading.Lock()
 
-def firebase_web_missing_keys():
-    required = {
-        "FIREBASE_API_KEY": FIREBASE_WEB_CONFIG.get("apiKey"),
-        "FIREBASE_PROJECT_ID": FIREBASE_WEB_CONFIG.get("projectId"),
-        "FIREBASE_MESSAGING_SENDER_ID": FIREBASE_WEB_CONFIG.get("messagingSenderId"),
-        "FIREBASE_APP_ID": FIREBASE_WEB_CONFIG.get("appId"),
-        "FIREBASE_VAPID_PUBLIC_KEY": FIREBASE_VAPID_PUBLIC_KEY,
-    }
-    return [name for name, value in required.items() if not value]
-
 def firebase_web_ready():
-    return not firebase_web_missing_keys()
-
-def _firebase_admin_candidate_paths():
-    """Percorsi supportati, incluso il mount standard dei Secret Files di Render."""
-    candidates = []
-    for value in (
-        os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip(),
-        os.environ.get("FIREBASE_SERVICE_ACCOUNT_FILE", "").strip(),
-        "/etc/secrets/firebase-admin.json",
-        "/etc/secrets/firebase_admin.json",
-        os.path.join(APP_DIR, "firebase-admin.json"),
-        os.path.join(APP_DIR, "firebase_admin.json"),
-        os.path.join(os.getcwd(), "firebase-admin.json"),
-        os.path.join(os.getcwd(), "firebase_admin.json"),
-    ):
-        if value and value not in candidates:
-            candidates.append(value)
-    return candidates
+    return bool(FIREBASE_VAPID_PUBLIC_KEY and FIREBASE_WEB_CONFIG.get("apiKey") and
+                FIREBASE_WEB_CONFIG.get("projectId") and FIREBASE_WEB_CONFIG.get("messagingSenderId") and
+                FIREBASE_WEB_CONFIG.get("appId"))
 
 def init_firebase_admin():
-    """Inizializza Firebase Admin da JSON env o Secret File Render, senza esporre segreti."""
-    global _FIREBASE_ADMIN_READY, _FIREBASE_ADMIN_ERROR, _FIREBASE_ADMIN_SOURCE, _FIREBASE_ADMIN_ATTEMPTS
+    """Inizializza Firebase Admin senza mai inserire credenziali private nel repository."""
+    global _FIREBASE_ADMIN_READY, _FIREBASE_ADMIN_ERROR
     if _FIREBASE_ADMIN_READY:
         return True
     with _FIREBASE_LOCK:
@@ -155,32 +128,17 @@ def init_firebase_admin():
                 _FIREBASE_ADMIN_READY = True
                 return True
             cred = None
-            _FIREBASE_ADMIN_SOURCE = None
-            _FIREBASE_ADMIN_ATTEMPTS = []
             raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
             if raw_json:
-                try:
-                    cred = credentials.Certificate(json.loads(raw_json))
-                    _FIREBASE_ADMIN_SOURCE = "variabile FIREBASE_SERVICE_ACCOUNT_JSON"
-                except Exception as exc:
-                    _FIREBASE_ADMIN_ERROR = f"FIREBASE_SERVICE_ACCOUNT_JSON non valido: {exc}"
-                    return False
+                cred = credentials.Certificate(json.loads(raw_json))
             else:
-                for credential_path in _firebase_admin_candidate_paths():
-                    exists = os.path.isfile(credential_path)
-                    _FIREBASE_ADMIN_ATTEMPTS.append({"path": credential_path, "exists": exists})
-                    if exists:
-                        cred = credentials.Certificate(credential_path)
-                        _FIREBASE_ADMIN_SOURCE = credential_path
-                        break
+                credential_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+                if credential_path and os.path.isfile(credential_path):
+                    cred = credentials.Certificate(credential_path)
             if cred is None:
-                checked = ", ".join(item["path"] for item in _FIREBASE_ADMIN_ATTEMPTS) or "nessun percorso"
-                _FIREBASE_ADMIN_ERROR = f"Credenziali Firebase Admin non trovate. Percorsi controllati: {checked}"
+                _FIREBASE_ADMIN_ERROR = "Credenziali Firebase Admin non configurate"
                 return False
-            options = {}
-            if FIREBASE_WEB_CONFIG.get("projectId"):
-                options["projectId"] = FIREBASE_WEB_CONFIG.get("projectId")
-            firebase_admin.initialize_app(cred, options or None)
+            firebase_admin.initialize_app(cred, {"projectId": FIREBASE_WEB_CONFIG.get("projectId")})
             _FIREBASE_ADMIN_READY = True
             _FIREBASE_ADMIN_ERROR = None
             return True
@@ -189,18 +147,49 @@ def init_firebase_admin():
             print(f"Firebase Admin non disponibile: {exc}")
             return False
 
+def _directory_is_writable(path):
+    """Verifica davvero che una cartella sia scrivibile, non solo che esista."""
+    try:
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".tbs_write_test")
+        with open(probe, "w", encoding="utf-8") as handle:
+            handle.write("ok")
+        os.remove(probe)
+        return True
+    except Exception as exc:
+        print(f"Cartella database non scrivibile {path}: {exc}")
+        return False
+
+
 def choose_db_path():
+    """Usa prima il disco Render, poi DATABASE_PATH, infine /tmp come emergenza."""
     configured = os.environ.get("DATABASE_PATH", "").strip()
+    candidates = []
     if configured:
-        return os.path.abspath(configured)
-    persistent_dir = "/var/data"
-    if os.path.isdir(persistent_dir) and os.access(persistent_dir, os.W_OK):
-        return os.path.join(persistent_dir, "gestionale_tbs.db")
-    return "/tmp/gestionale_tbs.db"
+        configured_path = os.path.abspath(configured)
+        candidates.append(configured_path)
+
+    # Sul servizio Starter il disco Render è montato qui. Lo rileviamo anche
+    # quando la variabile ambiente non è stata applicata al deploy corrente.
+    render_disk_path = "/var/data/gestionale_tbs.db"
+    if render_disk_path not in candidates:
+        candidates.append(render_disk_path)
+
+    for candidate in candidates:
+        parent = os.path.dirname(candidate) or "."
+        if _directory_is_writable(parent):
+            print(f"Database selezionato: {candidate}")
+            return candidate
+
+    fallback = "/tmp/gestionale_tbs.db"
+    print(f"ATTENZIONE: uso database temporaneo {fallback}")
+    return fallback
+
 
 DB_PATH = choose_db_path()
 os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 DB_IS_EPHEMERAL = os.path.abspath(DB_PATH).startswith("/tmp/")
+print(f"TBS database={DB_PATH} ephemeral={DB_IS_EPHEMERAL}")
 BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 _BACKUP_RETENTION_DAYS = max(1, int(os.environ.get("BACKUP_RETENTION_DAYS", "30")))
@@ -2232,10 +2221,6 @@ def push_diagnostics():
         'webConfigured':firebase_web_ready(),
         'adminReady':init_firebase_admin(),
         'adminError':_FIREBASE_ADMIN_ERROR,
-        'adminCredentialSource':_FIREBASE_ADMIN_SOURCE,
-        'adminCredentialAttempts':_FIREBASE_ADMIN_ATTEMPTS,
-        'webMissingKeys':firebase_web_missing_keys(),
-        'appVersion':APP_VERSION,
         'staff':[dict(r) for r in users],
         'devices':[dict(r) for r in devices],
         'deliveries':[dict(r) for r in deliveries],
@@ -2282,11 +2267,10 @@ def push_diagnostics_page():
     <h1>🔔 Diagnostica notifiche</h1>
     <p class='muted'>Controllo completo del telefono, del database e dell'invio Firebase.</p>
     <div class='diag-grid'>
-      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if web_ready else ""}}'></span>Configurazione Web</div><p>{{'Pronta' if web_ready else ('Mancano: ' + (web_missing|join(', ')))}}</p></div>
-      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if admin_ready else ""}}'></span>Firebase Admin</div><p>{{('Pronto · ' + (admin_source or 'credenziale caricata')) if admin_ready else (admin_error or 'Credenziali server mancanti')}}</p></div>
+      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if web_ready else ""}}'></span>Configurazione Web</div><p>{{'Pronta' if web_ready else 'Incompleta: mancano variabili Firebase Web su Render'}}</p></div>
+      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if admin_ready else ""}}'></span>Firebase Admin</div><p>{{'Pronto per inviare' if admin_ready else (admin_error or 'Credenziali server mancanti')}}</p></div>
       <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if my_active else ""}}'></span>Questo utente</div><p>{{my_active}} dispositivo/i attivo/i registrato/i per <b>{{session.get('user')}}</b>.</p></div>
     </div>
-    <div class='card'><h2>🧭 Verifica server</h2><p><b>Versione:</b> {{app_version}}</p><p><b>Credenziale Admin:</b> <span class='diag-code'>{{admin_source or 'non trovata'}}</span></p>{% if admin_attempts %}<p><b>Percorsi controllati:</b></p><div class='diag-code'>{% for item in admin_attempts %}{{'✅' if item.exists else '❌'}} {{item.path}}<br>{% endfor %}</div>{% endif %}</div>
     <div class='card' id='diagClient'><h2>📱 Controllo di questo dispositivo</h2><div id='clientRows'>Analisi in corso…</div><div class='actions' style='margin-top:16px'><button id='diagRegister' type='button'>Attiva / registra notifiche</button><button id='diagTest' type='button' class='success'>Invia notifica di prova</button><button id='diagRefresh' type='button' class='secondary'>Aggiorna dati</button></div><h3>Risultato</h3><div id='diagResult'>Nessun test eseguito.</div></div>
     <div class='card'><h2>👥 Admin e Gestori</h2><div class='diag-scroll'><table class='diag-table'><tr><th>Utente</th><th>Ruolo</th><th>Dispositivi attivi</th><th>Totali</th></tr>{% for u in staff %}<tr><td><b>{{u.username}}</b></td><td>{{u.role}}</td><td>{{u.active_devices or 0}}</td><td>{{u.total_devices or 0}}</td></tr>{% else %}<tr><td colspan='4'>Nessun utente trovato.</td></tr>{% endfor %}</table></div></div>
     <div class='card'><h2>📲 Dispositivi registrati</h2><div class='diag-scroll'><table class='diag-table'><tr><th>Utente</th><th>Stato</th><th>Token</th><th>Ultimo successo</th><th>Ultimo errore</th></tr>{% for d in devices %}<tr><td><b>{{d.username or d.user_id}}</b><br><small>{{d.platform or '-'}}</small></td><td>{{'✅ Attivo' if d.active else '⛔ Disattivo'}}</td><td class='diag-code'>…{{d.token_suffix or '-'}}</td><td>{{d.last_success_at|rome_time}}</td><td class='diag-code'>{{d.last_error or '-'}}</td></tr>{% else %}<tr><td colspan='5'><b>Nessun dispositivo registrato.</b> Premi “Attiva / registra notifiche” da questo Android.</td></tr>{% endfor %}</table></div></div>
@@ -2330,10 +2314,8 @@ def push_diagnostics_page():
     """
     my_active=sum(1 for d in devices if d.get('user_id')==session.get('user_id') and d.get('active'))
     return page('Diagnostica notifiche',body,staff=staff,devices=devices,deliveries=deliveries,
-                web_ready=firebase_web_ready(),web_missing=firebase_web_missing_keys(),
-                admin_ready=init_firebase_admin(),admin_error=_FIREBASE_ADMIN_ERROR,
-                admin_source=_FIREBASE_ADMIN_SOURCE,admin_attempts=_FIREBASE_ADMIN_ATTEMPTS,
-                app_version=APP_VERSION,my_active=my_active)
+                web_ready=firebase_web_ready(),admin_ready=init_firebase_admin(),
+                admin_error=_FIREBASE_ADMIN_ERROR,my_active=my_active)
 
 
 @app.get("/notifications/count")
@@ -4999,7 +4981,7 @@ if(isStandalone){btn.disabled=true;btn.textContent='App già installata';statusT
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;btn.disabled=false;btn.textContent='Installa sul dispositivo';statusText.textContent='Installazione disponibile';help.textContent='Premi il pulsante per installare questa app con la sua icona dedicata.';});
 btn.addEventListener('click',async()=>{if(isStandalone)return;if(promptEvent){promptEvent.prompt();const result=await promptEvent.userChoice;help.textContent=result.outcome==='accepted'?'Installazione avviata. Cerca l’icona nella schermata Home.':'Installazione annullata: puoi riprovare quando vuoi.';promptEvent=null;}else{help.textContent='Nel menu ⋮ di Chrome premi “Installa app”. Se appare “Apri TBS One”, disinstalla prima la vecchia app e ricarica questa pagina.';}});
 window.addEventListener('appinstalled',()=>{btn.disabled=true;btn.textContent='Installazione completata';statusText.textContent='Installata';help.textContent='Applicazione installata correttamente.';});
-(async()=>{if(isStandalone)return;try{if(!('serviceWorker' in navigator))throw new Error('Service worker non supportato');const reg=await navigator.serviceWorker.register('/service-worker.js?v=4321',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;await reg.update();statusText.textContent='Service worker attivo';setTimeout(()=>{if(!promptEvent)readyFallback();},1200);}catch(err){btn.disabled=false;btn.textContent='Apri istruzioni';statusText.textContent='Controllo manuale';help.textContent='Ricarica la pagina. Se necessario usa il menu ⋮ di Chrome e scegli Installa app.';console.warn(err);}})();
+(async()=>{if(isStandalone)return;try{if(!('serviceWorker' in navigator))throw new Error('Service worker non supportato');const reg=await navigator.serviceWorker.register('/service-worker.js?v=4320',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;await reg.update();statusText.textContent='Service worker attivo';setTimeout(()=>{if(!promptEvent)readyFallback();},1200);}catch(err){btn.disabled=false;btn.textContent='Apri istruzioni';statusText.textContent='Controllo manuale';help.textContent='Ricarica la pagina. Se necessario usa il menu ⋮ di Chrome e scegli Installa app.';console.warn(err);}})();
 </script></body></html>"""
     response = make_response(render_template_string(html, app_name=app_name, subtitle=subtitle, manifest_url=manifest_url, icon_url=icon_url, open_url=open_url, theme=theme))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -5143,7 +5125,7 @@ def service_worker():
     # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
     config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
     script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v43-2-1';
+const CACHE_NAME = 'tbs-one-dual-app-v43-2-0';
 const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
 const FIREBASE_CONFIG = {config_json};
 
