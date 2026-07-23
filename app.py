@@ -88,7 +88,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v38.2.1 LTS · Ordini fornitore riservati"
+APP_VERSION = "v38.3.0 LTS · Tesoreria completa"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 # Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
@@ -1551,12 +1551,66 @@ def change_password():
 @role_required("admin","manager")
 def treasury():
     today=now_rome().date(); start,end=utc_bounds_for_rome_day(today); month_start,_=utc_bounds_for_rome_day(today.replace(day=1))
+    movement_filter=request.args.get("tipo","").strip()
+    if movement_filter not in {"","withdrawal","return","deposit"}: movement_filter=""
     with connect() as db:
         day_sales=sales_totals_for_period(db,start,end); month_sales=sales_totals_for_period(db,month_start,end)
         cash=treasury_cash_balance(db); debts=treasury_open_debts(db); debt_total=sum(float(x['amount']) for x in debts)
         outflows=db.execute("SELECT COALESCE(SUM(amount),0) FROM treasury_movements WHERE movement_type='withdrawal' AND refundable=0").fetchone()[0]
-        recent=db.execute("SELECT * FROM treasury_movements ORDER BY id DESC LIMIT 40").fetchall(); count=db.execute("SELECT * FROM treasury_cash_counts ORDER BY id DESC LIMIT 1").fetchone(); closures=db.execute("SELECT * FROM treasury_daily_closures ORDER BY closure_date DESC LIMIT 14").fetchall()
-    return page("Tesoreria",'''<style>.money{font-size:30px;font-weight:800}.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.debt{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}.plus{color:#047857}.minus{color:#b91c1c}</style><h1>💎 Tesoreria Gioielli</h1><div class="grid"><div class="card"><div class="muted">Incasso oggi</div><div class="money">€ {{'%.2f'|format(day_sales.total)}}</div><p>💵 € {{'%.2f'|format(day_sales.cash)}} · 💳 € {{'%.2f'|format(day_sales.card)}}</p></div><div class="card"><div class="muted">Incasso mese</div><div class="money">€ {{'%.2f'|format(month_sales.total)}}</div><p>Contanti € {{'%.2f'|format(month_sales.cash)}} · Bancomat € {{'%.2f'|format(month_sales.card)}}</p></div><div class="card"><div class="muted">Contanti nel cassetto</div><div class="money">€ {{'%.2f'|format(cash)}}</div></div><div class="card"><div class="muted">Da restituire</div><div class="money">€ {{'%.2f'|format(debt_total)}}</div><p>Uscite definitive € {{'%.2f'|format(outflows)}}</p></div></div><div class="card buttons"><a class="danger" href="{{url_for('treasury_withdrawal')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➖ Prelievo</a><a class="success" href="{{url_for('treasury_return')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➕ Restituzione</a><a class="view" href="{{url_for('treasury_count')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">🧮 Conta cassetto</a><form method="post" action="{{url_for('treasury_empty')}}" onsubmit="return confirm('Confermi lo svuotamento completo del cassetto? Il movimento resterà nello storico.')"><button class="danger" style="width:100%;height:100%">Svuota cassetto</button></form></div><div class="grid"><div class="card"><h2>Chi deve rimettere denaro</h2>{% for d in debts %}<div class="debt"><b>{{d.responsible_username}}</b><b class="minus">€ {{'%.2f'|format(d.amount)}}</b></div>{% else %}<p class="muted">Nessun importo aperto.</p>{% endfor %}</div><div class="card"><h2>Ultimo conteggio</h2>{% if count %}<p>{{count.created_at|rome_time}} · {{count.username}}</p><p>Teorico € {{'%.2f'|format(count.theoretical_amount)}}<br>Contati € {{'%.2f'|format(count.counted_amount)}}<br>Differenza <b>€ {{'%.2f'|format(count.difference)}}</b></p>{% else %}<p class="muted">Nessun conteggio.</p>{% endif %}</div></div><div class="card"><h2>Ultimi movimenti</h2>{% for x in recent %}<p><b>{{x.movement_number}}</b> · {{x.created_at|rome_time}} · {{x.actor_username}}<br>{{x.category}}{% if x.responsible_username %} · Prelevato/restituito da <b>{{x.responsible_username}}</b>{% endif %}{% if x.supplier %} · Fornitore {{x.supplier}}{% endif %}<br><b class="{{'plus' if x.movement_type=='return' else 'minus'}}">{{'+' if x.movement_type=='return' else '-'}} € {{'%.2f'|format(x.amount)}}</b>{% if x.notes %}<br><span class="muted">{{x.notes}}</span>{% endif %}</p><hr>{% else %}<p class="muted">Nessun movimento.</p>{% endfor %}</div><div class="card"><h2>Chiusure giornaliere automatiche</h2><p class="muted">Create dopo mezzanotte; eventuali chiusure mancanti vengono recuperate alla prima apertura.</p>{% for c in closures %}<p><b>{{c.closure_date}}</b> · Totale € {{'%.2f'|format(c.sales_total)}} · Contanti € {{'%.2f'|format(c.cash_sales)}} · Bancomat € {{'%.2f'|format(c.card_sales)}}<br>Cassetto € {{'%.2f'|format(c.theoretical_cash)}} · Da restituire € {{'%.2f'|format(c.open_debts)}}</p><hr>{% else %}<p class="muted">La prima chiusura comparirà dopo mezzanotte.</p>{% endfor %}</div>''',day_sales=day_sales,month_sales=month_sales,cash=cash,debts=debts,debt_total=debt_total,outflows=outflows,recent=recent,count=count,closures=closures)
+        deposits=db.execute("SELECT COALESCE(SUM(amount),0) FROM treasury_movements WHERE movement_type='deposit'").fetchone()[0]
+        sql="SELECT * FROM treasury_movements"; params=[]
+        if movement_filter: sql+=" WHERE movement_type=?"; params.append(movement_filter)
+        sql+=" ORDER BY id DESC LIMIT 100"
+        recent=db.execute(sql,params).fetchall()
+        count=db.execute("SELECT * FROM treasury_cash_counts ORDER BY id DESC LIMIT 1").fetchone()
+        closures=db.execute("SELECT * FROM treasury_daily_closures ORDER BY closure_date DESC LIMIT 31").fetchall()
+        today_closed=db.execute("SELECT 1 FROM treasury_daily_closures WHERE closure_date=?",(today.isoformat(),)).fetchone() is not None
+    body="""<style>.money{font-size:30px;font-weight:800}.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.debt{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}.plus{color:#047857}.minus{color:#b91c1c}.treasury-action{padding:13px;text-align:center;text-decoration:none;border-radius:9px;font-weight:800;display:flex;align-items:center;justify-content:center}</style>
+    <div class='dash-head'><div><span class='eyebrow'>AMMINISTRAZIONE NEGOZIO</span><h1>💎 Tesoreria</h1><p class='muted'>Incassi, contanti, movimenti e chiusure giornaliere.</p></div></div>
+    <div class='grid'><div class='card'><div class='muted'>Incasso oggi</div><div class='money'>€ {{'%.2f'|format(day_sales.total)}}</div><p>💵 € {{'%.2f'|format(day_sales.cash)}} · 💳 € {{'%.2f'|format(day_sales.card)}}</p></div><div class='card'><div class='muted'>Incasso mese</div><div class='money'>€ {{'%.2f'|format(month_sales.total)}}</div><p>Contanti € {{'%.2f'|format(month_sales.cash)}} · Bancomat € {{'%.2f'|format(month_sales.card)}}</p></div><div class='card'><div class='muted'>Contanti nel cassetto</div><div class='money'>€ {{'%.2f'|format(cash)}}</div><p>Versamenti registrati € {{'%.2f'|format(deposits)}}</p></div><div class='card'><div class='muted'>Da restituire</div><div class='money'>€ {{'%.2f'|format(debt_total)}}</div><p>Uscite definitive € {{'%.2f'|format(outflows)}}</p></div></div>
+    <div class='card buttons'><a class='danger treasury-action' href='{{url_for("treasury_withdrawal")}}'>➖ Prelievo</a><a class='success treasury-action' href='{{url_for("treasury_deposit")}}'>➕ Versamento</a><a class='success treasury-action' href='{{url_for("treasury_return")}}'>↩ Restituzione</a><a class='view treasury-action' href='{{url_for("treasury_count")}}'>🧮 Conta cassetto</a><a class='secondary treasury-action' href='{{url_for("treasury_export")}}'>⬇️ Esporta CSV</a><form method='post' action='{{url_for("treasury_close_today")}}' onsubmit="return confirm('Confermi la chiusura di oggi?')"><button class='secondary' style='width:100%;height:100%'>{{'✅ Giornata chiusa' if today_closed else '📒 Chiudi giornata'}}</button></form><form method='post' action='{{url_for("treasury_empty")}}' onsubmit="return confirm('Confermi lo svuotamento completo del cassetto? Il movimento resterà nello storico.')"><button class='danger' style='width:100%;height:100%'>Svuota cassetto</button></form></div>
+    <div class='grid'><div class='card'><h2>Chi deve rimettere denaro</h2>{% for d in debts %}<div class='debt'><b>{{d.responsible_username}}</b><b class='minus'>€ {{'%.2f'|format(d.amount)}}</b></div>{% else %}<p class='muted'>Nessun importo aperto.</p>{% endfor %}</div><div class='card'><h2>Ultimo conteggio</h2>{% if count %}<p>{{count.created_at|rome_time}} · {{count.username}}</p><p>Teorico € {{'%.2f'|format(count.theoretical_amount)}}<br>Contati € {{'%.2f'|format(count.counted_amount)}}<br>Differenza <b>€ {{'%.2f'|format(count.difference)}}</b></p>{% else %}<p class='muted'>Nessun conteggio.</p>{% endif %}</div></div>
+    <div class='card'><div style='display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap'><h2 style='margin:0'>Movimenti</h2><form method='get' class='inline'><select name='tipo'><option value=''>Tutti</option><option value='withdrawal' {% if movement_filter=='withdrawal' %}selected{% endif %}>Prelievi</option><option value='deposit' {% if movement_filter=='deposit' %}selected{% endif %}>Versamenti</option><option value='return' {% if movement_filter=='return' %}selected{% endif %}>Restituzioni</option></select><button class='secondary'>Filtra</button></form></div>{% for x in recent %}<p><b>{{x.movement_number}}</b> · {{x.created_at|rome_time}} · {{x.actor_username}}<br>{{x.category}}{% if x.responsible_username %} · Responsabile <b>{{x.responsible_username}}</b>{% endif %}{% if x.supplier %} · Fornitore {{x.supplier}}{% endif %}<br><b class='{{"plus" if x.movement_type in ("return","deposit") else "minus"}}'>{{'+' if x.movement_type in ('return','deposit') else '-'}} € {{'%.2f'|format(x.amount)}}</b>{% if x.notes %}<br><span class='muted'>{{x.notes}}</span>{% endif %}</p><hr>{% else %}<p class='muted'>Nessun movimento.</p>{% endfor %}</div>
+    <div class='card'><h2>Chiusure giornaliere</h2><p class='muted'>Automatiche dopo mezzanotte oppure manuali con “Chiudi giornata”.</p>{% for c in closures %}<p><b>{{c.closure_date}}</b> · Totale € {{'%.2f'|format(c.sales_total)}} · Contanti € {{'%.2f'|format(c.cash_sales)}} · Bancomat € {{'%.2f'|format(c.card_sales)}}<br>Cassetto € {{'%.2f'|format(c.theoretical_cash)}} · Uscite € {{'%.2f'|format(c.definitive_outflows)}} · Da restituire € {{'%.2f'|format(c.open_debts)}}</p><hr>{% else %}<p class='muted'>Nessuna chiusura presente.</p>{% endfor %}</div>"""
+    return page("Tesoreria",body,day_sales=day_sales,month_sales=month_sales,cash=cash,debts=debts,debt_total=debt_total,outflows=outflows,deposits=deposits,recent=recent,count=count,closures=closures,movement_filter=movement_filter,today_closed=today_closed)
+
+@app.route("/treasury/deposit",methods=["GET","POST"])
+@role_required("admin","manager")
+def treasury_deposit():
+    if request.method=="POST":
+        try: amount=float(request.form.get("amount","0").replace(",","."))
+        except ValueError: amount=0
+        category=request.form.get("category","").strip()
+        allowed={"Fondo cassa","Versamento contanti","Rettifica autorizzata","Altro"}
+        if amount<=0 or category not in allowed: flash("Inserisci importo e causale validi.")
+        else:
+            with connect() as db:
+                number=next_treasury_number(db)
+                db.execute("INSERT INTO treasury_movements(movement_number,movement_type,category,amount,actor_user_id,actor_username,responsible_username,notes,refundable) VALUES(?,?,?,?,?,?,?,?,0)",(number,"deposit",category,amount,session.get("user_id"),session.get("user","sconosciuto"),session.get("user","sconosciuto"),request.form.get("notes","").strip()))
+                log_action(db,"Versamento tesoreria",details=f"{number}; {category}; € {amount:.2f}"); db.commit()
+            flash("Versamento registrato."); return redirect(url_for("treasury"))
+    return page("Versamento",'''<h1>Nuovo versamento</h1><div class="card"><form method="post"><p><label>Importo<input name="amount" inputmode="decimal" required></label></p><p><label>Causale<select name="category" required><option value="">Seleziona</option><option>Fondo cassa</option><option>Versamento contanti</option><option>Rettifica autorizzata</option><option>Altro</option></select></label></p><p><label>Note<textarea name="notes"></textarea></label></p><button class="success">Registra versamento</button></form><p class="muted">Il versamento aumenta il contante teorico presente nel cassetto.</p></div>''')
+
+@app.post("/treasury/close-today")
+@role_required("admin","manager")
+def treasury_close_today():
+    day=now_rome().date()
+    with connect() as db:
+        db.execute("DELETE FROM treasury_daily_closures WHERE closure_date=?",(day.isoformat(),)); create_daily_closure(db,day)
+        log_action(db,"Chiusura tesoreria manuale",details=day.isoformat()); db.commit()
+    flash("Chiusura giornaliera registrata."); return redirect(url_for("treasury"))
+
+@app.get("/treasury/export.csv")
+@role_required("admin","manager")
+def treasury_export():
+    import io
+    text=io.StringIO(); writer=csv.writer(text,delimiter=';')
+    writer.writerow(["Numero","Data","Tipo","Causale","Importo","Operatore","Responsabile","Fornitore","Fattura","Note"])
+    with connect() as db: rows=db.execute("SELECT * FROM treasury_movements ORDER BY id").fetchall()
+    for x in rows:
+        writer.writerow([x['movement_number'],format_rome(x['created_at']),x['movement_type'],x['category'] or '',f"{float(x['amount']):.2f}",x['actor_username'],x['responsible_username'] or '',x['supplier'] or '',x['invoice_number'] or '',x['notes'] or ''])
+    output=BytesIO(text.getvalue().encode('utf-8-sig'))
+    return send_file(output,as_attachment=True,download_name=f"tesoreria_{now_rome().strftime('%Y%m%d_%H%M')}.csv",mimetype="text/csv; charset=utf-8")
 
 @app.post("/treasury/empty")
 @role_required("admin","manager")
