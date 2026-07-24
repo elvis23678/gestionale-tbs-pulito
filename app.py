@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.4 ENTERPRISE · TBS ONE Design System"
+APP_VERSION = "v35.0.6 TBS ONE · UI Framework Reale"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -356,107 +356,15 @@ body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba
 '''
 
 
-
-
-# === v35.0.3 TBS ONE MOCKUP UI: tema operativo nero/oro ===
-CSS += r"""
-:root{--one-bg:#050505;--one-panel:#0c0c0d;--one-panel-2:#111113;--one-gold:#d8aa3e;--one-gold-hi:#f4d57b;--one-text:#f7f4ed;--one-muted:#a9a49b;--one-line:rgba(216,170,62,.28)}
-html{background:#050505}
-body{background:radial-gradient(circle at 8% 0%,rgba(216,170,62,.10),transparent 24%),radial-gradient(circle at 100% 12%,rgba(216,170,62,.07),transparent 27%),linear-gradient(180deg,#050505 0%,#090909 48%,#050505 100%)!important;color:var(--one-text)!important}
-body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.18;z-index:-1;background-image:linear-gradient(115deg,transparent 0 48%,rgba(216,170,62,.10) 49%,transparent 50% 100%);background-size:420px 420px}
-main{width:min(1240px,100%);margin:26px auto 110px;padding:0 22px}
-h1,h2,h3,h4,strong,b{color:var(--one-text)}p,.muted,small{color:var(--one-muted)!important}a{color:var(--one-gold-hi)}
-.main-header{background:rgba(4,4,5,.97)!important;border-bottom:1px solid var(--one-line)!important;box-shadow:0 14px 35px rgba(0,0,0,.45)!important}
-.header-brand strong{font-family:Georgia,"Times New Roman",serif;color:var(--one-gold-hi)!important;letter-spacing:.08em!important}.header-brand span{color:#b8954b!important}
-.user-menu a{background:#111113!important;border:1px solid rgba(216,170,62,.16);color:var(--one-gold-hi)!important}
-.main-nav a,.nav-group summary{color:#ece8df!important}.main-nav a:hover,.nav-group summary:hover{background:rgba(216,170,62,.12)!important;color:var(--one-gold-hi)!important}.nav-dropdown{background:#0b0b0d!important;border-color:var(--one-line)!important}
-.card,.kpi,.ux-card,.order-kpi{background:linear-gradient(145deg,rgba(17,17,19,.98),rgba(8,8,9,.98))!important;color:var(--one-text)!important;border:1px solid var(--one-line)!important;box-shadow:0 18px 45px rgba(0,0,0,.32)!important}
-.metric{color:var(--one-gold-hi)!important;font-family:Georgia,"Times New Roman",serif}.badge,.stock-pill{background:rgba(216,170,62,.12)!important;color:var(--one-gold-hi)!important;border:1px solid rgba(216,170,62,.20)!important}
-.dash-head{padding:4px 0 0!important}.dash-head>div:first-child{margin:0 0 24px}.dash-head .eyebrow{display:block;color:var(--one-gold)!important;font-size:12px;font-weight:900;letter-spacing:.14em;margin-bottom:7px}.dash-head h1{font-family:Georgia,"Times New Roman",serif;color:var(--one-text)!important;font-size:clamp(36px,6vw,58px);line-height:.96;letter-spacing:-.035em}.welcome-name{color:var(--one-gold-hi)!important;text-shadow:0 0 24px rgba(216,170,62,.18)!important}
-.quick-actions{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:14px!important;margin:0 0 22px!important}.quick-actions a{min-height:126px!important;padding:17px!important;border-radius:18px!important;background:linear-gradient(145deg,#111113,#080809)!important;color:var(--one-text)!important;border:1px solid var(--one-line)!important;box-shadow:0 15px 34px rgba(0,0,0,.30)!important}.quick-actions a span{background:#171719!important;color:var(--one-gold-hi)!important;border:1px solid rgba(216,170,62,.25);border-radius:50%!important}.quick-actions a b{color:var(--one-text)!important}.quick-actions a small{color:var(--one-muted)!important}
-.kpi-grid{gap:14px!important}.kpi{min-height:180px!important;border-radius:18px!important}.kpi strong{color:#d8d2c7!important;text-transform:uppercase;letter-spacing:.07em;font-size:12px}.kpi .metric{font-size:clamp(38px,5vw,54px)!important}.kpi:before{content:"";display:block;width:44px;height:2px;background:linear-gradient(90deg,var(--one-gold),transparent);margin-bottom:auto}
-input,select,textarea{background:#111113!important;color:var(--one-text)!important;border:1px solid rgba(216,170,62,.25)!important}input::placeholder,textarea::placeholder{color:#77736c}
-button:not(.secondary):not(.danger):not(.success),.button:not(.secondary):not(.danger):not(.success){background:linear-gradient(135deg,#f0ce70,#bd8a25)!important;color:#120e06!important}.secondary{background:#111113!important;color:var(--one-text)!important;border-color:rgba(216,170,62,.25)!important}
-.mobile-dock{background:rgba(7,7,8,.98)!important;border:1px solid rgba(216,170,62,.30)!important;box-shadow:0 18px 45px rgba(0,0,0,.55)!important}.mobile-dock a,.mobile-dock button{color:#c9c4ba!important}.mobile-dock span{color:var(--one-gold-hi)!important}.mobile-dock .dock-primary{background:linear-gradient(145deg,#f0ce70,#c28e27)!important;color:#151006!important;border-color:#161618!important}
-@media(max-width:800px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
-@media(max-width:520px){main{padding:0 15px;margin-top:22px}.dash-head h1{font-size:39px}.dash-head>div:first-child{margin-bottom:20px}.quick-actions{gap:11px!important}.quick-actions a{min-height:118px!important;padding:15px!important}.quick-actions a b{font-size:15px!important}.quick-actions a small{display:block!important;font-size:10px!important}.kpi{min-height:158px!important;padding:17px!important}.kpi .metric{font-size:39px!important}.main-header{border-bottom-color:rgba(216,170,62,.42)!important}}
-"""
-
-
-# === v35.0.4 TBS ONE DESIGN SYSTEM ===
-CSS += r"""
-:root{
-  --tbs-bg:#050505;--tbs-bg-2:#090909;--tbs-surface:#0d0d0f;--tbs-surface-2:#141416;
-  --tbs-gold:#d7aa43;--tbs-gold-light:#f2d276;--tbs-gold-dark:#9b6a18;
-  --tbs-text:#f7f3e9;--tbs-muted:#a8a299;--tbs-border:rgba(215,170,67,.28);
-  --tbs-shadow:0 18px 48px rgba(0,0,0,.46);--tbs-radius:20px;--tbs-radius-sm:14px;
-}
-*{box-sizing:border-box}
-html{background:var(--tbs-bg);color-scheme:dark}
-body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:
- radial-gradient(circle at 8% 4%,rgba(215,170,67,.11),transparent 20%),
- radial-gradient(circle at 94% 14%,rgba(215,170,67,.07),transparent 22%),
- linear-gradient(180deg,#050505 0%,#090909 46%,#050505 100%)!important;color:var(--tbs-text)!important}
-body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.28;background:
- linear-gradient(122deg,transparent 0 46%,rgba(215,170,67,.10) 47%,transparent 48% 100%);background-size:520px 520px}
-main{max-width:1280px!important}
-h1,h2,h3,h4{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.02em;color:var(--tbs-text)!important}
-.eyebrow{font-family:Inter,system-ui,sans-serif!important;color:var(--tbs-gold)!important;text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:900}
-.muted,small{color:var(--tbs-muted)!important}
-.main-header{background:rgba(5,5,6,.96)!important;backdrop-filter:blur(18px);border-bottom:1px solid var(--tbs-border)!important;box-shadow:0 16px 42px rgba(0,0,0,.44)!important}
-.header-brand strong{font-family:Georgia,"Times New Roman",serif!important;font-size:25px!important;color:var(--tbs-gold-light)!important;text-shadow:0 0 24px rgba(215,170,67,.20)}
-.header-brand span{font-size:9px!important;letter-spacing:.19em!important;color:#a88745!important}
-.header-icon,.logout-link{background:linear-gradient(145deg,#151517,#09090a)!important;border:1px solid var(--tbs-border)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
-.card,.kpi,.ux-card,.order-kpi,.order-stage{border-radius:var(--tbs-radius)!important;background:linear-gradient(145deg,rgba(20,20,22,.98),rgba(7,7,8,.99))!important;border:1px solid var(--tbs-border)!important;box-shadow:var(--tbs-shadow)!important;overflow:hidden}
-.card::before,.kpi::before{background:linear-gradient(90deg,var(--tbs-gold),transparent)!important}
-.metric{font-family:Georgia,"Times New Roman",serif!important;color:var(--tbs-gold-light)!important;text-shadow:0 0 22px rgba(215,170,67,.12)}
-.quick-actions a{border-radius:var(--tbs-radius)!important;background:linear-gradient(145deg,#151517,#09090a)!important;border:1px solid var(--tbs-border)!important;box-shadow:var(--tbs-shadow)!important;isolation:isolate}
-.quick-actions a::before{background:linear-gradient(135deg,rgba(255,255,255,.08),transparent 38%)!important}
-.quick-actions a::after{content:"";position:absolute;inset:auto 18px 0;height:1px;background:linear-gradient(90deg,transparent,var(--tbs-gold),transparent);opacity:.55}
-.quick-actions a span{display:grid!important;place-items:center;background:linear-gradient(145deg,#202024,#101012)!important;color:var(--tbs-gold-light)!important;border:1px solid rgba(215,170,67,.32)!important;box-shadow:inset 0 0 18px rgba(215,170,67,.06)}
-.quick-actions a:hover,.card:hover{border-color:rgba(242,210,118,.50)!important;box-shadow:0 22px 55px rgba(0,0,0,.52),0 0 0 1px rgba(215,170,67,.08)!important}
-button,.button,.view{border-radius:13px!important;font-weight:900!important;letter-spacing:.02em}
-input,select,textarea{border-radius:13px!important;background:#101012!important;border:1px solid rgba(215,170,67,.28)!important;color:var(--tbs-text)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
-input:focus,select:focus,textarea:focus{outline:none!important;border-color:var(--tbs-gold)!important;box-shadow:0 0 0 3px rgba(215,170,67,.12)!important}
-table{background:var(--tbs-surface)!important;border-radius:16px!important;overflow:hidden}th{background:#151517!important;color:var(--tbs-gold-light)!important}td,th{border-color:rgba(215,170,67,.16)!important}
-.flash,.toast{background:#111113!important;color:var(--tbs-text)!important;border:1px solid var(--tbs-border)!important;box-shadow:var(--tbs-shadow)!important}
-.mobile-dock{background:rgba(7,7,8,.97)!important;backdrop-filter:blur(18px);border:1px solid rgba(215,170,67,.36)!important;border-radius:25px!important;box-shadow:0 18px 50px rgba(0,0,0,.62)!important}
-.mobile-dock a,.mobile-dock button{background:transparent!important;color:#c6c0b7!important;border:none!important;box-shadow:none!important}
-.mobile-dock a.active{background:linear-gradient(145deg,var(--tbs-gold-light),#c38d24)!important;color:#171109!important;box-shadow:0 10px 24px rgba(215,170,67,.28)!important}
-.mobile-dock a.active span{color:#171109!important}
-.mobile-dock button{background:linear-gradient(145deg,var(--tbs-gold-light),#c38d24)!important;color:#171109!important}
-.mobile-dock button span{color:#171109!important}
-@media(max-width:760px){
- body{padding-bottom:104px!important}
- .main-header{padding:8px 16px!important;min-height:72px!important;height:72px!important}
- .header-brand{max-width:220px!important}.header-brand strong{font-size:26px!important}.header-brand span{font-size:8px!important}
- .user-menu{gap:8px!important}.user-label{display:none!important}.user-menu a{width:44px!important;height:44px!important}
- main{padding:0 18px!important;margin-top:28px!important}
- .dash-head{padding-top:6px!important}.dash-head h1{font-size:clamp(44px,13vw,64px)!important;line-height:.88!important;margin:8px 0 20px!important}
- .dash-head .muted{font-size:18px!important;line-height:1.45!important}
- .quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:13px!important}
- .quick-actions a{min-height:150px!important;padding:22px 18px!important}.quick-actions a span{width:58px!important;height:58px!important;font-size:31px!important}.quick-actions a b{font-size:20px!important}.quick-actions a small{font-size:13px!important;display:block!important}
- .kpi-grid{grid-template-columns:1fr!important;gap:12px!important}.kpi{min-height:165px!important;padding:22px!important}.kpi .metric{font-size:50px!important}
- .mobile-dock{left:18px!important;right:18px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;padding:7px!important;min-height:82px!important}
- .mobile-dock a,.mobile-dock button{min-height:64px!important;border-radius:20px!important;font-size:11px!important}.mobile-dock span{font-size:24px!important}
-}
-@media(max-width:390px){.header-brand strong{font-size:22px!important}.quick-actions a{min-height:140px!important;padding:18px 15px!important}.quick-actions a b{font-size:18px!important}.mobile-dock{left:10px!important;right:10px!important}}
-"""
-
 BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
 
-/* v35.0.2 · TBS ONE visual identity */
-:root{--tbs-gold:#c99a36;--tbs-gold-light:#f0cf78;--tbs-black:#050505;--tbs-panel:#0d0d0d}
-body{background-color:var(--tbs-black)}
-.main-header{background:linear-gradient(180deg,#090909,#030303);border-bottom:1px solid rgba(201,154,54,.45)}
-.header-brand strong{color:var(--tbs-gold-light);letter-spacing:.08em}.header-brand span{color:#b99a58;letter-spacing:.14em}
-.card,.kpi{background:linear-gradient(145deg,rgba(18,18,18,.98),rgba(7,7,7,.98));border-color:rgba(201,154,54,.34);box-shadow:0 16px 38px rgba(0,0,0,.26)}
-button,.view,.success{background:linear-gradient(135deg,#f0cf78,#b87a19)!important;color:#130e05!important;border-color:#d4a642!important}
-.secondary{background:#0b0b0b!important;color:#f0cf78!important;border-color:rgba(201,154,54,.55)!important}
-.metric,.eyebrow,h1,h2{color:#f0cf78}.muted{color:#aaa39a}
+/* v35.0.6 · TBS ONE UI FRAMEWORK REALE */
+:root{--tbs-bg:#070706;--tbs-panel:#10100f;--tbs-gold:#d8aa43;--tbs-gold2:#f1d27a;--tbs-line:rgba(216,170,67,.28);--tbs-text:#f7f2e8;--tbs-muted:#aaa49a;--tbs-radius:22px}
+html{background:var(--tbs-bg)}body{background:radial-gradient(circle at 15% 0%,rgba(216,170,67,.10),transparent 28%),radial-gradient(circle at 90% 15%,rgba(216,170,67,.05),transparent 25%),linear-gradient(180deg,#090908,#050505 62%);color:var(--tbs-text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.13;background-image:linear-gradient(115deg,transparent 0 48%,rgba(216,170,67,.14) 49%,transparent 50%),linear-gradient(25deg,transparent 0 48%,rgba(216,170,67,.08) 49%,transparent 50%);background-size:420px 420px,620px 620px;z-index:-1}a{color:var(--tbs-gold2)}main{max-width:1480px;margin:0 auto;padding:32px 28px 120px}.main-header{position:sticky;top:0;z-index:1000;background:rgba(5,5,5,.93);backdrop-filter:blur(18px);border-bottom:1px solid var(--tbs-line);box-shadow:0 14px 35px rgba(0,0,0,.3)}.header-brand strong{font-family:Georgia,"Times New Roman",serif;color:var(--tbs-gold2);font-size:25px;letter-spacing:.12em}.header-brand span{color:#c7b98f;letter-spacing:.14em}.main-nav a,.nav-group summary{color:#eee7da}.main-nav a:hover,.nav-group summary:hover{background:rgba(216,170,67,.10);color:var(--tbs-gold2)}.nav-dropdown{background:#0e0e0d;border:1px solid var(--tbs-line);box-shadow:0 24px 60px rgba(0,0,0,.55)}.header-icon,.logout-link{border:1px solid var(--tbs-line);background:#11110f;color:var(--tbs-gold2)}.card,.kpi{background:linear-gradient(145deg,rgba(24,24,22,.96),rgba(8,8,8,.98));border:1px solid var(--tbs-line);border-radius:var(--tbs-radius);box-shadow:inset 0 1px rgba(255,255,255,.025),0 18px 45px rgba(0,0,0,.24);color:var(--tbs-text)}.card:hover{border-color:rgba(241,210,122,.52);box-shadow:0 22px 55px rgba(0,0,0,.34),0 0 0 1px rgba(216,170,67,.06)}.eyebrow{color:var(--tbs-gold);letter-spacing:.16em;font-weight:800}.muted{color:var(--tbs-muted)!important}h1,h2,h3{color:var(--tbs-text)}.dash-head h1,.welcome-block h1{font-family:Georgia,"Times New Roman",serif;letter-spacing:-.035em}.welcome-name{color:var(--tbs-gold2)!important;text-shadow:none!important}.quick-actions>a{background:linear-gradient(145deg,#1a1a19,#0b0b0a);border:1px solid var(--tbs-line)!important;border-radius:24px;color:var(--tbs-text)!important;box-shadow:0 14px 34px rgba(0,0,0,.28)}.quick-actions>a:hover{transform:translateY(-3px);border-color:rgba(241,210,122,.55)!important}.quick-actions>a span{color:var(--tbs-gold2)}.quick-actions>a small{color:var(--tbs-muted)}.kpi strong{color:#d7d0c4;text-transform:uppercase;letter-spacing:.08em}.metric{color:var(--tbs-gold2)!important;font-family:Georgia,"Times New Roman",serif}button,.btn,.view,input[type=submit]{background:linear-gradient(135deg,var(--tbs-gold2),var(--tbs-gold));color:#181306;border:0;border-radius:14px;font-weight:900;box-shadow:0 10px 25px rgba(216,170,67,.16)}input,select,textarea{background:#11110f!important;color:var(--tbs-text)!important;border:1px solid var(--tbs-line)!important;border-radius:13px!important}input:focus,select:focus,textarea:focus{outline:2px solid rgba(216,170,67,.24);border-color:var(--tbs-gold)!important}table{color:var(--tbs-text)}th{color:var(--tbs-gold2);border-color:var(--tbs-line)}td{border-color:rgba(216,170,67,.12)}tr:hover td{background:rgba(216,170,67,.045)}.flash,.toast{background:#151410;color:var(--tbs-text);border:1px solid var(--tbs-line)}.mobile-dock{background:rgba(7,7,7,.96)!important;border:1px solid rgba(216,170,67,.42)!important;box-shadow:0 20px 50px rgba(0,0,0,.58)!important}.mobile-dock a,.mobile-dock button{color:#d0c8ba!important}.mobile-dock a.active{background:linear-gradient(145deg,var(--tbs-gold2),var(--tbs-gold))!important;color:#181306!important}.mobile-dock a.active span{color:#181306!important}
+@media(max-width:760px){main{padding:26px 22px 118px}.main-header{padding:10px 18px}.header-brand strong{font-size:22px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.header-brand span{font-size:7px}.dash-head{padding-top:18px}.dash-head h1{font-size:52px;line-height:.92}.dash-head>.muted,.dash-head p{font-size:18px}.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important}.quick-actions>a{min-height:150px!important;padding:22px!important}.quick-actions>a b{font-family:Georgia,"Times New Roman",serif;font-size:23px}.quick-actions>a small{display:block!important;font-size:15px;margin-top:7px}.kpi-grid{grid-template-columns:1fr!important;gap:12px!important}.kpi{min-height:166px!important;padding:28px!important}.metric{font-size:58px!important}.mobile-dock{left:14px!important;right:14px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;min-height:76px!important}}
 </style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
@@ -782,7 +690,7 @@ body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#11
 .login-only input{min-height:54px;border-radius:15px;font-size:16px}.login-only .password-wrap{position:relative}.login-only .password-wrap input{padding-right:54px}.login-only .password-toggle{position:absolute;right:7px;top:7px;width:40px;min-height:40px;padding:0;border-radius:11px;background:#f0ede5;color:#111722;font-size:18px}
 .login-only .login-submit{min-height:56px;border-radius:16px;background:linear-gradient(135deg,#e3c568,#bd8f2d);color:#17120a;font-size:17px;box-shadow:0 12px 24px rgba(184,138,45,.22)}.login-only .login-footer{text-align:center;padding:20px 10px 4px;color:#888e99;font:12px Arial,sans-serif}.login-only .login-footer b{display:block;color:#111722;margin-bottom:4px}.login-only .flash{margin:0 0 14px}
 @media(max-width:560px){body.login-only{background:linear-gradient(180deg,#111722 0 158px,#f7f5ef 158px 100%)}.login-only .login-top{height:158px;padding:20px 18px}.login-only .login-brand strong{font-size:31px}.login-only .version-pill{padding:7px 9px;font-size:10px}.login-only main{margin:-42px auto 0;padding:0 12px 24px}.login-only .badge-login{padding:18px!important}.login-only .card{border-radius:22px}}
-</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS ONE</strong><span>Business Operating System</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS ONE</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main></body></html>'''
+</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS</strong><span>Tattoo Beauty Saloon</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS Gestionale</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main></body></html>'''
 
 def login_page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
@@ -1930,14 +1838,14 @@ def logout():
 @app.get("/home")
 @login_required
 def home():
-    """Landing sicura per ruolo, senza cicli di reindirizzamento."""
+    """Pagina iniziale sicura e coerente con il ruolo."""
     role=(session.get("role") or "").strip().lower()
     if role in ("seller","venditore"):
         return redirect(url_for("pos"))
     if role in ("admin","manager","gestore"):
         return redirect(url_for("dashboard_smart"))
     session.clear()
-    flash("Ruolo utente non riconosciuto. Accedi nuovamente.","error")
+    flash("Ruolo non riconosciuto. Effettua nuovamente l'accesso.","warning")
     return redirect(url_for("login"))
 
 @app.get("/admin")
@@ -3658,11 +3566,6 @@ def v20_page_context():
 @app.after_request
 def v20_ui_headers(response):
     response.headers.setdefault('X-TBS-Version', APP_VERSION)
-    # Evita che Safari riutilizzi redirect/sessioni precedenti nelle pagine di accesso.
-    if request.endpoint in {'login','home','lock_register','unlock_register','logout'}:
-        response.headers['Cache-Control']='no-store, no-cache, must-revalidate, max-age=0'
-        response.headers['Pragma']='no-cache'
-        response.headers['Expires']='0'
     return response
 
 
@@ -3715,24 +3618,6 @@ def customers_crm():
 
 
 
-
-
-# === v35.0.5 TBS ONE UI FRAMEWORK ===
-CSS += r"""
-.tbs-dashboard{display:grid;gap:18px;padding-bottom:8px}
-.tbs-hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:18px;align-items:stretch}
-.tbs-hero-copy,.tbs-overview{position:relative;overflow:hidden;border:1px solid var(--tbs-border);border-radius:26px;background:linear-gradient(145deg,rgba(18,18,20,.98),rgba(6,6,7,.99));box-shadow:var(--tbs-shadow)}
-.tbs-hero-copy{padding:30px}.tbs-hero-copy:after{content:"";position:absolute;right:-45px;bottom:-75px;width:230px;height:230px;border:1px solid rgba(215,170,67,.17);transform:rotate(45deg);box-shadow:0 0 80px rgba(215,170,67,.07)}
-.tbs-hero-copy h1{margin:8px 0 12px;font-size:clamp(42px,5vw,72px);line-height:.92}.tbs-hero-copy p{font-size:17px;max-width:620px;margin:0}
-.tbs-overview{padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.tbs-mini-kpi{padding:16px;border:1px solid rgba(215,170,67,.18);border-radius:16px;background:rgba(255,255,255,.018)}.tbs-mini-kpi span{display:block;color:var(--tbs-muted);font-size:11px;text-transform:uppercase;letter-spacing:.11em;font-weight:900}.tbs-mini-kpi strong{display:block;margin-top:7px;color:var(--tbs-gold-light)!important;font:700 29px/1 Georgia,serif}.tbs-mini-kpi small{display:block;margin-top:7px}
-.tbs-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.tbs-action{position:relative;min-height:120px;padding:18px;text-decoration:none;border:1px solid var(--tbs-border);border-radius:20px;background:linear-gradient(145deg,#151517,#080809);box-shadow:var(--tbs-shadow);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}.tbs-action:before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.07),transparent 42%);pointer-events:none}.tbs-action-icon{position:absolute;top:17px;left:17px;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(215,170,67,.32);color:var(--tbs-gold-light);font-size:24px;background:#151517}.tbs-action b{font-size:18px}.tbs-action small{margin-top:4px}.tbs-action:hover{transform:translateY(-2px);border-color:rgba(242,210,118,.5)}
-.tbs-section-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-top:4px}.tbs-section-head h2{margin:0;font-size:27px}.tbs-section-head a{font-size:13px;text-decoration:none}
-.tbs-dashboard-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.tbs-stack{display:grid;gap:18px}.tbs-panel{border:1px solid var(--tbs-border);border-radius:22px;background:linear-gradient(145deg,rgba(18,18,20,.98),rgba(7,7,8,.99));box-shadow:var(--tbs-shadow);overflow:hidden}.tbs-panel-head{display:flex;align-items:center;justify-content:space-between;padding:17px 19px;border-bottom:1px solid rgba(215,170,67,.16)}.tbs-panel-head h3{margin:0;font-size:20px}.tbs-panel-body{padding:10px 18px 16px}.tbs-list-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.06)}.tbs-list-row:last-child{border-bottom:0}.tbs-list-row b{font-size:14px}.tbs-list-row .value{color:var(--tbs-gold-light);font-weight:900;white-space:nowrap}.tbs-alert-dot{width:9px;height:9px;border-radius:50%;background:#dc4f45;box-shadow:0 0 0 4px rgba(220,79,69,.12);flex:0 0 auto}.tbs-empty{padding:24px;text-align:center;color:var(--tbs-muted)}
-.tbs-priority-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.tbs-priority{display:block;padding:16px;text-decoration:none;border:1px solid rgba(215,170,67,.18);border-radius:16px;background:rgba(255,255,255,.018)}.tbs-priority h4{margin:8px 0 4px;font-size:17px}.tbs-priority span{font-size:12px;color:var(--tbs-gold)}
-@media(max-width:900px){.tbs-hero{grid-template-columns:1fr}.tbs-dashboard-grid{grid-template-columns:1fr}.tbs-actions{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){main{padding-inline:14px!important}.tbs-dashboard{gap:14px}.tbs-hero{gap:12px}.tbs-hero-copy{padding:22px 20px}.tbs-hero-copy h1{font-size:44px}.tbs-hero-copy p{font-size:15px}.tbs-overview{padding:14px;gap:9px}.tbs-mini-kpi{padding:13px}.tbs-mini-kpi strong{font-size:27px}.tbs-actions{gap:10px}.tbs-action{min-height:112px;padding:14px}.tbs-action-icon{top:14px;left:14px;width:42px;height:42px;font-size:21px}.tbs-action b{font-size:16px}.tbs-action small{font-size:11px}.tbs-section-head h2{font-size:23px}.tbs-panel-head{padding:15px 16px}.tbs-panel-body{padding:7px 15px 13px}.tbs-priority-grid{grid-template-columns:1fr}.main-header{padding-left:18px!important;padding-right:10px!important}.header-brand{max-width:150px!important}.header-brand strong{font-size:23px!important}.header-brand span{font-size:8px!important;letter-spacing:.12em!important}.user-menu{gap:4px!important}.user-menu a{width:38px!important;height:38px!important}}
-"""
-
 # --- v20 rev.7: Dashboard Smart ---
 @app.get('/dashboard-smart')
 @login_required
@@ -3762,35 +3647,7 @@ def dashboard_smart():
         if low: alerts.append(('Scorte',f'{low} prodotti da riordinare',url_for('inventory_pro')))
         if waiting: alerts.append(('Clienti',f'{waiting} clienti in attesa',url_for('catalog_requests')))
         if pending_reorders: alerts.append(('Fornitori',f'{pending_reorders} riordini aperti',url_for('reorders')))
-    body='''<div class="tbs-dashboard">
-<div class="tbs-hero">
-  <section class="tbs-hero-copy"><span class="eyebrow">CENTRO OPERATIVO</span><h1>Bentornato,<br><span class="welcome-name">{% if session.get('role') == 'admin' %}Elvis{% else %}{{session.get('user')}}{% endif %}</span>.</h1><p>Vendite, ordini e scorte in un unico spazio operativo.</p></section>
-  <section class="tbs-overview">
-    <div class="tbs-mini-kpi"><span>Incasso oggi</span><strong>€ {{'%.2f'|format(today.revenue)}}</strong><small>{{today.receipts}} vendite</small></div>
-    <div class="tbs-mini-kpi"><span>Scorte basse</span><strong>{{low}}</strong><small>articoli da controllare</small></div>
-    <div class="tbs-mini-kpi"><span>Clienti in attesa</span><strong>{{waiting}}</strong><small>ordini aperti</small></div>
-    <div class="tbs-mini-kpi"><span>Riordini</span><strong>{{pending_reorders}}</strong><small>fornitori aperti</small></div>
-  </section>
-</div>
-<div class="tbs-actions">
-  <a class="tbs-action" href="{{url_for('pos')}}"><span class="tbs-action-icon">€</span><b>Cassa</b><small>Avvia una nuova vendita</small></a>
-  <a class="tbs-action" href="{{url_for('scan_product')}}"><span class="tbs-action-icon">⌗</span><b>Scanner</b><small>Leggi QR e codici prodotto</small></a>
-  <a class="tbs-action" href="{{url_for('inventory_pro')}}"><span class="tbs-action-icon">◇</span><b>Magazzino</b><small>Scorte, movimenti e riordini</small></a>
-  <a class="tbs-action" href="{{url_for('customers_crm')}}"><span class="tbs-action-icon">◎</span><b>Clienti</b><small>Ordini, contatti e attività</small></a>
-</div>
-<div class="tbs-section-head"><h2>Priorità operative</h2><a href="{{url_for('enterprise')}}">Centro completo →</a></div>
-<div class="tbs-dashboard-grid">
-  <div class="tbs-stack">
-    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Da fare oggi</h3><span class="eyebrow">LIVE</span></div><div class="tbs-panel-body">
-      {% for kind,text,link in alerts %}<a class="tbs-list-row" href="{{link}}" style="text-decoration:none;color:inherit"><span style="display:flex;align-items:center;gap:12px"><i class="tbs-alert-dot"></i><span><b>{{kind}}</b><br><small>{{text}}</small></span></span><span class="value">Apri →</span></a>{% else %}<div class="tbs-empty">Tutto sotto controllo. Non risultano priorità operative.</div>{% endfor %}
-    </div></section>
-    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Accesso rapido</h3></div><div class="tbs-panel-body"><div class="tbs-priority-grid"><a class="tbs-priority" href="{{url_for('catalog_requests')}}"><span>ORDINI</span><h4>Richieste clienti</h4><small>Gestisci attese e consegne</small></a><a class="tbs-priority" href="{{url_for('reorders')}}"><span>FORNITORI</span><h4>Riordini</h4><small>Controlla merce ordinata</small></a><a class="tbs-priority" href="{{url_for('sales_log')}}"><span>VENDITE</span><h4>Registro</h4><small>Consulta incassi e movimenti</small></a></div></div></section>
-  </div>
-  <div class="tbs-stack">
-    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Stato attività</h3></div><div class="tbs-panel-body"><div class="tbs-list-row"><span><b>Vendite di oggi</b><br><small>Transazioni confermate</small></span><span class="value">{{today.receipts}}</span></div><div class="tbs-list-row"><span><b>Scorte critiche</b><br><small>Quantità minima raggiunta</small></span><span class="value">{{low}}</span></div><div class="tbs-list-row"><span><b>Clienti da contattare</b><br><small>Richieste ancora aperte</small></span><span class="value">{{waiting}}</span></div><div class="tbs-list-row"><span><b>Ordini fornitore</b><br><small>Non ancora ricevuti</small></span><span class="value">{{pending_reorders}}</span></div></div></section>
-  </div>
-</div>
-</div>'''
+    body='''<div class="dash-head"><div><span class="eyebrow">TBS ONE · CENTRO OPERATIVO</span><h1>Bentornato, {% if session.get('role') == 'admin' %}<span class="welcome-name">Elvis</span>{% else %}<span class="welcome-name">{{session.get('user')}}</span>{% endif %}.</h1><p class="muted">Vendite, ordini e scorte. Tutto sotto controllo.</p></div><div class="quick-actions"><a href="{{url_for('pos')}}"><span>€</span><b>Cassa</b><small>Nuova vendita</small></a><a href="{{url_for('scan_product')}}"><span>⌗</span><b>Scanner</b><small>Leggi QR prodotto</small></a><a href="{{url_for('inventory_pro')}}"><span>◇</span><b>Magazzino</b><small>Scorte e riordini</small></a><a href="{{url_for('customers_crm')}}"><span>◎</span><b>Clienti</b><small>Ordini e contatti</small></a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite</span></div><div class="kpi"><strong>Scorte basse</strong><div class="metric">{{low}}</div></div><div class="kpi"><strong>Clienti in attesa</strong><div class="metric">{{waiting}}</div></div><div class="kpi"><strong>Riordini aperti</strong><div class="metric">{{pending_reorders}}</div></div></div><h2>Da fare</h2><div class="grid">{% for kind,text,link in alerts %}<a class="card" href="{{link}}" style="text-decoration:none;color:inherit"><span class="eyebrow">{{kind}}</span><h3>{{text}}</h3><span>Apri →</span></a>{% else %}<div class="card"><h3>Tutto sotto controllo</h3><p class="muted">Non risultano priorità operative.</p></div>{% endfor %}</div>'''
     return page('Dashboard Smart',body,today=today,low=low,waiting=waiting,pending_reorders=pending_reorders,alerts=alerts)
 
 
