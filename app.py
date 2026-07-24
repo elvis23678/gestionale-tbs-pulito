@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.3.2 TBS ONE · Stable Mobile + QR Labels"
+APP_VERSION = "v36.3.3 TBS ONE · Stable Real Base"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1132,177 +1132,37 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
         .replace("}}", "}")
     )
 
+
 def product_scanner_html(target_url):
-    """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
-    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
-    replacements={
-        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
-        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
-        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
-        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
-        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
-        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
-        "Badge camera error":"Product QR camera error",
-        "Fotocamera non avviata.":"Fotocamera pronta.",
-    }
-    for old,new in replacements.items():
-        html=html.replace(old,new)
-
-    old_product_scan = r"""  function scanFrame(){
-    if(!running||submitted) return;
-    if(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0 && window.jsQR){
-      const maxWidth=900;
-      const scale=Math.min(1,maxWidth/video.videoWidth);
-      canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-      canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-        const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-        if(code&&code.data){submitBadge(code.data);return;}
-      }catch(e){}
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
-
-    new_product_scan = r"""  let lastProductScanAt=0;
-
-  function decodeProductCanvas(){
-    if(!window.jsQR)return null;
-    try{
-      const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code=window.jsQR(
-        image.data,
-        image.width,
-        image.height,
-        {inversionAttempts:'attemptBoth'}
-      );
-      return code&&code.data?code.data:null;
-    }catch(e){return null;}
-  }
-
-  function scanFrame(){
-    if(!running||submitted)return;
-    const now=performance.now();
-    if(now-lastProductScanAt<65){
-      scanTimer=requestAnimationFrame(scanFrame);
-      return;
-    }
-    lastProductScanAt=now;
-
-    if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0&&window.jsQR){
-      const vw=video.videoWidth;
-      const vh=video.videoHeight;
-
-      const ratio=.68;
-      const sw=Math.round(vw*ratio);
-      const sh=Math.round(vh*ratio);
-      const sx=Math.round((vw-sw)/2);
-      const sy=Math.round((vh-sh)/2);
-      const targetWidth=Math.min(1100,Math.max(850,sw));
-
-      canvas.width=targetWidth;
-      canvas.height=Math.round(targetWidth*sh/sw);
-      ctx.imageSmoothingEnabled=true;
-      ctx.imageSmoothingQuality='high';
-      ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
-
-      let value=decodeProductCanvas();
-      if(value){submitBadge(value);return;}
-
-      const fullWidth=Math.min(1000,vw);
-      canvas.width=fullWidth;
-      canvas.height=Math.round(fullWidth*vh/vw);
-      ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);
-
-      value=decodeProductCanvas();
-      if(value){submitBadge(value);return;}
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
-
-    if old_product_scan not in html:
-        raise RuntimeError("Scanner prodotti stabile non trovato")
-    html=html.replace(old_product_scan,new_product_scan,1)
-
-    feedback_js = r"""
-  let productScanAudioContext=null;
-
-  function productTone(success){
-    try{
-      const AudioCtx=window.AudioContext||window.webkitAudioContext;
-      if(!AudioCtx)return;
-      productScanAudioContext=productScanAudioContext||new AudioCtx();
-      if(productScanAudioContext.state==='suspended')productScanAudioContext.resume().catch(()=>{});
-      const now=productScanAudioContext.currentTime;
-      const osc=productScanAudioContext.createOscillator();
-      const gain=productScanAudioContext.createGain();
-      osc.type=success?'square':'sawtooth';
-      osc.frequency.setValueAtTime(success?1850:310,now);
-      osc.frequency.exponentialRampToValueAtTime(success?1450:190,now+(success?.075:.16));
-      gain.gain.setValueAtTime(.0001,now);
-      gain.gain.exponentialRampToValueAtTime(success?.16:.12,now+.006);
-      gain.gain.exponentialRampToValueAtTime(.0001,now+(success?.10:.19));
-      osc.connect(gain);gain.connect(productScanAudioContext.destination);
-      osc.start(now);osc.stop(now+(success?.11:.20));
-    }catch(e){}
-  }
-
-  async function verifyProductCode(clean){
-    const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{
-      cache:'no-store',
-      headers:{'Accept':'application/json'}
-    });
-    let data={};
-    try{data=await response.json()}catch(e){}
-    return {ok:response.ok&&data.ok,data:data};
-  }
-
-"""
-    html=html.replace("  function submitBadge(value){", feedback_js+"  async function submitBadge(value){", 1)
-
-    old_submit = """    submitted=true;
-    field.value=clean;
-    status.textContent='✓ QR letto. Ricerca del prodotto…';
-    guide.style.borderColor='#34d399';
-    halt().finally(()=>form.submit());"""
-
-    new_submit = """    submitted=true;
-    field.value=clean;
-    status.textContent='Verifica prodotto…';
-    guide.style.borderColor='#d6ae58';
-    try{
-      const result=await verifyProductCode(clean);
-      if(!result.ok){
-        productTone(false);
-        guide.style.borderColor='#ef4444';
-        guide.style.boxShadow='0 0 0 4px rgba(239,68,68,.18)';
-        status.textContent='✕ Prodotto non trovato: '+clean;
-        submitted=false;
-        setTimeout(()=>{
-          guide.style.borderColor='rgba(255,255,255,.9)';
-          guide.style.boxShadow='none';
-        },1400);
-        return;
-      }
-      productTone(true);
-      try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
-      status.textContent='✓ '+result.data.brand_code+' riconosciuto. Apertura…';
-      guide.style.borderColor='#34d399';
-      guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.16)';
-      await halt();
-      form.submit();
-    }catch(e){
-      productTone(false);
-      guide.style.borderColor='#ef4444';
-      status.textContent='Impossibile verificare il prodotto. Riprova.';
-      submitted=false;
-    }"""
-
-    if old_submit not in html:
-        raise RuntimeError("Submit scanner prodotto non trovato")
-    html=html.replace(old_submit,new_submit,1)
-    return html
+    # Scanner QR prodotti autonomo: camera stabile, nessuno zoom/focus forzato.
+    safe_target=(target_url or url_for("scan_product")).replace("&","&amp;").replace('"',"&quot;")
+    return r'''<div class="card product-scan-card" style="max-width:620px;margin:20px auto;text-align:center">
+<h2 style="margin-top:0">📷 Scansiona il prodotto</h2>
+<p class="muted">Avvicina il QR al centro del riquadro e mantienilo fermo.</p>
+<style>
+.product-scan-card{overflow:hidden}.product-camera-shell{position:relative;overflow:hidden;border-radius:18px;background:#050505;min-height:280px;border:1px solid rgba(232,190,91,.44)}
+#productVideo{width:100%;height:360px;object-fit:cover;display:block;background:#111}#productGuide{position:absolute;z-index:3;left:50%;top:50%;width:min(72vw,270px);height:min(72vw,270px);transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.92);border-radius:18px;box-shadow:0 0 0 999px rgba(0,0,0,.30);pointer-events:none;transition:border-color .18s ease,box-shadow .18s ease}
+.product-scan-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}.product-manual{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}#productStatus{min-height:24px}
+@media(max-width:560px){#productVideo{height:330px}.product-manual{grid-template-columns:1fr}.product-manual button{width:100%}}
+</style>
+<div class="product-camera-shell"><video id="productVideo" playsinline webkit-playsinline muted autoplay></video><canvas id="productCanvas" hidden></canvas><div id="productGuide"></div></div>
+<form id="productScanForm" method="post" action="__TARGET__"><input type="hidden" id="productPayload" name="badge_payload"><div class="product-manual"><input id="productManualCode" name="code" placeholder="Codice prodotto o lettore USB" autocomplete="off"><button type="submit">Cerca prodotto</button></div></form>
+<div class="product-scan-actions"><button type="button" id="productStart">Avvia fotocamera</button><button type="button" class="secondary" id="productStop" style="display:none">Ferma fotocamera</button></div><p id="productStatus" class="muted" aria-live="polite">Avvio automatico della fotocamera…</p></div>
+<script>
+(()=>{
+ const video=document.getElementById('productVideo'),canvas=document.getElementById('productCanvas'),ctx=canvas.getContext('2d',{willReadFrequently:true})||canvas.getContext('2d'),guide=document.getElementById('productGuide'),status=document.getElementById('productStatus'),startBtn=document.getElementById('productStart'),stopBtn=document.getElementById('productStop'),form=document.getElementById('productScanForm'),payload=document.getElementById('productPayload'),manual=document.getElementById('productManualCode');
+ let stream=null,running=false,submitted=false,raf=null,detector=null,lastScan=0,jsQRPromise=null;
+ const setStatus=(m,e=false)=>{status.textContent=m;status.style.color=e?'#ffb4b4':''};
+ function loadJsQR(){if(window.jsQR)return Promise.resolve(window.jsQR);if(jsQRPromise)return jsQRPromise;jsQRPromise=new Promise((resolve,reject)=>{const sources=['https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js','https://unpkg.com/jsqr@1.4.0/dist/jsQR.js'];let i=0;const next=()=>{if(i>=sources.length){reject(new Error('Lettore QR non disponibile'));return}const s=document.createElement('script');s.src=sources[i++];s.async=true;s.onload=()=>window.jsQR?resolve(window.jsQR):next();s.onerror=next;document.head.appendChild(s)};next()});return jsQRPromise}
+ async function stopCamera(){running=false;if(raf){cancelAnimationFrame(raf);raf=null}if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;try{video.pause();video.srcObject=null}catch(e){}stopBtn.style.display='none';startBtn.style.display='inline-block';startBtn.disabled=false}
+ async function verifyCode(code){const r=await fetch('/products/scan-check?code='+encodeURIComponent(code),{cache:'no-store',headers:{Accept:'application/json'}});let data={};try{data=await r.json()}catch(e){}return {ok:r.ok&&data.ok,data}}
+ async function acceptCode(value){const clean=(value||'').trim();if(!clean||submitted)return;submitted=true;payload.value=clean;manual.value=clean;setStatus('Verifica prodotto…');guide.style.borderColor='#d6ae58';try{const result=await verifyCode(clean);if(!result.ok){submitted=false;guide.style.borderColor='#ef4444';guide.style.boxShadow='0 0 0 4px rgba(239,68,68,.18),0 0 0 999px rgba(0,0,0,.30)';setStatus('Prodotto non trovato: '+clean,true);setTimeout(()=>{guide.style.borderColor='rgba(255,255,255,.92)';guide.style.boxShadow='0 0 0 999px rgba(0,0,0,.30)'},1200);return}guide.style.borderColor='#34d399';guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.18),0 0 0 999px rgba(0,0,0,.30)';setStatus('✓ '+result.data.brand_code+' riconosciuto. Apertura…');try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}await stopCamera();form.submit()}catch(e){submitted=false;guide.style.borderColor='#ef4444';setStatus('Impossibile verificare il prodotto. Riprova.',true)}}
+ function decodeJsQR(){if(!window.jsQR||!ctx)return null;try{const image=ctx.getImageData(0,0,canvas.width,canvas.height),r=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});return r&&r.data?r.data:null}catch(e){return null}}
+ async function scanFrame(){if(!running||submitted)return;const now=performance.now();if(now-lastScan<65){raf=requestAnimationFrame(scanFrame);return}lastScan=now;if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){if('BarcodeDetector' in window){try{detector=detector||new BarcodeDetector({formats:['qr_code']});const found=await detector.detect(video);if(found.length&&found[0].rawValue){acceptCode(found[0].rawValue);return}}catch(e){}}if(window.jsQR&&ctx){const vw=video.videoWidth,vh=video.videoHeight,ratio=.70,sw=Math.round(vw*ratio),sh=Math.round(vh*ratio),sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2),targetW=Math.min(1200,Math.max(900,sw));canvas.width=targetW;canvas.height=Math.round(targetW*sh/sw);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);let value=decodeJsQR();if(value){acceptCode(value);return}const fullW=Math.min(1050,vw);canvas.width=fullW;canvas.height=Math.round(fullW*vh/vw);ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);value=decodeJsQR();if(value){acceptCode(value);return}}}raf=requestAnimationFrame(scanFrame)}
+ async function startCamera(){if(running)return;submitted=false;startBtn.disabled=true;setStatus('Richiesta accesso alla fotocamera…');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){setStatus('Fotocamera non disponibile. Inserisci il codice manualmente.',true);startBtn.disabled=false;return}try{await stopCamera();startBtn.disabled=true;try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}})}catch(first){stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true})}video.srcObject=stream;video.setAttribute('playsinline','');video.setAttribute('webkit-playsinline','');await video.play();running=true;startBtn.style.display='none';stopBtn.style.display='inline-block';setStatus('Fotocamera attiva. Preparazione lettore QR…');try{await loadJsQR()}catch(e){console.warn(e)}setStatus('Fotocamera attiva. Avvicina il QR al centro.');raf=requestAnimationFrame(scanFrame)}catch(e){await stopCamera();setStatus('Impossibile avviare la fotocamera. Controlla i permessi del sito.',true);console.error('Product QR camera error',e)}finally{startBtn.disabled=false}}
+ startBtn.addEventListener('click',startCamera);stopBtn.addEventListener('click',stopCamera);form.addEventListener('submit',e=>{const code=(manual.value||payload.value||'').trim();if(!code){e.preventDefault();setStatus('Inquadra il QR oppure inserisci il codice.',true);startCamera()}});window.addEventListener('pagehide',stopCamera);window.addEventListener('beforeunload',stopCamera);if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',()=>setTimeout(startCamera,100),{once:true});else setTimeout(startCamera,100);
+})();
+</script>'''.replace('__TARGET__',safe_target)
 
 def create_badge_pdf(badge_name, token):
     """Crea un badge A6 verticale fronte/retro, pronto per stampa duplex."""
@@ -2650,7 +2510,7 @@ def product_qr_labels_pdf():
             pdf.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.2*mm,stroke=1,fill=0)
 
             payload=(product["brand_code"] or "").strip()
-            qr_size=13*mm
+            qr_size=12.4*mm
             widget=qr.QrCodeWidget(payload)
             widget.barLevel="M"
             bounds=widget.getBounds()
@@ -2659,9 +2519,11 @@ def product_qr_labels_pdf():
             scale=qr_size/max(bw,bh)
             drawing=Drawing(qr_size,qr_size,transform=[scale,0,0,scale,-bounds[0]*scale,-bounds[1]*scale])
             drawing.add(widget)
-            renderPDF.draw(drawing,pdf,x+.8*mm,y+1*mm)
+            pdf.setFillColor(colors.white)
+            pdf.rect(x+.7*mm,y+1.1*mm,12.8*mm,12.8*mm,fill=1,stroke=0)
+            renderPDF.draw(drawing,pdf,x+.9*mm,y+1.3*mm)
 
-            tx=x+14.3*mm
+            tx=x+14.4*mm
             pdf.setFillColor(colors.black)
             pdf.setFont("Helvetica-Bold",7)
             pdf.drawString(tx,y+10.1*mm,payload[:18])
@@ -4447,7 +4309,11 @@ def v20_page_context():
 
 @app.after_request
 def v20_ui_headers(response):
-    response.headers.setdefault('X-TBS-Version', APP_VERSION)
+    response.headers['X-TBS-Version']=APP_VERSION
+    if request.endpoint!='static':
+        response.headers['Cache-Control']='no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma']='no-cache'
+        response.headers['Expires']='0'
     return response
 
 
