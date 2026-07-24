@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.3.0 TBS ONE · Badge A6 & Camera Final"
+APP_VERSION = "v36.3.1 TBS ONE · Scanner Articoli PRO"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1073,7 +1073,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       status.textContent='Fotocamera attiva. Preparazione lettore QR…';
       try{
         await loadJsQR();
-        status.textContent='Fotocamera attiva. Inquadra il QR dentro il riquadro.';
+        status.textContent='Fotocamera attiva. Avvicina il QR piccolo al centro del riquadro.';
         scanTimer=requestAnimationFrame(scanFrame);
       }catch(readerError){
         status.textContent='Fotocamera attiva, ma il lettore QR non è disponibile. Usa il codice o il lettore USB.';
@@ -1147,6 +1147,123 @@ def product_scanner_html(target_url):
     }
     for old,new in replacements.items():
         html=html.replace(old,new)
+
+    # Ottimizzazioni dedicate ai piccoli QR delle etichette articoli.
+    html=html.replace(
+        "width:{ideal:1280},height:{ideal:720}",
+        "width:{ideal:1920,min:1280},height:{ideal:1080,min:720}",
+        1
+    )
+
+    old_product_scan = r"""  function scanFrame(){
+    if(!running||submitted) return;
+    if(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0 && window.jsQR){
+      const maxWidth=900;
+      const scale=Math.min(1,maxWidth/video.videoWidth);
+      canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+      canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      try{
+        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+        if(code&&code.data){submitBadge(code.data);return;}
+      }catch(e){}
+    }
+    scanTimer=requestAnimationFrame(scanFrame);
+  }"""
+
+    new_product_scan = r"""  let productDetector=null;
+  let lastProductScanAt=0;
+
+  function enhanceProductImage(imageData){
+    const data=imageData.data;
+    let min=255,max=0;
+    for(let i=0;i<data.length;i+=4){
+      const lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
+      if(lum<min)min=lum;if(lum>max)max=lum;
+    }
+    const range=Math.max(35,max-min);
+    for(let i=0;i<data.length;i+=4){
+      let lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
+      lum=Math.max(0,Math.min(255,((lum-min)*255/range-128)*1.38+128));
+      data[i]=data[i+1]=data[i+2]=lum;
+    }
+    return imageData;
+  }
+
+  function decodeProductCanvas(sourceCanvas,sourceContext){
+    if(!window.jsQR)return null;
+    try{
+      const normal=sourceContext.getImageData(0,0,sourceCanvas.width,sourceCanvas.height);
+      let result=window.jsQR(normal.data,normal.width,normal.height,{inversionAttempts:'attemptBoth'});
+      if(result&&result.data)return result.data;
+      const enhanced=enhanceProductImage(sourceContext.getImageData(0,0,sourceCanvas.width,sourceCanvas.height));
+      result=window.jsQR(enhanced.data,enhanced.width,enhanced.height,{inversionAttempts:'attemptBoth'});
+      return result&&result.data?result.data:null;
+    }catch(e){return null;}
+  }
+
+  async function scanFrame(){
+    if(!running||submitted)return;
+    const now=performance.now();
+    if(now-lastProductScanAt<55){scanTimer=requestAnimationFrame(scanFrame);return;}
+    lastProductScanAt=now;
+
+    if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
+      if('BarcodeDetector' in window){
+        try{
+          productDetector=productDetector||new BarcodeDetector({formats:['qr_code']});
+          const found=await productDetector.detect(video);
+          if(found.length&&found[0].rawValue){submitBadge(found[0].rawValue);return;}
+        }catch(e){}
+      }
+
+      const vw=video.videoWidth,vh=video.videoHeight;
+      const cropRatio=.68;
+      const sw=Math.round(vw*cropRatio),sh=Math.round(vh*cropRatio);
+      const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
+      const targetWidth=Math.min(1280,Math.max(900,sw));
+      const targetHeight=Math.round(targetWidth*sh/sw);
+
+      canvas.width=targetWidth;
+      canvas.height=targetHeight;
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(video,sx,sy,sw,sh,0,0,targetWidth,targetHeight);
+
+      let value=decodeProductCanvas(canvas,ctx);
+      if(value){submitBadge(value);return;}
+
+      // Secondo tentativo sull'intero fotogramma per QR fuori centro.
+      const fullWidth=Math.min(1120,vw);
+      const fullHeight=Math.round(fullWidth*vh/vw);
+      canvas.width=fullWidth;canvas.height=fullHeight;
+      ctx.drawImage(video,0,0,vw,vh,0,0,fullWidth,fullHeight);
+      value=decodeProductCanvas(canvas,ctx);
+      if(value){submitBadge(value);return;}
+    }
+    scanTimer=requestAnimationFrame(scanFrame);
+  }"""
+
+    if old_product_scan not in html:
+        raise RuntimeError("Funzione scanFrame prodotto non trovata")
+    html=html.replace(old_product_scan,new_product_scan,1)
+
+    old_stream_ready = r"""      video.srcObject=stream;
+      video.setAttribute('playsinline','');"""
+    new_stream_ready = r"""      const productTrack=stream.getVideoTracks()[0];
+      try{
+        const caps=productTrack.getCapabilities?productTrack.getCapabilities():{};
+        const advanced=[];
+        if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
+        if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
+        if(advanced.length)await productTrack.applyConstraints({advanced});
+      }catch(e){}
+      video.srcObject=stream;
+      video.setAttribute('playsinline','');"""
+    if old_stream_ready not in html:
+        raise RuntimeError("Avvio stream prodotto non trovato")
+    html=html.replace(old_stream_ready,new_stream_ready,1)
 
     feedback_js = r"""
   let productScanAudioContext=null;
@@ -2795,40 +2912,85 @@ async function startProductCamera(){
     await loadJsQR();
     const isIPad=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     const preferredFacing=isIPad?'user':'environment';
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:preferredFacing},width:{ideal:1280},height:{ideal:720}},audio:false});
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:preferredFacing},width:{ideal:1920,min:1280},height:{ideal:1080,min:720}},audio:false});
+    const productTrack=stream.getVideoTracks()[0];
+    try{
+      const caps=productTrack.getCapabilities?productTrack.getCapabilities():{};
+      const advanced=[];
+      if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
+      if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
+      if(advanced.length)await productTrack.applyConstraints({advanced});
+    }catch(e){}
     video.srcObject=stream;
     video.setAttribute('playsinline','');
     video.muted=true;
     await video.play();
     running=true;
-    camStatus.textContent='Inquadra il QR del gioiello. Mantienilo fermo e ben illuminato.';
+    camStatus.textContent='Avvicina il QR al riquadro, mantienilo fermo e ben illuminato.';
     scanProductFrame();
   }catch(e){
     running=false;
     camStatus.textContent='Fotocamera/lettore QR non disponibile: '+((e&&e.message)||e);
   }
 }
+let posProductDetector=null,lastPosProductScanAt=0;
+function enhancePosProductImage(imageData){
+  const data=imageData.data;let min=255,max=0;
+  for(let i=0;i<data.length;i+=4){
+    const lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
+    if(lum<min)min=lum;if(lum>max)max=lum;
+  }
+  const range=Math.max(35,max-min);
+  for(let i=0;i<data.length;i+=4){
+    let lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
+    lum=Math.max(0,Math.min(255,((lum-min)*255/range-128)*1.38+128));
+    data[i]=data[i+1]=data[i+2]=lum;
+  }
+  return imageData;
+}
+function decodePosProductCanvas(){
+  if(!window.jsQR||!qrContext)return null;
+  try{
+    let image=qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height);
+    let result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+    if(result&&result.data)return result.data;
+    image=enhancePosProductImage(qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height));
+    result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+    return result&&result.data?result.data:null;
+  }catch(e){return null}
+}
 async function scanProductFrame(){
   if(!running||scannerSubmitted)return;
+  const now=performance.now();
+  if(now-lastPosProductScanAt<55){scanFrameId=requestAnimationFrame(scanProductFrame);return}
+  lastPosProductScanAt=now;
   if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
     if('BarcodeDetector' in window){
       try{
-        const detector=new BarcodeDetector({formats:['qr_code']});
-        const results=await detector.detect(video);
+        posProductDetector=posProductDetector||new BarcodeDetector({formats:['qr_code']});
+        const results=await posProductDetector.detect(video);
         if(results.length&&results[0].rawValue){submitProductCode(results[0].rawValue);return}
       }catch(e){}
     }
     if(window.jsQR&&qrContext){
-      const maxWidth=960;
-      const scale=Math.min(1,maxWidth/video.videoWidth);
-      qrCanvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-      qrCanvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-      qrContext.drawImage(video,0,0,qrCanvas.width,qrCanvas.height);
-      try{
-        const imageData=qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height);
-        const result=window.jsQR(imageData.data,imageData.width,imageData.height,{inversionAttempts:'attemptBoth'});
-        if(result&&result.data){submitProductCode(result.data);return}
-      }catch(e){}
+      const vw=video.videoWidth,vh=video.videoHeight;
+      const ratio=.68,sw=Math.round(vw*ratio),sh=Math.round(vh*ratio);
+      const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
+      const targetWidth=Math.min(1280,Math.max(900,sw));
+      qrCanvas.width=targetWidth;
+      qrCanvas.height=Math.round(targetWidth*sh/sw);
+      qrContext.imageSmoothingEnabled=true;
+      qrContext.imageSmoothingQuality='high';
+      qrContext.drawImage(video,sx,sy,sw,sh,0,0,qrCanvas.width,qrCanvas.height);
+      let value=decodePosProductCanvas();
+      if(value){submitProductCode(value);return}
+
+      const fullWidth=Math.min(1120,vw);
+      qrCanvas.width=fullWidth;
+      qrCanvas.height=Math.round(fullWidth*vh/vw);
+      qrContext.drawImage(video,0,0,vw,vh,0,0,qrCanvas.width,qrCanvas.height);
+      value=decodePosProductCanvas();
+      if(value){submitProductCode(value);return}
     }
   }
   scanFrameId=requestAnimationFrame(scanProductFrame);
