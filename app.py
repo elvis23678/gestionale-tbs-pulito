@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.4.2 TBS ONE · QR Reader PRO"
+APP_VERSION = "v36.3.2 TBS ONE · Stable Mobile + QR Labels"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -458,99 +458,6 @@ table{max-width:100%}
 
 '''
 
-
-CSS += r'''
-/* ============================================================
-   v36.4.0 FINAL AUDIT · Contrasto e controlli uniformi
-   ============================================================ */
-:root{
-  --tbs-black:#080808;
-  --tbs-panel:#11110f;
-  --tbs-gold:#e0b647;
-  --tbs-gold-light:#f4d77d;
-  --tbs-ink:#171717;
-  --tbs-muted-dark:#4b4b4b;
-  --tbs-paper:#f7f5ef;
-}
-.card, .panel, .tbs-panel{overflow-wrap:anywhere}
-.card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-.card select,.card textarea,
-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-form select,form textarea{
-  color:#f8f8f8!important;
-  background:#090909!important;
-  border-color:rgba(224,182,71,.62)!important;
-  caret-color:var(--tbs-gold-light)!important;
-}
-input::placeholder,textarea::placeholder{color:#bdb8ae!important;opacity:1!important}
-select option{color:#fff!important;background:#111!important}
-label{color:inherit}
-.card label,.card label b,.card label span{opacity:1!important}
-input[type="checkbox"],input[type="radio"]{
-  appearance:none;-webkit-appearance:none;
-  width:24px!important;height:24px!important;min-width:24px;
-  display:inline-grid;place-content:center;vertical-align:middle;
-  margin:0 8px 0 0;border:2px solid #b99437!important;
-  border-radius:6px;background:#080808!important;
-}
-input[type="radio"]{border-radius:50%}
-input[type="checkbox"]::before{
-  content:"";width:12px;height:7px;border-left:3px solid #111;
-  border-bottom:3px solid #111;transform:rotate(-45deg) scale(0);
-}
-input[type="radio"]::before{
-  content:"";width:11px;height:11px;border-radius:50%;
-  background:#111;transform:scale(0);
-}
-input[type="checkbox"]:checked,input[type="radio"]:checked{
-  background:var(--tbs-gold)!important;border-color:var(--tbs-gold)!important;
-}
-input[type="checkbox"]:checked::before,input[type="radio"]:checked::before{transform:rotate(-45deg) scale(1)}
-input[type="radio"]:checked::before{transform:scale(1)}
-input[type="file"]{
-  color:#eee!important;background:#090909!important;
-  border:1px solid rgba(224,182,71,.62)!important;
-  border-radius:14px;padding:8px!important;max-width:100%;
-}
-input[type="file"]::file-selector-button{
-  border:0;border-radius:10px;padding:11px 14px;margin-right:10px;
-  background:linear-gradient(135deg,#f0ce6b,#bd8e28);
-  color:#17120a;font-weight:900;cursor:pointer;
-}
-input[type="file"]::-webkit-file-upload-button{
-  border:0;border-radius:10px;padding:11px 14px;margin-right:10px;
-  background:linear-gradient(135deg,#f0ce6b,#bd8e28);
-  color:#17120a;font-weight:900;
-}
-.card[style*="background:white"],.card[style*="background: white"],
-tr[style*="background:white"],tr[style*="background: white"]{
-  color:var(--tbs-ink)!important;
-}
-.card[style*="background:white"] .muted,.card[style*="background: white"] .muted,
-tr[style*="background:white"] .muted,tr[style*="background: white"] .muted{
-  color:var(--tbs-muted-dark)!important;
-}
-table tbody tr{color:inherit}
-table tbody tr[style*="background"] td,
-table tbody tr[style*="background"] th{color:#202020!important}
-table tbody tr[style*="background"] .muted{color:#525252!important}
-.muted{opacity:1!important}
-.white-row,.light-row,.notification-row{
-  color:#1c1c1c!important;
-}
-.white-row .muted,.light-row .muted,.notification-row .muted{
-  color:#555!important;
-}
-button:disabled,.button:disabled,[disabled]{
-  opacity:.62!important;filter:none!important;cursor:not-allowed!important;
-}
-a,button,input,select,textarea{touch-action:manipulation}
-@media(max-width:760px){
-  input,select,textarea,button{font-size:16px!important}
-  .card{max-width:100%}
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-}
-'''
 
 BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
@@ -1166,7 +1073,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
       status.textContent='Fotocamera attiva. Preparazione lettore QR…';
       try{
         await loadJsQR();
-        status.textContent='Fotocamera attiva. Avvicina il QR piccolo al centro del riquadro.';
+        status.textContent='Fotocamera attiva. Inquadra il QR dentro il riquadro.';
         scanTimer=requestAnimationFrame(scanFrame);
       }catch(readerError){
         status.textContent='Fotocamera attiva, ma il lettore QR non è disponibile. Usa il codice o il lettore USB.';
@@ -1226,181 +1133,176 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     )
 
 def product_scanner_html(target_url):
-    """Scanner prodotti con motore Html5Qrcode + fallback BarcodeDetector/jsQR."""
-    target = target_url.replace("&","&amp;").replace('"',"&quot;")
-    return r"""
-    <style>
-      .product-scanner{max-width:760px;margin:0 auto}
-      #productQrReader{overflow:hidden;border-radius:22px;border:1px solid rgba(224,182,71,.65);
-        background:#050505;min-height:390px}
-      #productQrReader video{object-fit:cover!important;border-radius:20px}
-      #productQrReader__scan_region{background:#050505!important}
-      #productQrReader__dashboard{background:#0b0b0a!important;color:#fff!important;padding:12px!important}
-      #productQrReader button,#productQrReader select{
-        border-radius:10px!important;padding:10px 12px!important;font-weight:850!important}
-      .scanner-status{margin-top:10px;padding:11px 13px;border-radius:13px;
-        background:#0b0b0a;border:1px solid rgba(224,182,71,.35);color:#fff;text-align:center;font-weight:800}
-      .scanner-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
-      .manual-box{margin-top:12px;padding:14px;border:1px solid rgba(224,182,71,.38);
-        border-radius:16px;background:#0b0b0a}
-      .manual-box form{display:grid;grid-template-columns:1fr auto;gap:10px}
-      @media(max-width:620px){
-        .scanner-controls,.manual-box form{grid-template-columns:1fr}
-        #productQrReader{min-height:340px}
-      }
-    </style>
+    """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
+    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
+    replacements={
+        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
+        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
+        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
+        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
+        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
+        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
+        "Badge camera error":"Product QR camera error",
+        "Fotocamera non avviata.":"Fotocamera pronta.",
+    }
+    for old,new in replacements.items():
+        html=html.replace(old,new)
 
-    <div class="product-scanner">
-      <div id="productQrReader"></div>
-      <div class="scanner-status" id="productScannerStatus">Avvio lettore QR…</div>
+    old_product_scan = r"""  function scanFrame(){
+    if(!running||submitted) return;
+    if(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0 && window.jsQR){
+      const maxWidth=900;
+      const scale=Math.min(1,maxWidth/video.videoWidth);
+      canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+      canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      try{
+        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+        if(code&&code.data){submitBadge(code.data);return;}
+      }catch(e){}
+    }
+    scanTimer=requestAnimationFrame(scanFrame);
+  }"""
 
-      <div class="scanner-controls">
-        <button type="button" id="productScannerRestart">Riavvia scanner</button>
-        <button type="button" class="secondary" id="productScannerZoom">Zoom +</button>
-        <button type="button" class="secondary" id="productScannerTorch">Torcia</button>
-      </div>
+    new_product_scan = r"""  let lastProductScanAt=0;
 
-      <div class="manual-box">
-        <form method="post" action="__TARGET__" id="productScannerForm">
-          <input type="hidden" name="badge_payload" id="productScannerPayload">
-          <input type="text" name="code" placeholder="Inserisci codice prodotto" autocomplete="off">
-          <button type="submit">Cerca prodotto</button>
-        </form>
-      </div>
-    </div>
+  function decodeProductCanvas(){
+    if(!window.jsQR)return null;
+    try{
+      const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code=window.jsQR(
+        image.data,
+        image.width,
+        image.height,
+        {inversionAttempts:'attemptBoth'}
+      );
+      return code&&code.data?code.data:null;
+    }catch(e){return null;}
+  }
 
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-    <script>
-    (() => {
-      const readerId='productQrReader';
-      const status=document.getElementById('productScannerStatus');
-      const restartBtn=document.getElementById('productScannerRestart');
-      const zoomBtn=document.getElementById('productScannerZoom');
-      const torchBtn=document.getElementById('productScannerTorch');
-      const payload=document.getElementById('productScannerPayload');
-      const form=document.getElementById('productScannerForm');
+  function scanFrame(){
+    if(!running||submitted)return;
+    const now=performance.now();
+    if(now-lastProductScanAt<65){
+      scanTimer=requestAnimationFrame(scanFrame);
+      return;
+    }
+    lastProductScanAt=now;
 
-      let html5=null;
-      let currentTrack=null;
-      let submitted=false;
-      let zoomLevel=1;
-      let torchOn=false;
+    if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0&&window.jsQR){
+      const vw=video.videoWidth;
+      const vh=video.videoHeight;
 
-      function setStatus(msg,error=false){
-        status.textContent=msg;
-        status.style.color=error?'#ffb4b4':'#fff';
-      }
+      const ratio=.68;
+      const sw=Math.round(vw*ratio);
+      const sh=Math.round(vh*ratio);
+      const sx=Math.round((vw-sw)/2);
+      const sy=Math.round((vh-sh)/2);
+      const targetWidth=Math.min(1100,Math.max(850,sw));
 
-      async function submitCode(value){
-        const clean=(value||'').trim();
-        if(!clean||submitted)return;
-        submitted=true;
-        payload.value=clean;
-        setStatus('✓ QR riconosciuto. Apertura prodotto…');
-        try{if(navigator.vibrate)navigator.vibrate([50,30,50])}catch(e){}
-        try{if(html5&&html5.isScanning)await html5.stop()}catch(e){}
-        form.submit();
-      }
+      canvas.width=targetWidth;
+      canvas.height=Math.round(targetWidth*sh/sw);
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
 
-      async function configureTrack(){
-        try{
-          const video=document.querySelector('#'+readerId+' video');
-          if(!video||!video.srcObject)return;
-          currentTrack=video.srcObject.getVideoTracks()[0];
-          const caps=currentTrack.getCapabilities?currentTrack.getCapabilities():{};
-          const advanced=[];
-          if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
-          if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
-          if(caps.zoom){
-            zoomLevel=Math.min(caps.zoom.max,Math.max(caps.zoom.min,2));
-            advanced.push({zoom:zoomLevel});
-          }
-          if(advanced.length)await currentTrack.applyConstraints({advanced});
-          zoomBtn.disabled=!caps.zoom;
-          torchBtn.disabled=!caps.torch;
-        }catch(e){}
-      }
+      let value=decodeProductCanvas();
+      if(value){submitBadge(value);return;}
 
-      async function startScanner(){
+      const fullWidth=Math.min(1000,vw);
+      canvas.width=fullWidth;
+      canvas.height=Math.round(fullWidth*vh/vw);
+      ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);
+
+      value=decodeProductCanvas();
+      if(value){submitBadge(value);return;}
+    }
+    scanTimer=requestAnimationFrame(scanFrame);
+  }"""
+
+    if old_product_scan not in html:
+        raise RuntimeError("Scanner prodotti stabile non trovato")
+    html=html.replace(old_product_scan,new_product_scan,1)
+
+    feedback_js = r"""
+  let productScanAudioContext=null;
+
+  function productTone(success){
+    try{
+      const AudioCtx=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtx)return;
+      productScanAudioContext=productScanAudioContext||new AudioCtx();
+      if(productScanAudioContext.state==='suspended')productScanAudioContext.resume().catch(()=>{});
+      const now=productScanAudioContext.currentTime;
+      const osc=productScanAudioContext.createOscillator();
+      const gain=productScanAudioContext.createGain();
+      osc.type=success?'square':'sawtooth';
+      osc.frequency.setValueAtTime(success?1850:310,now);
+      osc.frequency.exponentialRampToValueAtTime(success?1450:190,now+(success?.075:.16));
+      gain.gain.setValueAtTime(.0001,now);
+      gain.gain.exponentialRampToValueAtTime(success?.16:.12,now+.006);
+      gain.gain.exponentialRampToValueAtTime(.0001,now+(success?.10:.19));
+      osc.connect(gain);gain.connect(productScanAudioContext.destination);
+      osc.start(now);osc.stop(now+(success?.11:.20));
+    }catch(e){}
+  }
+
+  async function verifyProductCode(clean){
+    const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{
+      cache:'no-store',
+      headers:{'Accept':'application/json'}
+    });
+    let data={};
+    try{data=await response.json()}catch(e){}
+    return {ok:response.ok&&data.ok,data:data};
+  }
+
+"""
+    html=html.replace("  function submitBadge(value){", feedback_js+"  async function submitBadge(value){", 1)
+
+    old_submit = """    submitted=true;
+    field.value=clean;
+    status.textContent='✓ QR letto. Ricerca del prodotto…';
+    guide.style.borderColor='#34d399';
+    halt().finally(()=>form.submit());"""
+
+    new_submit = """    submitted=true;
+    field.value=clean;
+    status.textContent='Verifica prodotto…';
+    guide.style.borderColor='#d6ae58';
+    try{
+      const result=await verifyProductCode(clean);
+      if(!result.ok){
+        productTone(false);
+        guide.style.borderColor='#ef4444';
+        guide.style.boxShadow='0 0 0 4px rgba(239,68,68,.18)';
+        status.textContent='✕ Prodotto non trovato: '+clean;
         submitted=false;
-        setStatus('Richiesta accesso alla fotocamera…');
-
-        try{
-          if(html5){
-            try{if(html5.isScanning)await html5.stop()}catch(e){}
-            try{await html5.clear()}catch(e){}
-          }
-          html5=new Html5Qrcode(readerId,{verbose:false});
-
-          const config={
-            fps:20,
-            qrbox:(vw,vh)=>{
-              const size=Math.floor(Math.min(vw,vh)*0.72);
-              return {width:size,height:size};
-            },
-            aspectRatio:1.0,
-            disableFlip:false,
-            experimentalFeatures:{useBarCodeDetectorIfSupported:true},
-            videoConstraints:{
-              facingMode:{ideal:'environment'},
-              width:{ideal:1920,min:1280},
-              height:{ideal:1080,min:720},
-              focusMode:'continuous'
-            }
-          };
-
-          await html5.start(
-            {facingMode:{ideal:'environment'}},
-            config,
-            decoded=>submitCode(decoded),
-            ()=>{}
-          );
-          setStatus('Scanner attivo. Avvicina il QR e riempi il riquadro.');
-          setTimeout(configureTrack,700);
-        }catch(error){
-          console.error('Html5Qrcode start error',error);
-          setStatus('Impossibile avviare lo scanner. Controlla i permessi fotocamera.',true);
-        }
+        setTimeout(()=>{
+          guide.style.borderColor='rgba(255,255,255,.9)';
+          guide.style.boxShadow='none';
+        },1400);
+        return;
       }
+      productTone(true);
+      try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
+      status.textContent='✓ '+result.data.brand_code+' riconosciuto. Apertura…';
+      guide.style.borderColor='#34d399';
+      guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.16)';
+      await halt();
+      form.submit();
+    }catch(e){
+      productTone(false);
+      guide.style.borderColor='#ef4444';
+      status.textContent='Impossibile verificare il prodotto. Riprova.';
+      submitted=false;
+    }"""
 
-      restartBtn.addEventListener('click',startScanner);
-
-      zoomBtn.addEventListener('click',async()=>{
-        if(!currentTrack)return;
-        try{
-          const caps=currentTrack.getCapabilities?currentTrack.getCapabilities():{};
-          if(!caps.zoom)return;
-          zoomLevel+=0.5;
-          if(zoomLevel>caps.zoom.max)zoomLevel=caps.zoom.min;
-          await currentTrack.applyConstraints({advanced:[{zoom:zoomLevel}]});
-          zoomBtn.textContent='Zoom '+zoomLevel.toFixed(1)+'×';
-          setStatus('Zoom impostato. Mantieni il QR fermo.');
-        }catch(e){setStatus('Zoom non disponibile.',true)}
-      });
-
-      torchBtn.addEventListener('click',async()=>{
-        if(!currentTrack)return;
-        try{
-          torchOn=!torchOn;
-          await currentTrack.applyConstraints({advanced:[{torch:torchOn}]});
-          torchBtn.textContent=torchOn?'Spegni torcia':'Torcia';
-        }catch(e){
-          torchOn=false;
-          setStatus('Torcia non supportata.',true);
-        }
-      });
-
-      document.addEventListener('visibilitychange',async()=>{
-        if(document.hidden&&html5&&html5.isScanning){
-          try{await html5.stop()}catch(e){}
-        }
-      });
-
-      startScanner();
-    })();
-    </script>
-    """.replace("__TARGET__", target)
+    if old_submit not in html:
+        raise RuntimeError("Submit scanner prodotto non trovato")
+    html=html.replace(old_submit,new_submit,1)
+    return html
 
 def create_badge_pdf(badge_name, token):
     """Crea un badge A6 verticale fronte/retro, pronto per stampa duplex."""
@@ -2467,7 +2369,9 @@ def more_page():
   <a class="more-card" href="{{url_for('cart')}}"><span class="ico">＋</span><span><b>Carrello</b><small>Apri la vendita corrente</small></span></a>
   <a class="more-card" href="{{url_for('suspended_carts')}}"><span class="ico">Ⅱ</span><span><b>Vendite sospese</b><small>Riprendi un carrello salvato</small></span></a>
   <a class="more-card" href="{{url_for('scan_product')}}"><span class="ico">⌗</span><span><b>Scanner QR</b><small>Leggi un'etichetta prodotto</small></span></a>
-  {% if role in ('admin','manager') %}<a class="more-card" href="{{url_for('product_qr_labels')}}"><span class="ico">▦</span><span><b>Etichette QR</b><small>Stampa e ristampa etichette 35×15</small></span></a>{% endif %}
+  {% if role in ('admin','manager') %}
+  <a class="more-card" href="{{url_for('product_qr_labels')}}"><span class="ico">▦</span><span><b>Etichette QR</b><small>Stampa etichette 35×15 mm</small></span></a>
+  {% endif %}
   <a class="more-card" href="{{url_for('supplier_catalog')}}"><span class="ico">◇</span><span><b>Catalogo ordinabile</b><small>Articoli disponibili su richiesta</small></span></a>
 </div>
 
@@ -2552,9 +2456,9 @@ def scan_product_check():
 
 
 # ============================================================
-# v36.4.1 · Centro Etichette QR
+# v36.3.2 · Etichette QR prodotti (modulo isolato)
 # ============================================================
-@app.route("/products/qr-labels", methods=["GET", "POST"])
+@app.route("/products/qr-labels", methods=["GET"])
 @role_required("admin","manager")
 def product_qr_labels():
     with connect() as db:
@@ -2564,84 +2468,112 @@ def product_qr_labels():
             ORDER BY id DESC
         """).fetchall()
 
-    body=r"""
+    return page("Etichette QR",r"""
     <style>
-    .qr-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
-    .qr-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .qr-list{display:grid;gap:8px;max-height:520px;overflow:auto;padding-right:4px}
-    .qr-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
-      padding:12px;border:1px solid rgba(224,182,71,.38);border-radius:14px;background:#0b0b0a}
-    .qr-item b{color:#fff}.qr-item small{color:#c8c2b7}
-    .qr-stock{min-width:44px;text-align:center;padding:6px 8px;border-radius:999px;
-      background:#e0b647;color:#15110a;font-weight:950}
-    .qr-actions{position:sticky;bottom:78px;display:flex;gap:9px;flex-wrap:wrap;padding:12px;
-      border:1px solid rgba(224,182,71,.54);border-radius:16px;background:rgba(7,7,7,.96);
-      backdrop-filter:blur(12px);z-index:3}
-    @media(max-width:620px){.qr-head{display:block}.qr-filter-grid{grid-template-columns:1fr}.qr-item{grid-template-columns:auto 1fr}.qr-stock{grid-column:2}}
+      .labels-page{max-width:1050px;margin:auto}
+      .labels-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+      .labels-card{background:#11110f;border:1px solid rgba(216,174,77,.42);border-radius:20px;padding:16px}
+      .labels-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+      .labels-actions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0}
+      .labels-list{display:grid;gap:8px;max-height:560px;overflow:auto}
+      .label-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:12px;border:1px solid rgba(216,174,77,.28);border-radius:14px;background:#080808}
+      .label-row b{color:#fff}.label-row small{color:#bdb7aa}
+      .label-stock{min-width:42px;text-align:center;background:#d8ae4d;color:#181208;border-radius:999px;padding:6px 8px;font-weight:900}
+      .label-check{width:23px;height:23px;accent-color:#d8ae4d}
+      @media(max-width:650px){
+        .labels-grid{grid-template-columns:1fr}
+        .label-row{grid-template-columns:auto 1fr}
+        .label-stock{grid-column:2}
+      }
     </style>
-    <div class="qr-head"><div><span class="eyebrow">MAGAZZINO PRO</span><h1>Etichette QR</h1>
-    <p class="muted">Formato A4 con etichette 35×15 mm. Il QR contiene il codice interno del prodotto.</p></div>
-    <a class="secondary" href="{{url_for('products')}}">← Catalogo</a></div>
 
-    <form method="post" action="{{url_for('product_qr_labels_pdf')}}" class="card" id="qrLabelsForm">
-      <div class="qr-filter-grid">
-        <label>Gruppo da stampare
-          <select name="scope" id="qrScope">
-            <option value="selected">Solo articoli selezionati</option>
-            <option value="all">Tutti gli articoli attivi</option>
-            <option value="available">Solo disponibili</option>
-            <option value="last">Ultimi inseriti</option>
-            <option value="low">Ultimo pezzo / scorta bassa</option>
-          </select>
-        </label>
-        <label>Numero ultimi inseriti
-          <input name="last_count" type="number" min="1" max="300" value="20">
-        </label>
-        <label>Copie per articolo
-          <input name="copies" type="number" min="1" max="20" value="1">
-        </label>
-        <label>Testo aggiuntivo
-          <select name="extra">
-            <option value="stock">Mostra “ULTIMO PEZZO” quando quantità ≤ 1</option>
-            <option value="none">Nessun testo aggiuntivo</option>
-          </select>
-        </label>
+    <div class="labels-page">
+      <div class="labels-head">
+        <div>
+          <span class="eyebrow">MAGAZZINO PRO</span>
+          <h1>Etichette QR</h1>
+          <p class="muted">Stampa A4, formato etichetta 35×15 mm.</p>
+        </div>
+        <a class="secondary" href="{{url_for('products')}}">← Catalogo</a>
       </div>
 
-      <div class="qr-actions" style="position:static;margin:16px 0">
-        <button type="submit">Genera PDF etichette</button>
-        <button type="button" class="secondary" id="selectVisible">Seleziona visibili</button>
-        <button type="button" class="secondary" id="clearSelection">Deseleziona tutto</button>
-      </div>
+      <form method="post" action="{{url_for('product_qr_labels_pdf')}}" class="labels-card" id="labelsForm">
+        <div class="labels-grid">
+          <label>Articoli da stampare
+            <select name="scope" id="labelsScope">
+              <option value="selected">Solo selezionati</option>
+              <option value="all">Tutti gli articoli attivi</option>
+              <option value="available">Solo disponibili</option>
+              <option value="last">Ultimi inseriti</option>
+              <option value="low">Ultimo pezzo / scorta bassa</option>
+            </select>
+          </label>
+          <label>Numero ultimi inseriti
+            <input name="last_count" type="number" min="1" max="300" value="20">
+          </label>
+          <label>Copie per articolo
+            <input name="copies" type="number" min="1" max="20" value="1">
+          </label>
+          <label>Indicazione scorta
+            <select name="extra">
+              <option value="stock">Mostra ULTIMO PEZZO se quantità ≤ 1</option>
+              <option value="none">Non mostrare</option>
+            </select>
+          </label>
+        </div>
 
-      <p><input id="qrSearch" placeholder="Cerca codice, categoria, materiale o colore" type="search"></p>
+        <div class="labels-actions">
+          <button type="submit">Genera PDF etichette</button>
+          <button type="button" class="secondary" id="selectVisible">Seleziona visibili</button>
+          <button type="button" class="secondary" id="clearSelection">Deseleziona tutto</button>
+        </div>
 
-      <div class="qr-list" id="qrProductList">
-      {% for p in rows %}
-        <label class="qr-item" data-search="{{(p.brand_code~' '~(p.category or '')~' '~(p.material or '')~' '~(p.color or ''))|lower}}">
-          <input type="checkbox" name="product_ids" value="{{p.id}}">
-          <span><b>{{p.brand_code}}</b><br><small>{{p.category or 'Altro'}}{% if p.material %} · {{p.material}}{% endif %}{% if p.color %} · {{p.color}}{% endif %}</small></span>
-          <span class="qr-stock">{{p.quantity}}</span>
-        </label>
-      {% else %}
-        <p>Nessun prodotto attivo.</p>
-      {% endfor %}
-      </div>
+        <input id="labelsSearch" type="search" placeholder="Cerca codice, categoria, materiale o colore">
 
-      <p class="muted" style="margin-top:12px">Il PDF verrà scaricato automaticamente ed è pronto per la stampa in scala 100%.</p>
-    </form>
+        <div class="labels-list">
+          {% for p in rows %}
+          <label class="label-row"
+            data-search="{{(p.brand_code~' '~(p.category or '')~' '~(p.material or '')~' '~(p.color or ''))|lower}}">
+            <input class="label-check" type="checkbox" name="product_ids" value="{{p.id}}">
+            <span>
+              <b>{{p.brand_code}}</b><br>
+              <small>{{p.category or 'Altro'}}
+                {% if p.material %} · {{p.material}}{% endif %}
+                {% if p.color %} · {{p.color}}{% endif %}
+              </small>
+            </span>
+            <span class="label-stock">{{p.quantity}}</span>
+          </label>
+          {% else %}
+          <p>Nessun articolo attivo.</p>
+          {% endfor %}
+        </div>
+      </form>
+    </div>
+
     <script>
-    (()=>{const search=document.getElementById('qrSearch'),items=[...document.querySelectorAll('.qr-item')];
-      const filter=()=>{const q=(search.value||'').trim().toLowerCase();items.forEach(x=>x.style.display=!q||x.dataset.search.includes(q)?'grid':'none')};
-      search.addEventListener('input',filter);
-      document.getElementById('selectVisible').onclick=()=>items.forEach(x=>{if(x.style.display!=='none')x.querySelector('input').checked=true});
-      document.getElementById('clearSelection').onclick=()=>items.forEach(x=>x.querySelector('input').checked=false);
-      document.getElementById('qrLabelsForm').addEventListener('submit',e=>{const scope=document.getElementById('qrScope').value;
-        if(scope==='selected'&&!items.some(x=>x.querySelector('input').checked)){e.preventDefault();alert('Seleziona almeno un articolo oppure scegli un altro gruppo.');}});
+    (()=> {
+      const search=document.getElementById('labelsSearch');
+      const items=[...document.querySelectorAll('.label-row')];
+      search.addEventListener('input',()=>{
+        const q=(search.value||'').trim().toLowerCase();
+        items.forEach(item=>item.style.display=!q||item.dataset.search.includes(q)?'grid':'none');
+      });
+      document.getElementById('selectVisible').onclick=()=>{
+        items.forEach(item=>{if(item.style.display!=='none')item.querySelector('input').checked=true});
+      };
+      document.getElementById('clearSelection').onclick=()=>{
+        items.forEach(item=>item.querySelector('input').checked=false);
+      };
+      document.getElementById('labelsForm').addEventListener('submit',event=>{
+        if(document.getElementById('labelsScope').value==='selected'&&!items.some(item=>item.querySelector('input').checked)){
+          event.preventDefault();
+          alert('Seleziona almeno un articolo oppure scegli un altro gruppo.');
+        }
+      });
     })();
     </script>
-    """
-    return page("Etichette QR",body,rows=rows)
+    """,rows=rows)
 
 
 @app.post("/products/qr-labels/pdf")
@@ -2655,117 +2587,101 @@ def product_qr_labels_pdf():
 
         selected=[]
         for value in request.form.getlist("product_ids"):
-            try:
-                selected.append(int(value))
-            except (TypeError,ValueError):
-                pass
+            try:selected.append(int(value))
+            except (TypeError,ValueError):pass
 
         where="active=1"
         params=[]
-        order="brand_code"
+        order_by="brand_code"
 
         if scope=="selected":
             if not selected:
-                flash("Seleziona almeno un articolo oppure scegli un altro gruppo.")
+                flash("Seleziona almeno un articolo.")
                 return redirect(url_for("product_qr_labels"))
-            marks=",".join("?" for _ in selected)
-            where+=f" AND id IN ({marks})"
+            placeholders=",".join("?" for _ in selected)
+            where+=f" AND id IN ({placeholders})"
             params.extend(selected)
         elif scope=="available":
             where+=" AND quantity>0"
-        elif scope=="last":
-            order="id DESC"
         elif scope=="low":
             where+=" AND quantity<=1"
+        elif scope=="last":
+            order_by="id DESC"
         elif scope!="all":
             scope="all"
 
-        sql=f"SELECT * FROM products WHERE {where} ORDER BY {order}"
+        sql=f"SELECT * FROM products WHERE {where} ORDER BY {order_by}"
         if scope=="last":
             sql+=" LIMIT ?"
             params.append(last_count)
 
         with connect() as db:
-            product_rows=db.execute(sql,params).fetchall()
+            products_to_print=db.execute(sql,params).fetchall()
 
-        if not product_rows:
-            flash("Nessun articolo corrisponde alla selezione.")
+        if not products_to_print:
+            flash("Nessun articolo da stampare.")
             return redirect(url_for("product_qr_labels"))
 
         labels=[]
-        for product in product_rows:
+        for product in products_to_print:
             labels.extend([product]*copies)
 
-        buffer=BytesIO()
+        output=BytesIO()
+        pdf=canvas.Canvas(output,pagesize=A4)
         page_w,page_h=A4
-        c=canvas.Canvas(buffer,pagesize=A4)
-
         label_w,label_h=35*mm,15*mm
         margin_x,margin_y=8*mm,8*mm
-        cols=int((page_w-2*margin_x)//label_w)
-        rows_per_page=int((page_h-2*margin_y)//label_h)
-        per_page=max(1,cols*rows_per_page)
+        cols=max(1,int((page_w-2*margin_x)//label_w))
+        rows_per_page=max(1,int((page_h-2*margin_y)//label_h))
+        per_page=cols*rows_per_page
 
-        def draw_label(product,slot):
+        for index,product in enumerate(labels):
+            slot=index%per_page
+            if index and slot==0:
+                pdf.showPage()
+
             col=slot%cols
             row=slot//cols
             x=margin_x+col*label_w
             y=page_h-margin_y-(row+1)*label_h
 
-            c.saveState()
-            c.setStrokeColor(colors.HexColor("#B88A2E"))
-            c.setLineWidth(.35)
-            c.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.3*mm,stroke=1,fill=0)
+            pdf.setStrokeColor(colors.HexColor("#B88A2E"))
+            pdf.setLineWidth(.3)
+            pdf.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.2*mm,stroke=1,fill=0)
 
             payload=(product["brand_code"] or "").strip()
-            qr_size=13.2*mm
+            qr_size=13*mm
             widget=qr.QrCodeWidget(payload)
             widget.barLevel="M"
             bounds=widget.getBounds()
-            qr_w=bounds[2]-bounds[0]
-            qr_h=bounds[3]-bounds[1]
-            scale=qr_size/max(qr_w,qr_h)
-            drawing=Drawing(
-                qr_size,
-                qr_size,
-                transform=[scale,0,0,scale,-bounds[0]*scale,-bounds[1]*scale]
-            )
+            bw=bounds[2]-bounds[0]
+            bh=bounds[3]-bounds[1]
+            scale=qr_size/max(bw,bh)
+            drawing=Drawing(qr_size,qr_size,transform=[scale,0,0,scale,-bounds[0]*scale,-bounds[1]*scale])
             drawing.add(widget)
-            renderPDF.draw(drawing,c,x+.8*mm,y+.9*mm)
+            renderPDF.draw(drawing,pdf,x+.8*mm,y+1*mm)
 
-            tx=x+14.5*mm
-            c.setFillColor(colors.black)
-            c.setFont("Helvetica-Bold",7.2)
-            c.drawString(tx,y+10.1*mm,payload[:18])
-            c.setFont("Helvetica-Bold",7)
-            c.drawString(tx,y+6.7*mm,f"EUR {float(product['price'] or 0):.2f}")
-            c.setFont("Helvetica",5.2)
-            c.drawString(tx,y+3.9*mm,"TBS ONE")
+            tx=x+14.3*mm
+            pdf.setFillColor(colors.black)
+            pdf.setFont("Helvetica-Bold",7)
+            pdf.drawString(tx,y+10.1*mm,payload[:18])
+            pdf.setFont("Helvetica-Bold",6.8)
+            pdf.drawString(tx,y+6.8*mm,f"EUR {float(product['price'] or 0):.2f}")
+            pdf.setFont("Helvetica",5)
+            pdf.drawString(tx,y+4*mm,"TBS ONE")
 
             if extra=="stock" and int(product["quantity"] or 0)<=1:
-                c.setFillColor(colors.HexColor("#9A1F22"))
-                c.setFont("Helvetica-Bold",5)
-                c.drawString(tx,y+1.7*mm,"ULTIMO PEZZO")
-            c.restoreState()
+                pdf.setFillColor(colors.HexColor("#9A1F22"))
+                pdf.setFont("Helvetica-Bold",4.8)
+                pdf.drawString(tx,y+1.8*mm,"ULTIMO PEZZO")
 
-        for index,product in enumerate(labels):
-            slot=index%per_page
-            if index and slot==0:
-                c.showPage()
-            draw_label(product,slot)
+        pdf.save()
+        output.seek(0)
+        return send_file(output,mimetype="application/pdf",as_attachment=True,download_name="TBS_ONE_Etichette_QR_35x15.pdf")
 
-        c.save()
-        buffer.seek(0)
-        return send_file(
-            buffer,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name="TBS_ONE_Etichette_QR_35x15.pdf"
-        )
-
-    except Exception as exc:
+    except Exception:
         app.logger.exception("Errore generazione PDF etichette QR")
-        flash(f"Errore durante la generazione del PDF: {exc}")
+        flash("Errore durante la generazione del PDF. Controlla i log Render.")
         return redirect(url_for("product_qr_labels"))
 
 
@@ -2850,8 +2766,8 @@ def products():
 .products-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .scan-product-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:11px;background:#111827;color:#fff;text-decoration:none;font-weight:900}
 .scan-product-btn:hover{opacity:.9}
-</style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><div class="actions"><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a>{% if can_manage %}<a class="scan-product-btn" href="{{url_for('product_qr_labels')}}">▦ Etichette QR</a>{% endif %}</div></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
-{% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label style="color:#f5f1e8;font-weight:850"><input name="is_new" type="checkbox"> Novità</label><label style="color:#f5f1e8;font-weight:850"><input name="is_bestseller" type="checkbox"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
+</style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a>{% if can_manage %}<a class="scan-product-btn" href="{{url_for('product_qr_labels')}}">▦ Etichette QR</a>{% endif %}</div></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
+{% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
 <div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product"><div class="no-photo">📘</div><div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
 
 @app.post("/products/<int:product_id>/order")
@@ -3190,85 +3106,40 @@ async function startProductCamera(){
     await loadJsQR();
     const isIPad=/iPad/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     const preferredFacing=isIPad?'user':'environment';
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:preferredFacing},width:{ideal:1920,min:1280},height:{ideal:1080,min:720}},audio:false});
-    const productTrack=stream.getVideoTracks()[0];
-    try{
-      const caps=productTrack.getCapabilities?productTrack.getCapabilities():{};
-      const advanced=[];
-      if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
-      if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
-      if(advanced.length)await productTrack.applyConstraints({advanced});
-    }catch(e){}
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:preferredFacing},width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject=stream;
     video.setAttribute('playsinline','');
     video.muted=true;
     await video.play();
     running=true;
-    camStatus.textContent='Avvicina il QR al riquadro, mantienilo fermo e ben illuminato.';
+    camStatus.textContent='Inquadra il QR del gioiello. Mantienilo fermo e ben illuminato.';
     scanProductFrame();
   }catch(e){
     running=false;
     camStatus.textContent='Fotocamera/lettore QR non disponibile: '+((e&&e.message)||e);
   }
 }
-let posProductDetector=null,lastPosProductScanAt=0;
-function enhancePosProductImage(imageData){
-  const data=imageData.data;let min=255,max=0;
-  for(let i=0;i<data.length;i+=4){
-    const lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
-    if(lum<min)min=lum;if(lum>max)max=lum;
-  }
-  const range=Math.max(35,max-min);
-  for(let i=0;i<data.length;i+=4){
-    let lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
-    lum=Math.max(0,Math.min(255,((lum-min)*255/range-128)*1.38+128));
-    data[i]=data[i+1]=data[i+2]=lum;
-  }
-  return imageData;
-}
-function decodePosProductCanvas(){
-  if(!window.jsQR||!qrContext)return null;
-  try{
-    let image=qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height);
-    let result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-    if(result&&result.data)return result.data;
-    image=enhancePosProductImage(qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height));
-    result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-    return result&&result.data?result.data:null;
-  }catch(e){return null}
-}
 async function scanProductFrame(){
   if(!running||scannerSubmitted)return;
-  const now=performance.now();
-  if(now-lastPosProductScanAt<55){scanFrameId=requestAnimationFrame(scanProductFrame);return}
-  lastPosProductScanAt=now;
   if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
     if('BarcodeDetector' in window){
       try{
-        posProductDetector=posProductDetector||new BarcodeDetector({formats:['qr_code']});
-        const results=await posProductDetector.detect(video);
+        const detector=new BarcodeDetector({formats:['qr_code']});
+        const results=await detector.detect(video);
         if(results.length&&results[0].rawValue){submitProductCode(results[0].rawValue);return}
       }catch(e){}
     }
     if(window.jsQR&&qrContext){
-      const vw=video.videoWidth,vh=video.videoHeight;
-      const ratio=.68,sw=Math.round(vw*ratio),sh=Math.round(vh*ratio);
-      const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
-      const targetWidth=Math.min(1280,Math.max(900,sw));
-      qrCanvas.width=targetWidth;
-      qrCanvas.height=Math.round(targetWidth*sh/sw);
-      qrContext.imageSmoothingEnabled=true;
-      qrContext.imageSmoothingQuality='high';
-      qrContext.drawImage(video,sx,sy,sw,sh,0,0,qrCanvas.width,qrCanvas.height);
-      let value=decodePosProductCanvas();
-      if(value){submitProductCode(value);return}
-
-      const fullWidth=Math.min(1120,vw);
-      qrCanvas.width=fullWidth;
-      qrCanvas.height=Math.round(fullWidth*vh/vw);
-      qrContext.drawImage(video,0,0,vw,vh,0,0,qrCanvas.width,qrCanvas.height);
-      value=decodePosProductCanvas();
-      if(value){submitProductCode(value);return}
+      const maxWidth=960;
+      const scale=Math.min(1,maxWidth/video.videoWidth);
+      qrCanvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+      qrCanvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+      qrContext.drawImage(video,0,0,qrCanvas.width,qrCanvas.height);
+      try{
+        const imageData=qrContext.getImageData(0,0,qrCanvas.width,qrCanvas.height);
+        const result=window.jsQR(imageData.data,imageData.width,imageData.height,{inversionAttempts:'attemptBoth'});
+        if(result&&result.data){submitProductCode(result.data);return}
+      }catch(e){}
     }
   }
   scanFrameId=requestAnimationFrame(scanProductFrame);
