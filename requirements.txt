@@ -1,5 +1,5 @@
 Flask>=3.0,<4
 Werkzeug>=3.0,<4
 reportlab>=4.0,<5
-gunicorn==23.0.0
-firebase-admin>=6.5,<7
+pywebpush>=2.0,<3
+gunicorn>=22,<24
