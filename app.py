@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.4.1 TBS ONE · Scanner QR + PDF Hotfix"
+APP_VERSION = "v36.4.2 TBS ONE · QR Reader PRO"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1226,84 +1226,70 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     )
 
 def product_scanner_html(target_url):
-    """Scanner QR prodotti autonomo e stabile, senza dipendere dallo scanner badge."""
-    target_json = repr(target_url)
+    """Scanner prodotti con motore Html5Qrcode + fallback BarcodeDetector/jsQR."""
+    target = target_url.replace("&","&amp;").replace('"',"&quot;")
     return r"""
     <style>
       .product-scanner{max-width:760px;margin:0 auto}
-      .scanner-shell{position:relative;overflow:hidden;border-radius:22px;
-        border:1px solid rgba(224,182,71,.64);background:#050505;
-        min-height:420px;box-shadow:0 18px 45px rgba(0,0,0,.28)}
-      .scanner-shell video{width:100%;height:420px;object-fit:cover;display:block;background:#050505}
-      .scanner-guide{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-        width:min(64vw,270px);height:min(64vw,270px);border:3px solid rgba(255,255,255,.92);
-        border-radius:24px;box-shadow:0 0 0 9999px rgba(0,0,0,.32);
-        transition:.18s ease;pointer-events:none}
-      .scanner-line{position:absolute;left:10%;right:10%;height:2px;top:16%;
-        background:linear-gradient(90deg,transparent,#f1d179,transparent);
-        box-shadow:0 0 10px #f1d179;animation:tbsScanLine 2s ease-in-out infinite}
-      @keyframes tbsScanLine{0%,100%{top:16%}50%{top:82%}}
-      .scanner-status{position:absolute;left:12px;right:12px;bottom:12px;
-        padding:11px 13px;border-radius:13px;background:rgba(0,0,0,.78);
-        color:#fff;text-align:center;font-weight:800;backdrop-filter:blur(8px)}
-      .scanner-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+      #productQrReader{overflow:hidden;border-radius:22px;border:1px solid rgba(224,182,71,.65);
+        background:#050505;min-height:390px}
+      #productQrReader video{object-fit:cover!important;border-radius:20px}
+      #productQrReader__scan_region{background:#050505!important}
+      #productQrReader__dashboard{background:#0b0b0a!important;color:#fff!important;padding:12px!important}
+      #productQrReader button,#productQrReader select{
+        border-radius:10px!important;padding:10px 12px!important;font-weight:850!important}
+      .scanner-status{margin-top:10px;padding:11px 13px;border-radius:13px;
+        background:#0b0b0a;border:1px solid rgba(224,182,71,.35);color:#fff;text-align:center;font-weight:800}
+      .scanner-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
       .manual-box{margin-top:12px;padding:14px;border:1px solid rgba(224,182,71,.38);
         border-radius:16px;background:#0b0b0a}
       .manual-box form{display:grid;grid-template-columns:1fr auto;gap:10px}
-      .scanner-error{color:#ffb4b4}
       @media(max-width:620px){
-        .scanner-shell,.scanner-shell video{min-height:360px;height:360px}
         .scanner-controls,.manual-box form{grid-template-columns:1fr}
+        #productQrReader{min-height:340px}
       }
     </style>
+
     <div class="product-scanner">
-      <div class="scanner-shell">
-        <video id="productScannerVideo" playsinline muted></video>
-        <div class="scanner-guide" id="productScannerGuide"><div class="scanner-line"></div></div>
-        <div class="scanner-status" id="productScannerStatus">Avvio fotocamera…</div>
-      </div>
+      <div id="productQrReader"></div>
+      <div class="scanner-status" id="productScannerStatus">Avvio lettore QR…</div>
 
       <div class="scanner-controls">
-        <button type="button" id="productScannerStart">Avvia fotocamera</button>
+        <button type="button" id="productScannerRestart">Riavvia scanner</button>
+        <button type="button" class="secondary" id="productScannerZoom">Zoom +</button>
         <button type="button" class="secondary" id="productScannerTorch">Torcia</button>
       </div>
 
       <div class="manual-box">
-        <form method="post" action="__TARGET_URL__" id="productScannerForm">
+        <form method="post" action="__TARGET__" id="productScannerForm">
           <input type="hidden" name="badge_payload" id="productScannerPayload">
-          <input type="text" name="code" id="productScannerManual"
-                 placeholder="Inserisci codice prodotto" autocomplete="off">
+          <input type="text" name="code" placeholder="Inserisci codice prodotto" autocomplete="off">
           <button type="submit">Cerca prodotto</button>
         </form>
       </div>
-      <canvas id="productScannerCanvas" hidden></canvas>
     </div>
 
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <script>
     (() => {
-      const video=document.getElementById('productScannerVideo');
-      const canvas=document.getElementById('productScannerCanvas');
-      const ctx=canvas.getContext('2d',{willReadFrequently:true})||canvas.getContext('2d');
+      const readerId='productQrReader';
       const status=document.getElementById('productScannerStatus');
-      const guide=document.getElementById('productScannerGuide');
-      const startBtn=document.getElementById('productScannerStart');
+      const restartBtn=document.getElementById('productScannerRestart');
+      const zoomBtn=document.getElementById('productScannerZoom');
       const torchBtn=document.getElementById('productScannerTorch');
       const payload=document.getElementById('productScannerPayload');
       const form=document.getElementById('productScannerForm');
 
-      let stream=null,track=null,raf=null,submitted=false,detector=null,torchOn=false,lastScan=0;
+      let html5=null;
+      let currentTrack=null;
+      let submitted=false;
+      let zoomLevel=1;
+      let torchOn=false;
 
-      function setStatus(message,error=false){
-        status.textContent=message;
-        status.classList.toggle('scanner-error',error);
-      }
-
-      async function stopCamera(){
-        if(raf)cancelAnimationFrame(raf);
-        raf=null;
-        if(stream)stream.getTracks().forEach(t=>t.stop());
-        stream=null;track=null;
+      function setStatus(msg,error=false){
+        status.textContent=msg;
+        status.style.color=error?'#ffb4b4':'#fff';
       }
 
       async function submitCode(value){
@@ -1311,116 +1297,110 @@ def product_scanner_html(target_url):
         if(!clean||submitted)return;
         submitted=true;
         payload.value=clean;
-        guide.style.borderColor='#34d399';
-        guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.18),0 0 0 9999px rgba(0,0,0,.32)';
         setStatus('✓ QR riconosciuto. Apertura prodotto…');
-        try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
-        await stopCamera();
+        try{if(navigator.vibrate)navigator.vibrate([50,30,50])}catch(e){}
+        try{if(html5&&html5.isScanning)await html5.stop()}catch(e){}
         form.submit();
       }
 
-      function decodeCanvas(){
-        if(!window.jsQR||!ctx)return null;
+      async function configureTrack(){
         try{
-          const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-          const result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-          return result&&result.data?result.data:null;
-        }catch(e){return null}
+          const video=document.querySelector('#'+readerId+' video');
+          if(!video||!video.srcObject)return;
+          currentTrack=video.srcObject.getVideoTracks()[0];
+          const caps=currentTrack.getCapabilities?currentTrack.getCapabilities():{};
+          const advanced=[];
+          if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
+          if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
+          if(caps.zoom){
+            zoomLevel=Math.min(caps.zoom.max,Math.max(caps.zoom.min,2));
+            advanced.push({zoom:zoomLevel});
+          }
+          if(advanced.length)await currentTrack.applyConstraints({advanced});
+          zoomBtn.disabled=!caps.zoom;
+          torchBtn.disabled=!caps.torch;
+        }catch(e){}
       }
 
-      async function scan(){
-        if(!stream||submitted)return;
-        const now=performance.now();
-        if(now-lastScan<70){raf=requestAnimationFrame(scan);return}
-        lastScan=now;
-
-        if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
-          if('BarcodeDetector' in window){
-            try{
-              detector=detector||new BarcodeDetector({formats:['qr_code']});
-              const found=await detector.detect(video);
-              if(found.length&&found[0].rawValue){submitCode(found[0].rawValue);return}
-            }catch(e){}
-          }
-
-          if(ctx&&window.jsQR){
-            const vw=video.videoWidth,vh=video.videoHeight;
-            const ratio=.66;
-            const sw=Math.round(vw*ratio),sh=Math.round(vh*ratio);
-            const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
-            const targetW=Math.min(1280,Math.max(900,sw));
-            canvas.width=targetW;
-            canvas.height=Math.round(targetW*sh/sw);
-            ctx.imageSmoothingEnabled=true;
-            ctx.imageSmoothingQuality='high';
-            ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
-            let value=decodeCanvas();
-            if(value){submitCode(value);return}
-
-            const fullW=Math.min(1100,vw);
-            canvas.width=fullW;
-            canvas.height=Math.round(fullW*vh/vw);
-            ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);
-            value=decodeCanvas();
-            if(value){submitCode(value);return}
-          }
-        }
-        raf=requestAnimationFrame(scan);
-      }
-
-      async function startCamera(){
+      async function startScanner(){
         submitted=false;
-        await stopCamera();
         setStatus('Richiesta accesso alla fotocamera…');
+
         try{
-          stream=await navigator.mediaDevices.getUserMedia({
-            video:{
-              facingMode:{ideal:'environment'},
-              width:{ideal:1920},
-              height:{ideal:1080}
+          if(html5){
+            try{if(html5.isScanning)await html5.stop()}catch(e){}
+            try{await html5.clear()}catch(e){}
+          }
+          html5=new Html5Qrcode(readerId,{verbose:false});
+
+          const config={
+            fps:20,
+            qrbox:(vw,vh)=>{
+              const size=Math.floor(Math.min(vw,vh)*0.72);
+              return {width:size,height:size};
             },
-            audio:false
-          });
-          track=stream.getVideoTracks()[0];
-          video.srcObject=stream;
-          await video.play();
+            aspectRatio:1.0,
+            disableFlip:false,
+            experimentalFeatures:{useBarCodeDetectorIfSupported:true},
+            videoConstraints:{
+              facingMode:{ideal:'environment'},
+              width:{ideal:1920,min:1280},
+              height:{ideal:1080,min:720},
+              focusMode:'continuous'
+            }
+          };
 
-          try{
-            const caps=track.getCapabilities?track.getCapabilities():{};
-            const advanced=[];
-            if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
-            if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
-            if(advanced.length)await track.applyConstraints({advanced});
-            torchBtn.disabled=!(caps.torch);
-          }catch(e){torchBtn.disabled=true}
-
-          setStatus('Fotocamera attiva. Avvicina il QR al centro.');
-          scan();
+          await html5.start(
+            {facingMode:{ideal:'environment'}},
+            config,
+            decoded=>submitCode(decoded),
+            ()=>{}
+          );
+          setStatus('Scanner attivo. Avvicina il QR e riempi il riquadro.');
+          setTimeout(configureTrack,700);
         }catch(error){
-          console.error('Product scanner camera error',error);
-          setStatus('Fotocamera non disponibile. Controlla i permessi oppure inserisci il codice.',true);
+          console.error('Html5Qrcode start error',error);
+          setStatus('Impossibile avviare lo scanner. Controlla i permessi fotocamera.',true);
         }
       }
 
-      startBtn.addEventListener('click',startCamera);
+      restartBtn.addEventListener('click',startScanner);
+
+      zoomBtn.addEventListener('click',async()=>{
+        if(!currentTrack)return;
+        try{
+          const caps=currentTrack.getCapabilities?currentTrack.getCapabilities():{};
+          if(!caps.zoom)return;
+          zoomLevel+=0.5;
+          if(zoomLevel>caps.zoom.max)zoomLevel=caps.zoom.min;
+          await currentTrack.applyConstraints({advanced:[{zoom:zoomLevel}]});
+          zoomBtn.textContent='Zoom '+zoomLevel.toFixed(1)+'×';
+          setStatus('Zoom impostato. Mantieni il QR fermo.');
+        }catch(e){setStatus('Zoom non disponibile.',true)}
+      });
+
       torchBtn.addEventListener('click',async()=>{
-        if(!track)return;
+        if(!currentTrack)return;
         try{
           torchOn=!torchOn;
-          await track.applyConstraints({advanced:[{torch:torchOn}]});
+          await currentTrack.applyConstraints({advanced:[{torch:torchOn}]});
           torchBtn.textContent=torchOn?'Spegni torcia':'Torcia';
         }catch(e){
           torchOn=false;
-          setStatus('Torcia non supportata su questo dispositivo.',true);
+          setStatus('Torcia non supportata.',true);
         }
       });
 
-      document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
-      window.addEventListener('pagehide',stopCamera);
-      startCamera();
+      document.addEventListener('visibilitychange',async()=>{
+        if(document.hidden&&html5&&html5.isScanning){
+          try{await html5.stop()}catch(e){}
+        }
+      });
+
+      startScanner();
     })();
     </script>
-    """.replace("__TARGET_URL__", target_json[1:-1])
+    """.replace("__TARGET__", target)
 
 def create_badge_pdf(badge_name, token):
     """Crea un badge A6 verticale fronte/retro, pronto per stampa duplex."""
@@ -2738,9 +2718,9 @@ def product_qr_labels_pdf():
             c.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.3*mm,stroke=1,fill=0)
 
             payload=(product["brand_code"] or "").strip()
-            qr_size=12*mm
+            qr_size=13.2*mm
             widget=qr.QrCodeWidget(payload)
-            widget.barLevel="H"
+            widget.barLevel="M"
             bounds=widget.getBounds()
             qr_w=bounds[2]-bounds[0]
             qr_h=bounds[3]-bounds[1]
@@ -2751,9 +2731,9 @@ def product_qr_labels_pdf():
                 transform=[scale,0,0,scale,-bounds[0]*scale,-bounds[1]*scale]
             )
             drawing.add(widget)
-            renderPDF.draw(drawing,c,x+1.2*mm,y+1.5*mm)
+            renderPDF.draw(drawing,c,x+.8*mm,y+.9*mm)
 
-            tx=x+14.2*mm
+            tx=x+14.5*mm
             c.setFillColor(colors.black)
             c.setFont("Helvetica-Bold",7.2)
             c.drawString(tx,y+10.1*mm,payload[:18])
