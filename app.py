@@ -13,10 +13,8 @@ from datetime import datetime, timezone, date, time, timedelta
 from zoneinfo import ZoneInfo
 import shutil
 import tempfile
-import json
-import threading
 
-from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify, Response, make_response
+from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -24,7 +22,7 @@ from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128, qr
-from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.shapes import Drawing
 from reportlab.graphics import renderPDF
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -88,177 +86,23 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v43.5.0 DEV · Release 3 Completa"
+APP_VERSION = "v35.0.2 ENTERPRISE · TBS ONE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
-# Firebase Web Push: i valori pubblici dell'app Web vanno configurati su Render.
-FIREBASE_VAPID_PUBLIC_KEY = os.environ.get(
-    "FIREBASE_VAPID_PUBLIC_KEY",
-    "BGUMsZB9LddQBriLdvhqeonmM9aq3IKwn2yP0RgMTzt6uOIEF3s04tjhnV0xOmye50NxZABNMbgsulVWj-NjmUM",
-).strip()
-FIREBASE_WEB_CONFIG = {
-    "apiKey": os.environ.get("FIREBASE_API_KEY", "").strip(),
-    "authDomain": os.environ.get("FIREBASE_AUTH_DOMAIN", "tbs-gestionale.firebaseapp.com").strip(),
-    "projectId": os.environ.get("FIREBASE_PROJECT_ID", "tbs-gestionale").strip(),
-    "storageBucket": os.environ.get("FIREBASE_STORAGE_BUCKET", "").strip(),
-    "messagingSenderId": os.environ.get("FIREBASE_MESSAGING_SENDER_ID", "342914995645").strip(),
-    "appId": os.environ.get("FIREBASE_APP_ID", "").strip(),
-}
-_FIREBASE_ADMIN_READY = False
-_FIREBASE_ADMIN_ERROR = None
-_FIREBASE_ADMIN_CREDENTIAL_SOURCE = None
-_FIREBASE_ADMIN_CHECKED_PATHS = []
-_FIREBASE_LOCK = threading.Lock()
-
-def firebase_web_ready():
-    return bool(FIREBASE_VAPID_PUBLIC_KEY and FIREBASE_WEB_CONFIG.get("apiKey") and
-                FIREBASE_WEB_CONFIG.get("projectId") and FIREBASE_WEB_CONFIG.get("messagingSenderId") and
-                FIREBASE_WEB_CONFIG.get("appId"))
-
-def _firebase_admin_candidate_paths():
-    """Restituisce i possibili percorsi delle credenziali Firebase Admin su Render."""
-    candidates = []
-
-    def add(path):
-        path = (path or "").strip()
-        if path:
-            path = os.path.abspath(path)
-            if path not in candidates:
-                candidates.append(path)
-
-    # Percorso esplicito, se configurato.
-    add(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""))
-
-    # Secret File Render: il file viene montato qui a runtime.
-    add("/etc/secrets/firebase-admin.json")
-    add("/etc/secrets/firebase_admin.json")
-
-    # Fallback utili in locale o in repository.
-    add(os.path.join(os.getcwd(), "firebase-admin.json"))
-    add(os.path.join(os.getcwd(), "firebase_admin.json"))
-    add(os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase-admin.json"))
-    add(os.path.join(os.path.dirname(os.path.abspath(__file__)), "firebase_admin.json"))
-    return candidates
-
-
-def init_firebase_admin():
-    """Inizializza Firebase Admin da JSON env o Secret File Render."""
-    global _FIREBASE_ADMIN_READY, _FIREBASE_ADMIN_ERROR
-    global _FIREBASE_ADMIN_CREDENTIAL_SOURCE, _FIREBASE_ADMIN_CHECKED_PATHS
-
-    if _FIREBASE_ADMIN_READY:
-        return True
-
-    with _FIREBASE_LOCK:
-        if _FIREBASE_ADMIN_READY:
-            return True
-        try:
-            import firebase_admin
-            from firebase_admin import credentials
-
-            if firebase_admin._apps:
-                _FIREBASE_ADMIN_READY = True
-                _FIREBASE_ADMIN_ERROR = None
-                _FIREBASE_ADMIN_CREDENTIAL_SOURCE = "Firebase Admin già inizializzato"
-                return True
-
-            cred = None
-            source = None
-            _FIREBASE_ADMIN_CHECKED_PATHS = []
-
-            raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
-            if raw_json:
-                # Accetta anche un eventuale BOM iniziale.
-                parsed = json.loads(raw_json.lstrip("\ufeff"))
-                cred = credentials.Certificate(parsed)
-                source = "FIREBASE_SERVICE_ACCOUNT_JSON"
-            else:
-                for credential_path in _firebase_admin_candidate_paths():
-                    _FIREBASE_ADMIN_CHECKED_PATHS.append(credential_path)
-                    if not os.path.isfile(credential_path):
-                        continue
-                    if os.path.getsize(credential_path) <= 2:
-                        continue
-                    # Leggiamo e validiamo il JSON per restituire un errore chiaro.
-                    with open(credential_path, "r", encoding="utf-8-sig") as handle:
-                        parsed = json.load(handle)
-                    cred = credentials.Certificate(parsed)
-                    source = credential_path
-                    break
-
-            if cred is None:
-                checked = ", ".join(_FIREBASE_ADMIN_CHECKED_PATHS) or "nessun percorso"
-                _FIREBASE_ADMIN_ERROR = (
-                    "Credenziali Firebase Admin non trovate. "
-                    f"Percorsi controllati: {checked}"
-                )
-                _FIREBASE_ADMIN_CREDENTIAL_SOURCE = None
-                return False
-
-            options = {}
-            project_id = FIREBASE_WEB_CONFIG.get("projectId")
-            if project_id:
-                options["projectId"] = project_id
-            firebase_admin.initialize_app(cred, options or None)
-            _FIREBASE_ADMIN_READY = True
-            _FIREBASE_ADMIN_ERROR = None
-            _FIREBASE_ADMIN_CREDENTIAL_SOURCE = source
-            print(f"Firebase Admin pronto da: {source}")
-            return True
-        except Exception as exc:
-            _FIREBASE_ADMIN_READY = False
-            _FIREBASE_ADMIN_ERROR = f"{type(exc).__name__}: {exc}"
-            print(f"Firebase Admin non disponibile: {_FIREBASE_ADMIN_ERROR}")
-            return False
-
-def _directory_is_writable(path):
-    """Verifica davvero che una cartella sia scrivibile, non solo che esista."""
-    try:
-        os.makedirs(path, exist_ok=True)
-        probe = os.path.join(path, ".tbs_write_test")
-        with open(probe, "w", encoding="utf-8") as handle:
-            handle.write("ok")
-        os.remove(probe)
-        return True
-    except Exception as exc:
-        print(f"Cartella database non scrivibile {path}: {exc}")
-        return False
-
-
 def choose_db_path():
-    """Usa prima il disco Render, poi DATABASE_PATH, infine /tmp come emergenza."""
     configured = os.environ.get("DATABASE_PATH", "").strip()
-    candidates = []
     if configured:
-        configured_path = os.path.abspath(configured)
-        candidates.append(configured_path)
-
-    # Sul servizio Starter il disco Render è montato qui. Lo rileviamo anche
-    # quando la variabile ambiente non è stata applicata al deploy corrente.
-    render_disk_path = "/var/data/gestionale_tbs.db"
-    if render_disk_path not in candidates:
-        candidates.append(render_disk_path)
-
-    for candidate in candidates:
-        parent = os.path.dirname(candidate) or "."
-        if _directory_is_writable(parent):
-            print(f"Database selezionato: {candidate}")
-            return candidate
-
-    fallback = "/tmp/gestionale_tbs.db"
-    print(f"ATTENZIONE: uso database temporaneo {fallback}")
-    return fallback
-
+        return os.path.abspath(configured)
+    persistent_dir = "/var/data"
+    if os.path.isdir(persistent_dir) and os.access(persistent_dir, os.W_OK):
+        return os.path.join(persistent_dir, "gestionale_tbs.db")
+    return "/tmp/gestionale_tbs.db"
 
 DB_PATH = choose_db_path()
 os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
 DB_IS_EPHEMERAL = os.path.abspath(DB_PATH).startswith("/tmp/")
-print(f"TBS database={DB_PATH} ephemeral={DB_IS_EPHEMERAL}")
 BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH), "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
-_BACKUP_RETENTION_DAYS = max(1, int(os.environ.get("BACKUP_RETENTION_DAYS", "30")))
-_BACKUP_LOCK = threading.Lock()
-_LAST_DAILY_BACKUP_CHECK = None
 
 def bootstrap_database_file():
     """Inizializza il database senza sovrascrivere mai quello persistente."""
@@ -512,87 +356,21 @@ body.catalog-page form.inline{position:sticky;top:76px;z-index:8;background:rgba
 '''
 
 
-BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest-tbs-one.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
+BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS</strong><span>TATTOO BEAUTY SALOON</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') == 'seller' %}<a href="{{ url_for('catalog_requests') }}">📦 I miei ordini clienti</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a><a href="{{ url_for('label_print_center') }}">Stampa etichette QR</a><a href="{{ url_for('enterprise_inventory') }}">Inventario e rettifiche</a><a href="{{ url_for('enterprise_sales') }}">Vendite, resi e marginalità</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('orders_pro') }}">Ordini PRO</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria PRO</a><a href="{{ url_for('cash_session') }}">Apertura / chiusura cassa</a><a href="{{ url_for('recycle_bin') }}">Cestino intelligente</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics_page') }}">🔔 Diagnostica notifiche</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});let tbsLatestNotificationId=Number(sessionStorage.getItem('tbsLatestNotificationId')||0);function tbsBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.12,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.22);o.start();o.stop(c.currentTime+.24)}catch(e){}}function tbsLiveToast(title,message,url){const stack=document.getElementById('toastStack');if(!stack)return;const el=document.createElement('div');el.className='toast toast-info';el.innerHTML='<b></b><br><span></span>';el.querySelector('b').textContent=title||'Nuova notifica';el.querySelector('span').textContent=message||'';el.style.cursor='pointer';el.onclick=()=>{if(url)location.href=url};stack.appendChild(el);setTimeout(()=>{el.classList.add('toast-hide');setTimeout(()=>el.remove(),450)},7000)}async function checkLiveNotifications(){try{const r=await fetch("{{url_for('notification_poll')}}",{cache:'no-store',headers:{'Accept':'application/json'}});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(b){if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex'}else b.style.display='none'}if(d.latest&&Number(d.latest.id)>tbsLatestNotificationId){const firstRun=tbsLatestNotificationId===0;tbsLatestNotificationId=Number(d.latest.id);sessionStorage.setItem('tbsLatestNotificationId',String(tbsLatestNotificationId));if(!firstRun){tbsBeep();tbsLiveToast(d.latest.title,d.latest.message,d.latest.url);if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('TBS · '+d.latest.title,{body:d.latest.message||'',tag:'tbs-'+d.latest.id});n.onclick=()=>{window.focus();location.href=d.latest.url}}}}}catch(e){}}checkLiveNotifications();setInterval(checkLiveNotifications,4000);{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}checkDiscounts();setInterval(checkDiscounts,8000);{% endif %}{% if session.get('role') == 'seller' %}{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/catalogo-ordinabili/richieste') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}<script>
-(function(){
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function(){
-      navigator.serviceWorker.register("/service-worker.js", {scope:"/",updateViaCache:"none"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
-    });
-  }
-})();
-</script>{% if session.get('user_id') %}<script type="module">
-(async function(){
-  const buttonId='tbsPushEnable';
-  function showButton(label){
-    let b=document.getElementById(buttonId);
-    if(!b){
-      b=document.createElement('button'); b.id=buttonId; b.type='button';
-      b.style.cssText='position:fixed;right:14px;bottom:96px;z-index:99999;border:2px solid #d8b75c;background:#111722;color:#fff;border-radius:999px;padding:12px 16px;font-weight:900;font-size:14px;box-shadow:0 12px 28px rgba(0,0,0,.38);max-width:calc(100vw - 28px)';
-      document.body.appendChild(b);
-    }
-    b.textContent=label; b.hidden=false; b.disabled=false; return b;
-  }
-  function blockedHelp(){alert('Le notifiche sono bloccate. Tocca l’icona delle impostazioni del sito nella barra di Chrome, apri Permessi → Notifiche e scegli Consenti. Poi ricarica la pagina.');}
-  const waiting=showButton('🔔 Verifica notifiche'); waiting.disabled=true;
-  try{
-    if(!('serviceWorker' in navigator)||!('Notification' in window)){
-      const b=showButton('⚠️ Push non supportate'); b.onclick=()=>alert('Usa Chrome aggiornato o installa la PWA TBS.'); return;
-    }
-    const cfgResp=await fetch('/api/push/config',{cache:'no-store',headers:{'Accept':'application/json'}});
-    if(!cfgResp.ok) throw new Error('Configurazione push non raggiungibile');
-    const settings=await cfgResp.json();
-    if(!settings.enabled){const b=showButton('⚠️ Firebase da configurare');b.onclick=()=>alert('Controlla le variabili Firebase su Render.');return;}
-    const [{initializeApp,getApps},{getMessaging,getToken,deleteToken,isSupported,onMessage}]=await Promise.all([
-      import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')
-    ]);
-    if(!(await isSupported())){const b=showButton('⚠️ Push non supportate');b.onclick=()=>alert('Firebase Messaging non è supportato su questo browser.');return;}
-    const firebaseApp=getApps().length?getApps()[0]:initializeApp(settings.config);
-    const messaging=getMessaging(firebaseApp);
-    const registration=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});
-    await registration.update();
-    await navigator.serviceWorker.ready;
-    onMessage(messaging,function(payload){
-      try{
-        const data=payload.data||{};
-        const title=data.title||(payload.notification&&payload.notification.title)||'TBS One';
-        const body=data.body||(payload.notification&&payload.notification.body)||'';
-        if(Notification.permission==='granted'){
-          registration.showNotification(title,{body:body,icon:'/pwa-icon-192.png',badge:'/pwa-icon-192.png',tag:data.kind?'tbs-'+data.kind+'-'+(data.reference_id||''):'tbs-push',requireInteraction:data.kind==='discount_request',data:{url:data.url||'/notifications'}});
-        }
-      }catch(err){console.warn('Visualizzazione push in primo piano fallita',err);}
-    });
-    async function registerToken(){
-      if(Notification.permission==='denied'){blockedHelp();throw new Error('Permesso notifiche bloccato');}
-      const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
-      if(permission!=='granted') throw new Error('Permesso notifiche non concesso');
-      const token=await getToken(messaging,{vapidKey:settings.vapidKey,serviceWorkerRegistration:registration});
-      if(!token) throw new Error('Firebase non ha restituito il token');
-      const r=await fetch('/api/push/subscribe',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({token,platform:'web-pwa'})});
-      const raw=await r.text();let data={};try{data=raw?JSON.parse(raw):{};}catch(_e){}
-      if(!r.ok) throw new Error(data.error||('Registrazione dispositivo non riuscita (HTTP '+r.status+')'));
-      if(!data.ok) throw new Error(data.error||'Il server non ha confermato la registrazione');
-      localStorage.setItem('tbsPushToken',token);
-      const b=showButton('✅ Notifiche attive'); b.onclick=()=>location.href='/notifications'; setTimeout(()=>b.hidden=true,4000);
-      return token;
-    }
-    if(Notification.permission==='granted'){
-      showButton('🔔 Registrazione…').disabled=true;
-      registerToken().catch(e=>{console.warn(e);const b=showButton('⚠️ Riprova notifiche');b.onclick=()=>registerToken().catch(x=>alert(x.message));});
-    }else if(Notification.permission==='denied'){
-      const b=showButton('🔕 Notifiche bloccate'); b.onclick=blockedHelp;
-    }else{
-      const b=showButton('🔔 Attiva notifiche');
-      b.onclick=async()=>{b.disabled=true;b.textContent='Attivazione…';try{await registerToken();}catch(e){b.disabled=false;b.textContent='Riprova notifiche';alert(e.message);}};
-    }
-    window.TBSPush={register:registerToken,async disable(){const token=localStorage.getItem('tbsPushToken');if(token){await fetch('/api/push/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});await deleteToken(messaging);localStorage.removeItem('tbsPushToken');}location.reload();}};
-  }catch(e){console.warn('TBS Push:',e);const b=showButton('⚠️ Riprova notifiche');b.onclick=()=>location.reload();}
-})();
-</script>{% endif %}</body></html>'''
+
+/* v35.0.2 · TBS ONE visual identity */
+:root{--tbs-gold:#c99a36;--tbs-gold-light:#f0cf78;--tbs-black:#050505;--tbs-panel:#0d0d0d}
+body{background-color:var(--tbs-black)}
+.main-header{background:linear-gradient(180deg,#090909,#030303);border-bottom:1px solid rgba(201,154,54,.45)}
+.header-brand strong{color:var(--tbs-gold-light);letter-spacing:.08em}.header-brand span{color:#b99a58;letter-spacing:.14em}
+.card,.kpi{background:linear-gradient(145deg,rgba(18,18,18,.98),rgba(7,7,7,.98));border-color:rgba(201,154,54,.34);box-shadow:0 16px 38px rgba(0,0,0,.26)}
+button,.view,.success{background:linear-gradient(135deg,#f0cf78,#b87a19)!important;color:#130e05!important;border-color:#d4a642!important}
+.secondary{background:#0b0b0b!important;color:#f0cf78!important;border-color:rgba(201,154,54,.55)!important}
+.metric,.eyebrow,h1,h2{color:#f0cf78}.muted{color:#aaa39a}
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -619,50 +397,6 @@ def database_integrity(path):
 def make_consistent_backup(destination):
     with connect() as source, sqlite3.connect(destination) as target:
         source.backup(target)
-
-
-def _cleanup_old_backups():
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_BACKUP_RETENTION_DAYS)
-    for item in Path(BACKUP_DIR).glob("*.db"):
-        try:
-            modified = datetime.fromtimestamp(item.stat().st_mtime, timezone.utc)
-            if modified < cutoff:
-                item.unlink()
-        except OSError as exc:
-            app.logger.warning("Impossibile eliminare il backup %s: %s", item, exc)
-
-
-def create_verified_backup(kind="manuale"):
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    stamp = now_rome().strftime("%Y%m%d_%H%M%S")
-    safe_kind = "".join(ch for ch in str(kind).lower() if ch.isalnum() or ch == "_") or "manuale"
-    destination = os.path.join(BACKUP_DIR, f"{safe_kind}_{stamp}.db")
-    temporary = destination + ".tmp"
-    with _BACKUP_LOCK:
-        try:
-            make_consistent_backup(temporary)
-            valid, detail = database_integrity(temporary)
-            if not valid:
-                raise RuntimeError(f"verifica integrità non superata: {detail}")
-            os.replace(temporary, destination)
-            _cleanup_old_backups()
-            return destination
-        finally:
-            if os.path.exists(temporary):
-                os.remove(temporary)
-
-
-def ensure_daily_backup():
-    global _LAST_DAILY_BACKUP_CHECK
-    today = now_rome().date()
-    if _LAST_DAILY_BACKUP_CHECK == today:
-        return
-    _LAST_DAILY_BACKUP_CHECK = today
-    prefix = f"automatico_{today.strftime('%Y%m%d')}_"
-    if any(item.name.startswith(prefix) for item in Path(BACKUP_DIR).glob("automatico_*.db")):
-        _cleanup_old_backups()
-        return
-    create_verified_backup("automatico")
 
 CATALOG_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'supplier_catalog_enriched.csv')
 
@@ -858,25 +592,6 @@ def init_db():
         """)
         for c,d in [("category","TEXT DEFAULT 'Altro'"),("photo_data","TEXT"),("material","TEXT"),("color","TEXT"),("size","TEXT"),("stone","TEXT"),("thread_type","TEXT"),("notes","TEXT"),("active","INTEGER NOT NULL DEFAULT 1"),("min_stock","INTEGER NOT NULL DEFAULT 1"),("location","TEXT"),("cost_price","REAL DEFAULT 0"),("is_new","INTEGER NOT NULL DEFAULT 0"),("is_bestseller","INTEGER NOT NULL DEFAULT 0"),("model_name","TEXT"),("variant_group","TEXT")]:
             ensure_column(db,"products",c,d)
-        # v43.4.0: migrazioni additive e cestino sicuro. Nessuna tabella esistente viene ricreata.
-        ensure_column(db,"products","deleted_at","TEXT")
-        ensure_column(db,"products","deleted_by","TEXT")
-        db.execute("""CREATE TABLE IF NOT EXISTS schema_migrations(
-            version TEXT PRIMARY KEY,
-            description TEXT NOT NULL,
-            applied_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
-        db.execute("""CREATE TABLE IF NOT EXISTS recycle_bin_events(
-            id INTEGER PRIMARY KEY,
-            entity_type TEXT NOT NULL,
-            entity_id INTEGER NOT NULL,
-            entity_label TEXT,
-            action TEXT NOT NULL,
-            username TEXT NOT NULL,
-            details TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
-        db.execute("INSERT OR IGNORE INTO schema_migrations(version,description) VALUES(?,?)",("43.4.0","Tesoreria PRO, inventario tracciato, resi, cestino e migrazioni additive"))
         ensure_column(db,"users","role","TEXT NOT NULL DEFAULT 'seller'")
         ensure_column(db,"users","active","INTEGER NOT NULL DEFAULT 1")
         ensure_column(db,"users","created_at","TEXT DEFAULT CURRENT_TIMESTAMP")
@@ -970,7 +685,7 @@ def page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION, db_is_ephemeral=DB_IS_EPHEMERAL, lock_timeout_ms=LOCK_TIMEOUT_SECONDS*1000)
 
-LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><meta name="theme-color" content="#111722"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="TBS One"><link rel="manifest" href="/manifest-tbs-one.webmanifest"><link rel="icon" href="/pwa-icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/pwa-icon-192.png"><style>{{ css }}.tbs-launch{position:fixed;inset:0;z-index:99999;background:#080c14;display:flex;align-items:center;justify-content:center;transition:opacity .35s ease,visibility .35s ease}.tbs-launch.hide{opacity:0;visibility:hidden}.tbs-launch img{width:min(42vw,220px);height:auto;filter:drop-shadow(0 12px 35px rgba(216,183,92,.22))}.tbs-launch small{display:block;color:#d8b75c;text-align:center;letter-spacing:.18em;margin-top:18px;font-weight:700}.standalone-app body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+LOGIN_BASE = r'''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111722"><title>{{ title }}</title><style>{{ css }}
 body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#111722 0 180px,#f7f5ef 180px 100%);color:#111722}
 .login-only .login-top{height:180px;padding:24px 26px;display:flex;align-items:flex-start;justify-content:space-between;color:#fff;border-bottom:1px solid rgba(210,174,76,.7)}
 .login-only .login-brand strong{display:block;font-size:38px;line-height:1;letter-spacing:.04em}.login-only .login-brand span{display:block;margin-top:8px;color:#d8b75c;font:700 12px Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase}
@@ -980,33 +695,16 @@ body.login-only{min-height:100vh;padding:0;background:linear-gradient(180deg,#11
 .login-only input{min-height:54px;border-radius:15px;font-size:16px}.login-only .password-wrap{position:relative}.login-only .password-wrap input{padding-right:54px}.login-only .password-toggle{position:absolute;right:7px;top:7px;width:40px;min-height:40px;padding:0;border-radius:11px;background:#f0ede5;color:#111722;font-size:18px}
 .login-only .login-submit{min-height:56px;border-radius:16px;background:linear-gradient(135deg,#e3c568,#bd8f2d);color:#17120a;font-size:17px;box-shadow:0 12px 24px rgba(184,138,45,.22)}.login-only .login-footer{text-align:center;padding:20px 10px 4px;color:#888e99;font:12px Arial,sans-serif}.login-only .login-footer b{display:block;color:#111722;margin-bottom:4px}.login-only .flash{margin:0 0 14px}
 @media(max-width:560px){body.login-only{background:linear-gradient(180deg,#111722 0 158px,#f7f5ef 158px 100%)}.login-only .login-top{height:158px;padding:20px 18px}.login-only .login-brand strong{font-size:31px}.login-only .version-pill{padding:7px 9px;font-size:10px}.login-only main{margin:-42px auto 0;padding:0 12px 24px}.login-only .badge-login{padding:18px!important}.login-only .card{border-radius:22px}}
-</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS</strong><span>Tattoo Beauty Saloon</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS Gestionale</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main><script>
-(function(){
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function(){
-      navigator.serviceWorker.register("/service-worker.js", {scope:"/",updateViaCache:"none"}).catch(function(err){console.warn("TBS service worker non disponibile", err);});
-    });
-  }
-})();
-</script></body></html>'''
+</style></head><body class="login-only"><header class="login-top"><div class="login-brand"><strong>TBS ONE</strong><span>Business Operating System</span></div><div class="version-pill"><i class="version-dot"></i>{{ app_version }}</div></header><main>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}{% endwith %}{{ body|safe }}<footer class="login-footer"><b>TBS ONE</b>{{ app_version }}<br>© Tattoo Beauty Saloon</footer></main></body></html>'''
 
 def login_page(title, body, **ctx):
     inner = render_template_string(body, **ctx)
     return render_template_string(LOGIN_BASE, title=title, css=CSS, body=inner, app_version=APP_VERSION)
 
-def role_landing_endpoint(role=None):
-    """Destinazione unica e sicura dopo login/sblocco o accesso negato."""
-    current_role = role or session.get("role")
-    return "pos" if current_role == "seller" else "dashboard"
-
-def role_landing_redirect(role=None):
-    # 303 evita che Safari ripeta una POST durante la catena di navigazione.
-    return redirect(url_for(role_landing_endpoint(role)), code=303)
-
 def login_required(fn):
     @wraps(fn)
     def wrapped(*a,**k):
-        return redirect(url_for("login"), code=303) if not session.get("user_id") else fn(*a,**k)
+        return redirect(url_for("login")) if not session.get("user_id") else fn(*a,**k)
     return wrapped
 
 def role_required(*roles):
@@ -1014,14 +712,10 @@ def role_required(*roles):
         @wraps(fn)
         def wrapped(*a,**k):
             if not session.get("user_id"):
-                return redirect(url_for("login"), code=303)
+                return redirect(url_for("login"))
             if session.get("role") not in roles:
                 flash("Non hai i permessi per questa operazione.")
-                target = role_landing_endpoint()
-                # Non redirigere mai verso la stessa route: è la protezione anti-loop.
-                if request.endpoint == target:
-                    return ("Accesso non autorizzato", 403)
-                return redirect(url_for(target), code=303)
+                return redirect(url_for("home"))
             return fn(*a,**k)
         return wrapped
     return decorator
@@ -1471,7 +1165,7 @@ PUBLIC_CSS = """
 @media(max-width:760px){.bottom-nav{grid-template-columns:repeat(5,1fr)}.favorite-btn{font-size:18px!important}.instant-search input{font-size:16px}}
 
 """
-PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><link rel='manifest' href='/manifest-tbs-jewelry.webmanifest'><link rel='apple-touch-icon' href='/jewelry-icon-192.png'><style>{{css}}</style></head><body><div id='tbsLaunch' class='tbs-launch'><div><img src='/jewelry-icon-512.png' alt='TBS Jewelry'><small>JEWELRY ATELIER</small></div></div><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
+PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
 const favKey='tbs_boutique_favorites';const getFav=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(e){return[]}};const setFav=x=>localStorage.setItem(favKey,JSON.stringify(x));function syncFav(){const fav=getFav();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=fav.includes(b.dataset.key);b.classList.toggle('is-favorite',on);b.textContent=on?'♥ Preferito':'♡ Preferito';b.setAttribute('aria-pressed',on?'true':'false')});const c=document.getElementById('favoriteCount');if(c)c.textContent=fav.length;applyFavoriteFilter()};let favoritesOnly=false;function applyFavoriteFilter(){const fav=getFav();document.querySelectorAll('.shop-product').forEach(card=>card.classList.toggle('hidden-by-favorite',favoritesOnly&&!fav.includes(card.dataset.productKey)));const empty=document.getElementById('favoritesEmpty');if(empty)empty.classList.toggle('visible',favoritesOnly&&!document.querySelector('.shop-product:not(.hidden-by-favorite):not(.hidden-by-search)'));updateVisibleCount()};document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(b){e.preventDefault();let fav=getFav();fav=fav.includes(b.dataset.key)?fav.filter(x=>x!==b.dataset.key):[...fav,b.dataset.key];setFav(fav);syncFav()}if(e.target.closest('#favoritesTop,#favoritesBottom')){e.preventDefault();favoritesOnly=!favoritesOnly;document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});applyFavoriteFilter()}});function updateVisibleCount(){const cards=[...document.querySelectorAll('.shop-product')];const n=cards.filter(c=>!c.classList.contains('hidden-by-search')&&!c.classList.contains('hidden-by-favorite')).length;const el=document.getElementById('liveResultCount');if(el)el.textContent=n+' proposte visualizzate'}const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.classList.toggle('hidden-by-search',q&&!c.dataset.search.includes(q)));applyFavoriteFilter()});syncFav();updateVisibleCount()</script></body></html>"""
 def public_page(title, body, **ctx):
     count=sum(int(q) for q in session.get("client_cart",{}).values())
@@ -1665,66 +1359,12 @@ def change_password():
 @role_required("admin","manager")
 def treasury():
     today=now_rome().date(); start,end=utc_bounds_for_rome_day(today); month_start,_=utc_bounds_for_rome_day(today.replace(day=1))
-    movement_filter=request.args.get("tipo","").strip()
-    if movement_filter not in {"","withdrawal","return","deposit"}: movement_filter=""
     with connect() as db:
         day_sales=sales_totals_for_period(db,start,end); month_sales=sales_totals_for_period(db,month_start,end)
         cash=treasury_cash_balance(db); debts=treasury_open_debts(db); debt_total=sum(float(x['amount']) for x in debts)
         outflows=db.execute("SELECT COALESCE(SUM(amount),0) FROM treasury_movements WHERE movement_type='withdrawal' AND refundable=0").fetchone()[0]
-        deposits=db.execute("SELECT COALESCE(SUM(amount),0) FROM treasury_movements WHERE movement_type='deposit'").fetchone()[0]
-        sql="SELECT * FROM treasury_movements"; params=[]
-        if movement_filter: sql+=" WHERE movement_type=?"; params.append(movement_filter)
-        sql+=" ORDER BY id DESC LIMIT 100"
-        recent=db.execute(sql,params).fetchall()
-        count=db.execute("SELECT * FROM treasury_cash_counts ORDER BY id DESC LIMIT 1").fetchone()
-        closures=db.execute("SELECT * FROM treasury_daily_closures ORDER BY closure_date DESC LIMIT 31").fetchall()
-        today_closed=db.execute("SELECT 1 FROM treasury_daily_closures WHERE closure_date=?",(today.isoformat(),)).fetchone() is not None
-    body="""<style>.money{font-size:30px;font-weight:800}.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.debt{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}.plus{color:#047857}.minus{color:#b91c1c}.treasury-action{padding:13px;text-align:center;text-decoration:none;border-radius:9px;font-weight:800;display:flex;align-items:center;justify-content:center}</style>
-    <div class='dash-head'><div><span class='eyebrow'>AMMINISTRAZIONE NEGOZIO</span><h1>💎 Tesoreria</h1><p class='muted'>Incassi, contanti, movimenti e chiusure giornaliere.</p></div></div>
-    <div class='grid'><div class='card'><div class='muted'>Incasso oggi</div><div class='money'>€ {{'%.2f'|format(day_sales.total)}}</div><p>💵 € {{'%.2f'|format(day_sales.cash)}} · 💳 € {{'%.2f'|format(day_sales.card)}}</p></div><div class='card'><div class='muted'>Incasso mese</div><div class='money'>€ {{'%.2f'|format(month_sales.total)}}</div><p>Contanti € {{'%.2f'|format(month_sales.cash)}} · Bancomat € {{'%.2f'|format(month_sales.card)}}</p></div><div class='card'><div class='muted'>Contanti nel cassetto</div><div class='money'>€ {{'%.2f'|format(cash)}}</div><p>Versamenti registrati € {{'%.2f'|format(deposits)}}</p></div><div class='card'><div class='muted'>Da restituire</div><div class='money'>€ {{'%.2f'|format(debt_total)}}</div><p>Uscite definitive € {{'%.2f'|format(outflows)}}</p></div></div>
-    <div class='card buttons'><a class='danger treasury-action' href='{{url_for("treasury_withdrawal")}}'>➖ Prelievo</a><a class='success treasury-action' href='{{url_for("treasury_deposit")}}'>➕ Versamento</a><a class='success treasury-action' href='{{url_for("treasury_return")}}'>↩ Restituzione</a><a class='view treasury-action' href='{{url_for("treasury_count")}}'>🧮 Conta cassetto</a><a class='secondary treasury-action' href='{{url_for("treasury_export")}}'>⬇️ Esporta CSV</a><form method='post' action='{{url_for("treasury_close_today")}}' onsubmit="return confirm('Confermi la chiusura di oggi?')"><button class='secondary' style='width:100%;height:100%'>{{'✅ Giornata chiusa' if today_closed else '📒 Chiudi giornata'}}</button></form><form method='post' action='{{url_for("treasury_empty")}}' onsubmit="return confirm('Confermi lo svuotamento completo del cassetto? Il movimento resterà nello storico.')"><button class='danger' style='width:100%;height:100%'>Svuota cassetto</button></form></div>
-    <div class='grid'><div class='card'><h2>Chi deve rimettere denaro</h2>{% for d in debts %}<div class='debt'><b>{{d.responsible_username}}</b><b class='minus'>€ {{'%.2f'|format(d.amount)}}</b></div>{% else %}<p class='muted'>Nessun importo aperto.</p>{% endfor %}</div><div class='card'><h2>Ultimo conteggio</h2>{% if count %}<p>{{count.created_at|rome_time}} · {{count.username}}</p><p>Teorico € {{'%.2f'|format(count.theoretical_amount)}}<br>Contati € {{'%.2f'|format(count.counted_amount)}}<br>Differenza <b>€ {{'%.2f'|format(count.difference)}}</b></p>{% else %}<p class='muted'>Nessun conteggio.</p>{% endif %}</div></div>
-    <div class='card'><div style='display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap'><h2 style='margin:0'>Movimenti</h2><form method='get' class='inline'><select name='tipo'><option value=''>Tutti</option><option value='withdrawal' {% if movement_filter=='withdrawal' %}selected{% endif %}>Prelievi</option><option value='deposit' {% if movement_filter=='deposit' %}selected{% endif %}>Versamenti</option><option value='return' {% if movement_filter=='return' %}selected{% endif %}>Restituzioni</option></select><button class='secondary'>Filtra</button></form></div>{% for x in recent %}<p><b>{{x.movement_number}}</b> · {{x.created_at|rome_time}} · {{x.actor_username}}<br>{{x.category}}{% if x.responsible_username %} · Responsabile <b>{{x.responsible_username}}</b>{% endif %}{% if x.supplier %} · Fornitore {{x.supplier}}{% endif %}<br><b class='{{"plus" if x.movement_type in ("return","deposit") else "minus"}}'>{{'+' if x.movement_type in ('return','deposit') else '-'}} € {{'%.2f'|format(x.amount)}}</b>{% if x.notes %}<br><span class='muted'>{{x.notes}}</span>{% endif %}</p><hr>{% else %}<p class='muted'>Nessun movimento.</p>{% endfor %}</div>
-    <div class='card'><h2>Chiusure giornaliere</h2><p class='muted'>Automatiche dopo mezzanotte oppure manuali con “Chiudi giornata”.</p>{% for c in closures %}<p><b>{{c.closure_date}}</b> · Totale € {{'%.2f'|format(c.sales_total)}} · Contanti € {{'%.2f'|format(c.cash_sales)}} · Bancomat € {{'%.2f'|format(c.card_sales)}}<br>Cassetto € {{'%.2f'|format(c.theoretical_cash)}} · Uscite € {{'%.2f'|format(c.definitive_outflows)}} · Da restituire € {{'%.2f'|format(c.open_debts)}}</p><hr>{% else %}<p class='muted'>Nessuna chiusura presente.</p>{% endfor %}</div>"""
-    return page("Tesoreria",body,day_sales=day_sales,month_sales=month_sales,cash=cash,debts=debts,debt_total=debt_total,outflows=outflows,deposits=deposits,recent=recent,count=count,closures=closures,movement_filter=movement_filter,today_closed=today_closed)
-
-@app.route("/treasury/deposit",methods=["GET","POST"])
-@role_required("admin","manager")
-def treasury_deposit():
-    if request.method=="POST":
-        try: amount=float(request.form.get("amount","0").replace(",","."))
-        except ValueError: amount=0
-        category=request.form.get("category","").strip()
-        allowed={"Fondo cassa","Versamento contanti","Rettifica autorizzata","Altro"}
-        if amount<=0 or category not in allowed: flash("Inserisci importo e causale validi.")
-        else:
-            with connect() as db:
-                number=next_treasury_number(db)
-                db.execute("INSERT INTO treasury_movements(movement_number,movement_type,category,amount,actor_user_id,actor_username,responsible_username,notes,refundable) VALUES(?,?,?,?,?,?,?,?,0)",(number,"deposit",category,amount,session.get("user_id"),session.get("user","sconosciuto"),session.get("user","sconosciuto"),request.form.get("notes","").strip()))
-                log_action(db,"Versamento tesoreria",details=f"{number}; {category}; € {amount:.2f}"); db.commit()
-            flash("Versamento registrato."); return redirect(url_for("treasury"))
-    return page("Versamento",'''<h1>Nuovo versamento</h1><div class="card"><form method="post"><p><label>Importo<input name="amount" inputmode="decimal" required></label></p><p><label>Causale<select name="category" required><option value="">Seleziona</option><option>Fondo cassa</option><option>Versamento contanti</option><option>Rettifica autorizzata</option><option>Altro</option></select></label></p><p><label>Note<textarea name="notes"></textarea></label></p><button class="success">Registra versamento</button></form><p class="muted">Il versamento aumenta il contante teorico presente nel cassetto.</p></div>''')
-
-@app.post("/treasury/close-today")
-@role_required("admin","manager")
-def treasury_close_today():
-    day=now_rome().date()
-    with connect() as db:
-        db.execute("DELETE FROM treasury_daily_closures WHERE closure_date=?",(day.isoformat(),)); create_daily_closure(db,day)
-        log_action(db,"Chiusura tesoreria manuale",details=day.isoformat()); db.commit()
-    flash("Chiusura giornaliera registrata."); return redirect(url_for("treasury"))
-
-@app.get("/treasury/export.csv")
-@role_required("admin","manager")
-def treasury_export():
-    import io
-    text=io.StringIO(); writer=csv.writer(text,delimiter=';')
-    writer.writerow(["Numero","Data","Tipo","Causale","Importo","Operatore","Responsabile","Fornitore","Fattura","Note"])
-    with connect() as db: rows=db.execute("SELECT * FROM treasury_movements ORDER BY id").fetchall()
-    for x in rows:
-        writer.writerow([x['movement_number'],format_rome(x['created_at']),x['movement_type'],x['category'] or '',f"{float(x['amount']):.2f}",x['actor_username'],x['responsible_username'] or '',x['supplier'] or '',x['invoice_number'] or '',x['notes'] or ''])
-    output=BytesIO(text.getvalue().encode('utf-8-sig'))
-    return send_file(output,as_attachment=True,download_name=f"tesoreria_{now_rome().strftime('%Y%m%d_%H%M')}.csv",mimetype="text/csv; charset=utf-8")
+        recent=db.execute("SELECT * FROM treasury_movements ORDER BY id DESC LIMIT 40").fetchall(); count=db.execute("SELECT * FROM treasury_cash_counts ORDER BY id DESC LIMIT 1").fetchone(); closures=db.execute("SELECT * FROM treasury_daily_closures ORDER BY closure_date DESC LIMIT 14").fetchall()
+    return page("Tesoreria",'''<style>.money{font-size:30px;font-weight:800}.buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.debt{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}.plus{color:#047857}.minus{color:#b91c1c}</style><h1>💎 Tesoreria Gioielli</h1><div class="grid"><div class="card"><div class="muted">Incasso oggi</div><div class="money">€ {{'%.2f'|format(day_sales.total)}}</div><p>💵 € {{'%.2f'|format(day_sales.cash)}} · 💳 € {{'%.2f'|format(day_sales.card)}}</p></div><div class="card"><div class="muted">Incasso mese</div><div class="money">€ {{'%.2f'|format(month_sales.total)}}</div><p>Contanti € {{'%.2f'|format(month_sales.cash)}} · Bancomat € {{'%.2f'|format(month_sales.card)}}</p></div><div class="card"><div class="muted">Contanti nel cassetto</div><div class="money">€ {{'%.2f'|format(cash)}}</div></div><div class="card"><div class="muted">Da restituire</div><div class="money">€ {{'%.2f'|format(debt_total)}}</div><p>Uscite definitive € {{'%.2f'|format(outflows)}}</p></div></div><div class="card buttons"><a class="danger" href="{{url_for('treasury_withdrawal')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➖ Prelievo</a><a class="success" href="{{url_for('treasury_return')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">➕ Restituzione</a><a class="view" href="{{url_for('treasury_count')}}" style="padding:13px;text-align:center;text-decoration:none;border-radius:9px">🧮 Conta cassetto</a><form method="post" action="{{url_for('treasury_empty')}}" onsubmit="return confirm('Confermi lo svuotamento completo del cassetto? Il movimento resterà nello storico.')"><button class="danger" style="width:100%;height:100%">Svuota cassetto</button></form></div><div class="grid"><div class="card"><h2>Chi deve rimettere denaro</h2>{% for d in debts %}<div class="debt"><b>{{d.responsible_username}}</b><b class="minus">€ {{'%.2f'|format(d.amount)}}</b></div>{% else %}<p class="muted">Nessun importo aperto.</p>{% endfor %}</div><div class="card"><h2>Ultimo conteggio</h2>{% if count %}<p>{{count.created_at|rome_time}} · {{count.username}}</p><p>Teorico € {{'%.2f'|format(count.theoretical_amount)}}<br>Contati € {{'%.2f'|format(count.counted_amount)}}<br>Differenza <b>€ {{'%.2f'|format(count.difference)}}</b></p>{% else %}<p class="muted">Nessun conteggio.</p>{% endif %}</div></div><div class="card"><h2>Ultimi movimenti</h2>{% for x in recent %}<p><b>{{x.movement_number}}</b> · {{x.created_at|rome_time}} · {{x.actor_username}}<br>{{x.category}}{% if x.responsible_username %} · Prelevato/restituito da <b>{{x.responsible_username}}</b>{% endif %}{% if x.supplier %} · Fornitore {{x.supplier}}{% endif %}<br><b class="{{'plus' if x.movement_type=='return' else 'minus'}}">{{'+' if x.movement_type=='return' else '-'}} € {{'%.2f'|format(x.amount)}}</b>{% if x.notes %}<br><span class="muted">{{x.notes}}</span>{% endif %}</p><hr>{% else %}<p class="muted">Nessun movimento.</p>{% endfor %}</div><div class="card"><h2>Chiusure giornaliere automatiche</h2><p class="muted">Create dopo mezzanotte; eventuali chiusure mancanti vengono recuperate alla prima apertura.</p>{% for c in closures %}<p><b>{{c.closure_date}}</b> · Totale € {{'%.2f'|format(c.sales_total)}} · Contanti € {{'%.2f'|format(c.cash_sales)}} · Bancomat € {{'%.2f'|format(c.card_sales)}}<br>Cassetto € {{'%.2f'|format(c.theoretical_cash)}} · Da restituire € {{'%.2f'|format(c.open_debts)}}</p><hr>{% else %}<p class="muted">La prima chiusura comparirà dopo mezzanotte.</p>{% endfor %}</div>''',day_sales=day_sales,month_sales=month_sales,cash=cash,debts=debts,debt_total=debt_total,outflows=outflows,recent=recent,count=count,closures=closures)
 
 @app.post("/treasury/empty")
 @role_required("admin","manager")
@@ -1816,214 +1456,6 @@ def health():
     }, (200 if db_ok else 500)
 
 
-def _ensure_push_subscriptions(db):
-    """Crea o migra la tabella FCM senza modificare gli altri dati del gestionale."""
-    modern_schema = """CREATE TABLE IF NOT EXISTS push_subscriptions(
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        username TEXT,
-        token TEXT NOT NULL UNIQUE,
-        platform TEXT,
-        user_agent TEXT,
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        last_success_at TEXT,
-        last_error TEXT
-    )"""
-
-    existing = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='push_subscriptions'"
-    ).fetchone()
-    if existing:
-        columns = db.execute("PRAGMA table_info(push_subscriptions)").fetchall()
-        names = {row[1] for row in columns}
-        # Le prime versioni usavano Web Push classico e rendevano obbligatori
-        # endpoint/p256dh/auth. FCM usa invece un singolo token: SQLite non può
-        # rimuovere quei NOT NULL con ALTER TABLE, quindi ricreiamo solo questa
-        # tabella conservando gli eventuali token FCM già validi.
-        legacy_required = {
-            row[1] for row in columns
-            if row[1] in {'endpoint', 'p256dh', 'auth'} and int(row[3] or 0) == 1
-        }
-        if legacy_required:
-            db.execute("DROP TABLE IF EXISTS push_subscriptions_fcm_new")
-            db.execute(modern_schema.replace(
-                'CREATE TABLE IF NOT EXISTS push_subscriptions(',
-                'CREATE TABLE push_subscriptions_fcm_new('
-            ))
-            if 'token' in names:
-                selectable = [
-                    name for name in (
-                        'user_id','username','token','platform','user_agent','active',
-                        'created_at','updated_at','last_success_at','last_error'
-                    ) if name in names
-                ]
-                if 'user_id' in selectable and 'token' in selectable:
-                    cols = ','.join(selectable)
-                    db.execute(f"""INSERT OR IGNORE INTO push_subscriptions_fcm_new ({cols})
-                                   SELECT {cols} FROM push_subscriptions
-                                   WHERE token IS NOT NULL AND length(trim(token)) >= 40""")
-            db.execute("DROP TABLE push_subscriptions")
-            db.execute("ALTER TABLE push_subscriptions_fcm_new RENAME TO push_subscriptions")
-        else:
-            db.execute(modern_schema)
-    else:
-        db.execute(modern_schema)
-
-    for name, definition in (
-        ("user_id", "INTEGER"),
-        ("username", "TEXT"),
-        ("token", "TEXT"),
-        ("platform", "TEXT"),
-        ("user_agent", "TEXT"),
-        ("active", "INTEGER NOT NULL DEFAULT 1"),
-        ("created_at", "TEXT"),
-        ("updated_at", "TEXT"),
-        ("last_success_at", "TEXT"),
-        ("last_error", "TEXT"),
-    ):
-        ensure_column(db, "push_subscriptions", name, definition)
-    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_token_unique ON push_subscriptions(token)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_push_user_active ON push_subscriptions(user_id,active)")
-
-
-def _push_url_for(kind, reference_type=None, reference_id=None):
-    """Restituisce sempre un URL HTTPS assoluto, richiesto da Firebase Web Push."""
-    if kind == 'discount_request':
-        path = '/discount-approvals'
-    elif kind in ('customer_order','catalog_request','order_arrived'):
-        path = '/customer-orders'
-    else:
-        path = '/notifications'
-
-    # Su Render RENDER_EXTERNAL_URL è l'origine pubblica del servizio.
-    # APP_BASE_URL consente un eventuale dominio personalizzato futuro.
-    base_url = (os.environ.get('APP_BASE_URL') or
-                os.environ.get('RENDER_EXTERNAL_URL') or
-                request.host_url or '').strip().rstrip('/')
-
-    if not base_url:
-        base_url = 'https://gestionale-tbs-pulito.onrender.com'
-    elif base_url.startswith('http://'):
-        base_url = 'https://' + base_url[len('http://'):]
-    elif not base_url.startswith('https://'):
-        base_url = 'https://' + base_url.lstrip('/')
-
-    return f"{base_url}{path}"
-
-
-def _ensure_push_delivery_log(db):
-    db.execute("""CREATE TABLE IF NOT EXISTS push_delivery_log(
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
-        username TEXT,
-        subscription_id INTEGER,
-        token_suffix TEXT,
-        kind TEXT,
-        title TEXT,
-        reference_type TEXT,
-        reference_id INTEGER,
-        status TEXT NOT NULL,
-        firebase_message_id TEXT,
-        error_text TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )""")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_push_delivery_user ON push_delivery_log(user_id,created_at)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_push_delivery_status ON push_delivery_log(status,created_at)")
-
-
-def _log_push_delivery(db, user_id, username, subscription_id, token, kind, title,
-                       reference_type, reference_id, status, firebase_message_id=None, error_text=None):
-    _ensure_push_delivery_log(db)
-    db.execute("""INSERT INTO push_delivery_log(
-        user_id,username,subscription_id,token_suffix,kind,title,
-        reference_type,reference_id,status,firebase_message_id,error_text
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(
-        user_id,username,subscription_id,(token or '')[-12:],kind,title,
-        reference_type,reference_id,status,firebase_message_id,
-        (str(error_text)[:1000] if error_text else None)
-    ))
-
-
-def _send_push_for_user(db, user_id, title, message, kind='notification', reference_type=None, reference_id=None):
-    """Invia una push a tutti i dispositivi attivi dell'utente e registra ogni tentativo."""
-    _ensure_push_subscriptions(db)
-    _ensure_push_delivery_log(db)
-    user=db.execute("SELECT id,username FROM users WHERE id=?",(user_id,)).fetchone()
-    username=user['username'] if user else None
-    tokens=db.execute("""SELECT id,token,username,platform,last_error
-                         FROM push_subscriptions
-                         WHERE user_id=? AND active=1""",(user_id,)).fetchall()
-    if not tokens:
-        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
-                           'no_device',error_text='Nessun dispositivo attivo associato all’utente')
-        app.logger.warning("Push non inviata: nessun dispositivo per user_id=%s username=%s kind=%s",
-                           user_id,username,kind)
-        return 0
-    if not init_firebase_admin():
-        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
-                           'admin_not_ready',error_text=_FIREBASE_ADMIN_ERROR or 'Firebase Admin non inizializzato')
-        app.logger.error("Push non inviata: Firebase Admin non pronto: %s",_FIREBASE_ADMIN_ERROR)
-        return 0
-    try:
-        from firebase_admin import messaging
-    except Exception as exc:
-        _log_push_delivery(db,user_id,username,None,'',kind,title,reference_type,reference_id,
-                           'import_error',error_text=exc)
-        app.logger.exception("Firebase messaging non disponibile")
-        return 0
-    sent=0
-    target_url=_push_url_for(kind,reference_type,reference_id)
-    push_title=str(f"TBS One · {title}")
-    push_body=str(message or '')
-    for row in tokens:
-        try:
-            # Payload Web Push compatibile con Chrome Android:
-            # - il browser visualizza automaticamente la notifica in background;
-            # - onMessage la visualizza in primo piano tramite ServiceWorkerRegistration.
-            push_data={
-                'title':push_title,
-                'body':push_body,
-                'url':target_url,
-                'kind':str(kind or 'notification'),
-                'reference_type':str(reference_type or ''),
-                'reference_id':str(reference_id or ''),
-            }
-            # Messaggio data-only: il Service Worker crea direttamente la notifica.
-            # In questo modo il click conserva sempre l'URL e apre la pagina corretta.
-            msg=messaging.Message(
-                token=row['token'],
-                data=push_data,
-                webpush=messaging.WebpushConfig(
-                    headers={'Urgency':'high','TTL':'300'},
-                ),
-            )
-            firebase_message_id=messaging.send(msg)
-            db.execute("""UPDATE push_subscriptions
-                          SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
-                          WHERE id=?""",(row['id'],))
-            _log_push_delivery(db,user_id,row['username'] or username,row['id'],row['token'],kind,title,
-                               reference_type,reference_id,'sent',firebase_message_id=firebase_message_id)
-            app.logger.info("Push Firebase inviata user_id=%s sub_id=%s message_id=%s kind=%s",
-                            user_id,row['id'],firebase_message_id,kind)
-            sent += 1
-        except Exception as exc:
-            error_text=str(exc)[:1000]
-            deactivate=any(x in error_text.lower() for x in (
-                'not registered','registration-token-not-registered','unregistered',
-                'invalid registration','requested entity was not found'
-            ))
-            db.execute("""UPDATE push_subscriptions
-                          SET active=?,last_error=?,updated_at=CURRENT_TIMESTAMP
-                          WHERE id=?""",(0 if deactivate else 1,error_text,row['id']))
-            _log_push_delivery(db,user_id,row['username'] or username,row['id'],row['token'],kind,title,
-                               reference_type,reference_id,'failed',error_text=error_text)
-            app.logger.exception("Invio push fallito user_id=%s sub_id=%s kind=%s",
-                                 user_id,row['id'],kind)
-    return sent
-
-
 def _ensure_notifications(db):
     db.execute("""CREATE TABLE IF NOT EXISTS notifications(
         id INTEGER PRIMARY KEY,
@@ -2063,29 +1495,19 @@ def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=
     recipient=_current_user_for_identity(db,user_id,recipient_username)
     if not recipient:
         return False
-    cursor=db.execute("""INSERT OR IGNORE INTO notifications(
+    db.execute("""INSERT OR IGNORE INTO notifications(
         recipient_user_id,recipient_username,notification_type,title,message,
         reference_type,reference_id,event_key
     ) VALUES(?,?,?,?,?,?,?,?)""",(
         recipient['id'],recipient['username'],kind,title,message,
         reference_type,reference_id,event_key
     ))
-    inserted = cursor.rowcount > 0
-    if inserted:
-        _send_push_for_user(db,recipient['id'],title,message,kind,reference_type,reference_id)
-    return inserted
+    return True
 
 
 def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
     placeholders=','.join('?' for _ in roles)
-    users=db.execute(f"SELECT id,username,role FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
-    app.logger.info("Notifica ruoli kind=%s reference=%s:%s destinatari=%s",
-                    kind,reference_type,reference_id,
-                    [(u['id'],u['username'],u['role']) for u in users])
-    if not users:
-        _ensure_push_delivery_log(db)
-        _log_push_delivery(db,None,None,None,'',kind,title,reference_type,reference_id,
-                           'no_recipient',error_text=f"Nessun utente attivo nei ruoli: {roles}")
+    users=db.execute(f"SELECT id,username FROM users WHERE active=1 AND role IN ({placeholders})",tuple(roles)).fetchall()
     for user in users:
         user_event_key=f"{event_key}:user:{user['id']}" if event_key else None
         _notify_user(db,user['id'],kind,title,message,reference_type,reference_id,user_event_key,user['username'])
@@ -2176,231 +1598,6 @@ def _notification_unread_count(db,user_id):
     _repair_notification_recipients(db)
     return int(db.execute("SELECT COUNT(*) FROM notifications WHERE recipient_user_id=? AND read_at IS NULL AND archived_at IS NULL",(user_id,)).fetchone()[0] or 0)
 
-@app.get('/api/push/config')
-@login_required
-def push_config():
-    return jsonify({
-        'enabled': firebase_web_ready(),
-        'config': FIREBASE_WEB_CONFIG if firebase_web_ready() else {},
-        'vapidKey': FIREBASE_VAPID_PUBLIC_KEY if firebase_web_ready() else '',
-        'adminReady': init_firebase_admin(),
-    })
-
-
-@app.get('/api/push/status')
-@login_required
-def push_status():
-    with connect() as db:
-        _ensure_push_subscriptions(db)
-        active=int(db.execute("SELECT COUNT(*) FROM push_subscriptions WHERE user_id=? AND active=1",(session.get('user_id'),)).fetchone()[0] or 0)
-        db.commit()
-    return jsonify({'configured':firebase_web_ready(),'activeDevices':active,'adminReady':init_firebase_admin(),'adminError':_FIREBASE_ADMIN_ERROR})
-
-
-@app.post('/api/push/subscribe')
-@login_required
-def push_subscribe():
-    """Registra o riattiva il token FCM del dispositivo autenticato."""
-    payload=request.get_json(silent=True) or {}
-    token=str(payload.get('token') or '').strip()
-    user_id=session.get('user_id')
-    if not user_id:
-        return jsonify({'ok':False,'error':'Sessione non valida: accedi nuovamente'}),401
-    if len(token) < 40:
-        return jsonify({'ok':False,'error':'Token push non valido o incompleto'}),400
-    platform=str(payload.get('platform') or 'web')[:50]
-    user_agent=request.headers.get('User-Agent','')[:500]
-    try:
-        with connect() as db:
-            _ensure_push_subscriptions(db)
-            existing=db.execute("SELECT id FROM push_subscriptions WHERE token=?",(token,)).fetchone()
-            if existing:
-                db.execute("""UPDATE push_subscriptions
-                              SET user_id=?,username=?,platform=?,user_agent=?,active=1,
-                                  updated_at=CURRENT_TIMESTAMP,last_error=NULL
-                              WHERE token=?""",
-                           (user_id,session.get('user'),platform,user_agent,token))
-            else:
-                db.execute("""INSERT INTO push_subscriptions
-                              (user_id,username,token,platform,user_agent,active,created_at,updated_at)
-                              VALUES(?,?,?,?,?,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)""",
-                           (user_id,session.get('user'),token,platform,user_agent))
-            db.commit()
-            saved=db.execute("SELECT id,active FROM push_subscriptions WHERE token=? AND user_id=?",(token,user_id)).fetchone()
-        if not saved:
-            return jsonify({'ok':False,'error':'Il token non è stato salvato nel database'}),500
-        return jsonify({'ok':True,'subscriptionId':saved['id'],'active':bool(saved['active'])})
-    except sqlite3.IntegrityError as exc:
-        print(f"Registrazione push IntegrityError: {exc}")
-        return jsonify({'ok':False,'error':'Conflitto durante la registrazione del dispositivo'}),409
-    except Exception as exc:
-        print(f"Registrazione push fallita: {type(exc).__name__}: {exc}")
-        return jsonify({'ok':False,'error':f'Registrazione dispositivo non riuscita: {type(exc).__name__}'}),500
-
-
-@app.post('/api/push/unsubscribe')
-@login_required
-def push_unsubscribe():
-    payload=request.get_json(silent=True) or {}
-    token=str(payload.get('token') or '').strip()
-    with connect() as db:
-        _ensure_push_subscriptions(db)
-        if token:
-            db.execute("UPDATE push_subscriptions SET active=0,updated_at=CURRENT_TIMESTAMP WHERE token=? AND user_id=?",(token,session.get('user_id')))
-        else:
-            db.execute("UPDATE push_subscriptions SET active=0,updated_at=CURRENT_TIMESTAMP WHERE user_id=?",(session.get('user_id'),))
-        db.commit()
-    return jsonify({'ok':True})
-
-
-@app.post('/api/push/test')
-@login_required
-@role_required('admin','manager')
-def push_test():
-    with connect() as db:
-        sent=_send_push_for_user(
-            db,session.get('user_id'),
-            'Test notifiche push',
-            'Le notifiche di TBS One funzionano anche con il gestionale chiuso.',
-            'push_test'
-        )
-        rows=db.execute("""SELECT status,firebase_message_id,error_text,created_at
-                           FROM push_delivery_log
-                           WHERE user_id=? AND kind='push_test'
-                           ORDER BY id DESC LIMIT 5""",(session.get('user_id'),)).fetchall()
-        db.commit()
-    payload={'ok':bool(sent),'sent':sent,'attempts':[dict(r) for r in rows],
-             'adminReady':init_firebase_admin(),'adminError':_FIREBASE_ADMIN_ERROR}
-    return jsonify(payload),(200 if sent else 400)
-
-
-@app.get('/api/push/diagnostics')
-@login_required
-@role_required('admin','manager')
-def push_diagnostics():
-    with connect() as db:
-        _ensure_push_subscriptions(db)
-        _ensure_push_delivery_log(db)
-        users=db.execute("""SELECT u.id,u.username,u.role,
-                            SUM(CASE WHEN p.active=1 THEN 1 ELSE 0 END) AS active_devices,
-                            COUNT(p.id) AS total_devices
-                            FROM users u
-                            LEFT JOIN push_subscriptions p ON p.user_id=u.id
-                            WHERE u.active=1 AND u.role IN ('admin','manager')
-                            GROUP BY u.id,u.username,u.role
-                            ORDER BY u.role,u.username""").fetchall()
-        devices=db.execute("""SELECT id,user_id,username,platform,active,
-                                     substr(token,-12) AS token_suffix,
-                                     last_success_at,last_error,updated_at
-                              FROM push_subscriptions
-                              ORDER BY updated_at DESC,id DESC LIMIT 50""").fetchall()
-        deliveries=db.execute("""SELECT id,user_id,username,subscription_id,token_suffix,kind,title,
-                                        reference_type,reference_id,status,firebase_message_id,error_text,created_at
-                                 FROM push_delivery_log
-                                 ORDER BY id DESC LIMIT 100""").fetchall()
-        db.commit()
-    return jsonify({
-        'ok':True,
-        'webConfigured':firebase_web_ready(),
-        'adminReady':init_firebase_admin(),
-        'adminError':_FIREBASE_ADMIN_ERROR,
-        'staff':[dict(r) for r in users],
-        'devices':[dict(r) for r in devices],
-        'deliveries':[dict(r) for r in deliveries],
-    })
-
-
-@app.get('/push-diagnostics')
-@login_required
-@role_required('admin','manager')
-def push_diagnostics_page():
-    """Pagina leggibile da smartphone per diagnosticare e testare le push."""
-    with connect() as db:
-        _ensure_push_subscriptions(db)
-        _ensure_push_delivery_log(db)
-        staff=[dict(r) for r in db.execute("""SELECT u.id,u.username,u.role,
-                            SUM(CASE WHEN p.active=1 THEN 1 ELSE 0 END) AS active_devices,
-                            COUNT(p.id) AS total_devices
-                            FROM users u
-                            LEFT JOIN push_subscriptions p ON p.user_id=u.id
-                            WHERE u.active=1 AND u.role IN ('admin','manager')
-                            GROUP BY u.id,u.username,u.role
-                            ORDER BY u.role,u.username""").fetchall()]
-        devices=[dict(r) for r in db.execute("""SELECT id,user_id,username,platform,active,
-                                     substr(token,-12) AS token_suffix,
-                                     last_success_at,last_error,updated_at
-                              FROM push_subscriptions
-                              ORDER BY updated_at DESC,id DESC LIMIT 50""").fetchall()]
-        deliveries=[dict(r) for r in db.execute("""SELECT id,user_id,username,subscription_id,token_suffix,kind,title,
-                                        reference_type,reference_id,status,firebase_message_id,error_text,created_at
-                                 FROM push_delivery_log
-                                 ORDER BY id DESC LIMIT 30""").fetchall()]
-        db.commit()
-    body=r"""
-    <style>
-      .diag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
-      .diag-state{display:flex;align-items:center;gap:10px;font-weight:900;font-size:18px}
-      .diag-dot{width:16px;height:16px;border-radius:50%;display:inline-block;background:#dc2626;box-shadow:0 0 0 5px rgba(220,38,38,.12)}
-      .diag-dot.ok{background:#16a34a;box-shadow:0 0 0 5px rgba(22,163,74,.12)}
-      .diag-table{width:100%;border-collapse:collapse;font-size:14px}.diag-table th,.diag-table td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}
-      .diag-scroll{overflow:auto}.diag-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;font-size:12px}
-      #diagClient .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #eee}
-      #diagResult{white-space:pre-wrap;word-break:break-word;background:#111722;color:#f8fafc;padding:14px;border-radius:14px;min-height:56px}
-    </style>
-    <h1>🔔 Diagnostica notifiche</h1>
-    <p class='muted'>Controllo completo del telefono, del database e dell'invio Firebase.</p>
-    <div class='diag-grid'>
-      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if web_ready else ""}}'></span>Configurazione Web</div><p>{{'Pronta' if web_ready else 'Incompleta: mancano variabili Firebase Web su Render'}}</p></div>
-      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if admin_ready else ""}}'></span>Firebase Admin</div><p>{{'Pronto per inviare' if admin_ready else (admin_error or 'Credenziali server mancanti')}}</p></div>
-      <div class='card'><div class='diag-state'><span class='diag-dot {{"ok" if my_active else ""}}'></span>Questo utente</div><p>{{my_active}} dispositivo/i attivo/i registrato/i per <b>{{session.get('user')}}</b>.</p></div>
-    </div>
-    <div class='card' id='diagClient'><h2>📱 Controllo di questo dispositivo</h2><div id='clientRows'>Analisi in corso…</div><div class='actions' style='margin-top:16px'><button id='diagRegister' type='button'>Attiva / registra notifiche</button><button id='diagTest' type='button' class='success'>Invia notifica di prova</button><button id='diagRefresh' type='button' class='secondary'>Aggiorna dati</button></div><h3>Risultato</h3><div id='diagResult'>Nessun test eseguito.</div></div>
-    <div class='card'><h2>👥 Admin e Gestori</h2><div class='diag-scroll'><table class='diag-table'><tr><th>Utente</th><th>Ruolo</th><th>Dispositivi attivi</th><th>Totali</th></tr>{% for u in staff %}<tr><td><b>{{u.username}}</b></td><td>{{u.role}}</td><td>{{u.active_devices or 0}}</td><td>{{u.total_devices or 0}}</td></tr>{% else %}<tr><td colspan='4'>Nessun utente trovato.</td></tr>{% endfor %}</table></div></div>
-    <div class='card'><h2>📲 Dispositivi registrati</h2><div class='diag-scroll'><table class='diag-table'><tr><th>Utente</th><th>Stato</th><th>Token</th><th>Ultimo successo</th><th>Ultimo errore</th></tr>{% for d in devices %}<tr><td><b>{{d.username or d.user_id}}</b><br><small>{{d.platform or '-'}}</small></td><td>{{'✅ Attivo' if d.active else '⛔ Disattivo'}}</td><td class='diag-code'>…{{d.token_suffix or '-'}}</td><td>{{d.last_success_at|rome_time}}</td><td class='diag-code'>{{d.last_error or '-'}}</td></tr>{% else %}<tr><td colspan='5'><b>Nessun dispositivo registrato.</b> Premi “Attiva / registra notifiche” da questo Android.</td></tr>{% endfor %}</table></div></div>
-    <div class='card'><h2>📨 Ultimi tentativi Firebase</h2><div class='diag-scroll'><table class='diag-table'><tr><th>Ora</th><th>Utente</th><th>Tipo</th><th>Esito</th><th>Dettaglio</th></tr>{% for x in deliveries %}<tr><td>{{x.created_at|rome_time}}</td><td>{{x.username or x.user_id}}</td><td>{{x.kind}}</td><td><b>{{x.status}}</b></td><td class='diag-code'>{{x.error_text or x.firebase_message_id or '-'}}</td></tr>{% else %}<tr><td colspan='5'>Ancora nessun tentativo registrato.</td></tr>{% endfor %}</table></div></div>
-    <script type='module'>
-    const result=document.getElementById('diagResult');
-    const rows=document.getElementById('clientRows');
-    function line(k,v,ok){return `<div class="row"><b>${k}</b><span>${ok?'✅':'❌'} ${v}</span></div>`}
-    async function inspect(){
-      const supported=('Notification' in window)&&('serviceWorker' in navigator)&&('PushManager' in window);
-      let sw='Non disponibile', swOk=false;
-      try{const reg=await navigator.serviceWorker.getRegistration('/');swOk=!!reg;sw=reg?'Registrato':'Non registrato';}catch(e){sw=String(e)}
-      const perm=('Notification' in window)?Notification.permission:'non supportato';
-      let status={};try{status=await (await fetch('/api/push/status',{cache:'no-store'})).json()}catch(e){status={activeDevices:0}}
-      rows.innerHTML=line('Browser push',supported?'Supportato':'Non supportato',supported)+line('Permesso',perm,perm==='granted')+line('Service worker',sw,swOk)+line('Token salvati per questo utente',String(status.activeDevices||0),(status.activeDevices||0)>0)+line('Firebase server',status.adminReady?'Pronto':(status.adminError||'Non pronto'),!!status.adminReady);
-    }
-    document.getElementById('diagRegister').onclick=async()=>{
-      result.textContent='Registrazione in corso…';
-      try{
-        if(!('Notification' in window)) throw new Error('Questo browser non supporta le notifiche');
-        const permission=await Notification.requestPermission();
-        if(permission!=='granted') throw new Error('Permesso notifiche non concesso: '+permission);
-        const cfg=await (await fetch('/api/push/config',{cache:'no-store'})).json();
-        if(!cfg.enabled) throw new Error('Configurazione Firebase Web incompleta su Render');
-        const [{initializeApp,getApps},{getMessaging,getToken}]=await Promise.all([import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),import('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js')]);
-        const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;
-        const app=getApps().length?getApps()[0]:initializeApp(cfg.config);
-        const token=await getToken(getMessaging(app),{vapidKey:cfg.vapidKey,serviceWorkerRegistration:reg});
-        if(!token) throw new Error('Firebase non ha restituito un token');
-        const r=await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,platform:navigator.platform||'web'})});
-        const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'Salvataggio token fallito');
-        result.textContent='✅ Dispositivo registrato correttamente. ID registrazione: '+data.subscriptionId+'\nOra premi “Invia notifica di prova”.';await inspect();
-      }catch(e){result.textContent='❌ '+(e.message||String(e));}
-    };
-    document.getElementById('diagTest').onclick=async()=>{
-      result.textContent='Invio test in corso…';
-      try{const r=await fetch('/api/push/test',{method:'POST',headers:{'Accept':'application/json'}});const data=await r.json();result.textContent=(r.ok?'✅ Invio accettato dal server\n':'❌ Invio non riuscito\n')+JSON.stringify(data,null,2);}catch(e){result.textContent='❌ '+(e.message||String(e));}
-    };
-    document.getElementById('diagRefresh').onclick=()=>location.reload();inspect();
-    </script>
-    """
-    my_active=sum(1 for d in devices if d.get('user_id')==session.get('user_id') and d.get('active'))
-    return page('Diagnostica notifiche',body,staff=staff,devices=devices,deliveries=deliveries,
-                web_ready=firebase_web_ready(),admin_ready=init_firebase_admin(),
-                admin_error=_FIREBASE_ADMIN_ERROR,my_active=my_active)
-
-
 @app.get("/notifications/count")
 @login_required
 def notification_count():
@@ -2409,25 +1606,6 @@ def notification_count():
         db.commit()
         count=_notification_unread_count(db,session.get("user_id"))
     return jsonify({"count":count})
-
-@app.get("/notifications/poll")
-@login_required
-def notification_poll():
-    """Stato leggero per badge, avvisi live e apertura rapida."""
-    with connect() as db:
-        _sync_all_notifications(db)
-        db.commit()
-        row=db.execute("""SELECT id,title,message,notification_type,reference_type,reference_id,created_at
-                          FROM notifications
-                          WHERE recipient_user_id=? AND read_at IS NULL AND archived_at IS NULL
-                          ORDER BY id DESC LIMIT 1""",(session.get("user_id"),)).fetchone()
-        count=_notification_unread_count(db,session.get("user_id"))
-    latest=dict(row) if row else None
-    if latest:
-        latest["url"]=url_for("notification_detail",notification_id=latest["id"])
-        if latest.get("notification_type")=="discount_request" and session.get("role") in ("admin","manager"):
-            latest["url"]=url_for("discount_approvals")
-    return jsonify({"count":count,"latest":latest})
 
 @app.get("/notifications")
 @login_required
@@ -2489,18 +1667,10 @@ def notification_center():
         else:
             rows.append(item)
 
-    if session.get('role') in ('admin','manager'):
-        with connect() as db:
-            for item in rows:
-                if not item.get('is_group') and item.get('reference_type')=='discount' and item.get('reference_id'):
-                    req=db.execute("SELECT status FROM discount_requests WHERE id=?",(item.get('reference_id'),)).fetchone()
-                    item['reference_status']=req['status'] if req else None
-
     body="""<style>
     .notice-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0}.notice-tabs a{padding:14px 8px;border-radius:14px;background:#e5e7eb;color:#111;text-align:center;text-decoration:none;font-weight:950}.notice-tabs a.active{background:#111827;color:#fff}
     .notice-list{display:grid;gap:12px;margin-top:16px}.notice-row{display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:16px;padding:14px;cursor:pointer;transition:transform .12s,box-shadow .12s}.notice-row:active{transform:scale(.99)}.notice-row:hover{box-shadow:0 8px 22px rgba(15,23,42,.08)}.notice-row.unread{border-left:7px solid #dc2626}.notice-row.read{border-left:7px solid #10b981}
-    .notice-main{text-decoration:none;color:inherit}.trash{background:#fff0f0;color:#b91c1c;padding:10px;border-radius:12px}.status-pill{border-radius:99px;padding:3px 8px;font-size:11px;color:#fff;white-space:nowrap}.status-new{background:#dc2626}.status-read{background:#059669}.group-pill{background:#d7a72c;color:#111;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:900}.quick-auth{grid-column:2/-1;display:grid;grid-template-columns:minmax(110px,170px) 1fr 1fr;gap:8px;align-items:center;padding-top:8px;border-top:1px solid #eee}.quick-auth input{min-height:42px;margin:0;text-align:center;letter-spacing:4px}.quick-auth button{min-height:42px;padding:8px 10px}.quick-auth .reject{background:#b91c1c;color:#fff}
-    @media(max-width:560px){.quick-auth{grid-column:1/-1;grid-template-columns:1fr 1fr}.quick-auth input{grid-column:1/-1}}
+    .notice-main{text-decoration:none;color:inherit}.trash{background:#fff0f0;color:#b91c1c;padding:10px;border-radius:12px}.status-pill{border-radius:99px;padding:3px 8px;font-size:11px;color:#fff;white-space:nowrap}.status-new{background:#dc2626}.status-read{background:#059669}.group-pill{background:#d7a72c;color:#111;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:900}
     @media(max-width:560px){.notice-tabs{grid-template-columns:1fr}.notice-row{grid-template-columns:38px 1fr auto;padding:13px 10px}}
     </style>
     <h1>🔔 Centro notifiche</h1>
@@ -2510,7 +1680,7 @@ def notification_center():
       {% if n.is_group %}
       <div class='notice-row {% if not n.read_at and view!="archive" %}unread{% elif view!="archive" %}read{% endif %}' data-href='{{url_for("notification_sales_group",seller=n.seller,minute=n.minute)}}'>
         <div style='font-size:28px'>💰</div>
-        <div class='notice-main'><b>{{n.seller}} · {{n["items"]|length}} vendite</b> <span class='group-pill'>RAGGRUPPATE</span>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVE</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTE</span>{% endif %}<br>Totale gruppo: <b>€ {{'%.2f'|format(n.group_total)}}</b><br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviate {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
+        <div class='notice-main'><b>{{n.seller}} · {{n.items|length}} vendite</b> <span class='group-pill'>RAGGRUPPATE</span>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVE</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTE</span>{% endif %}<br>Totale gruppo: <b>€ {{'%.2f'|format(n.group_total)}}</b><br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviate {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
         {% if view!='archive' %}<form method='post' action='{{url_for("archive_notification_group")}}' onsubmit="event.stopPropagation();return confirm('Archiviare tutte le notifiche di questo gruppo? Rimarranno nello storico.')"><input type='hidden' name='seller' value='{{n.seller}}'><input type='hidden' name='minute' value='{{n.minute}}'><button class='trash' type='submit'>🗑️</button></form>{% endif %}
       </div>
       {% else %}
@@ -2518,7 +1688,6 @@ def notification_center():
         <div style='font-size:28px'>{% if n.notification_type=='sale' %}💰{% elif n.notification_type=='discount_request' %}🏷️{% elif n.notification_type=='discount_approved' %}✅{% elif n.notification_type=='discount_rejected' %}❌{% else %}🔔{% endif %}</div>
         <div class='notice-main'><b>{{n.title}}</b>{% if not n.read_at and view!='archive' %} <span class='status-pill status-new'>NUOVA</span>{% elif view!='archive' %} <span class='status-pill status-read'>LETTA</span>{% endif %}<br>{{n.message or ''}}<br><small>{{n.created_at|rome_time}}{% if view=='archive' %} · archiviata {{n.archived_at|rome_time}} da {{n.archived_by_username or 'Sistema'}}{% endif %}</small></div>
         {% if view!='archive' %}<form method='post' action='{{url_for("archive_notification",notification_id=n.id)}}' onsubmit="event.stopPropagation();return confirm('Archiviare questa notifica? Rimarrà nello storico.')"><button class='trash' type='submit'>🗑️</button></form>{% endif %}
-        {% if view!='archive' and session.get('role') in ('admin','manager') and n.notification_type=='discount_request' and n.reference_status=='In attesa' %}<form class='quick-auth' method='post' action='{{url_for("decide_discount_request",request_id=n.reference_id)}}' onclick='event.stopPropagation()'><input type='hidden' name='return_to' value='notifications'><input name='pin' inputmode='numeric' pattern='[0-9]{4,6}' maxlength='6' placeholder='PIN rapido' required><button name='decision' value='approve' class='success' type='submit'>✅ Approva</button><button name='decision' value='reject' class='reject' type='submit' onclick="return confirm('Rifiutare questa richiesta di sconto?')">❌ Rifiuta</button></form>{% endif %}
       </div>
       {% endif %}
     {% else %}<div class='card'>Nessuna notifica in questa sezione.</div>{% endfor %}</div>
@@ -2622,13 +1791,13 @@ def login():
                 user=find_badge_user(db,badge_payload)
                 if user:
                     start_user_session(db,user,"Login badge")
-                    return role_landing_redirect(user["role"])
+                    return redirect(url_for("home"))
                 flash("Badge non valido, revocato o account disattivato.")
             else:
                 user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
                 if user and check_password_hash(user["password_hash"],request.form.get("password","")):
                     start_user_session(db,user,"Login")
-                    return role_landing_redirect(user["role"])
+                    return redirect(url_for("home"))
                 flash("Credenziali non corrette o account disattivato.")
     scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
     return login_page("Accesso · TBS Gestionale",'''<section class="login-intro"><h1>Benvenuto</h1><p>Inquadra il badge oppure accedi con le tue credenziali.</p></section>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:800;padding:4px 2px">Accedi con username e password</summary><form method="post" style="margin-top:16px"><p><input name="username" autocomplete="username" placeholder="Utente" required></p><p class="password-wrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required><button class="password-toggle" type="button" aria-label="Mostra password" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈'">👁</button></p><button class="login-submit">Accedi</button></form><p class="muted" style="text-align:center;margin-bottom:0">Blocco automatico dopo {{minutes}} minuti.</p></details>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
@@ -2660,9 +1829,7 @@ def unlock_register():
                     if restored: session["cart"]=restored[0]
                 log_action(db,"Sblocco cassa con badge" if badge_payload else "Sblocco cassa",details=("Stesso utente" if same_user else f"Sessione precedente: {locked_username}")); db.commit()
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
-                if same_user and locked_cart_id:
-                    return redirect(url_for("cart"), code=303)
-                return role_landing_redirect(user["role"])
+                return redirect(url_for("cart") if same_user and locked_cart_id else url_for("home"))
         flash("Badge o credenziali non validi; account eventualmente disattivato.")
     scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True)
     return page("Cassa bloccata",'''<div style="max-width:560px;margin:22px auto;text-align:center"><div style="font-size:48px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Mostra il badge alla webcam.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
@@ -2676,8 +1843,15 @@ def logout():
 @app.get("/home")
 @login_required
 def home():
-    """Pagina iniziale definitiva: Venditore → Cassa; Gestore/Admin → Dashboard."""
-    return role_landing_redirect()
+    """Landing sicura per ruolo, senza cicli di reindirizzamento."""
+    role=(session.get("role") or "").strip().lower()
+    if role in ("seller","venditore"):
+        return redirect(url_for("pos"))
+    if role in ("admin","manager","gestore"):
+        return redirect(url_for("dashboard_smart"))
+    session.clear()
+    flash("Ruolo utente non riconosciuto. Accedi nuovamente.","error")
+    return redirect(url_for("login"))
 
 @app.get("/admin")
 @login_required
@@ -2740,24 +1914,7 @@ def price_check():
         by_id={x["id"]:x for x in found}
         recent_rows=[by_id[x] for x in recent_ids if x in by_id]
     is_manager=session.get("role") in ("admin","manager")
-    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><a class="view" href="{{url_for(\'scan_assistant_product\')}}" style="display:flex;align-items:center;justify-content:center;margin-top:10px;padding:13px;border-radius:10px;text-decoration:none;color:white;font-weight:900">📷 SCANSIONA QR PRODOTTO</a><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
-
-@app.route("/price-check/scan", methods=["GET", "POST"])
-@login_required
-def scan_assistant_product():
-    if request.method == "POST":
-        scanned = (request.form.get("badge_payload") or request.form.get("code") or "").strip()
-        if not scanned:
-            flash("Nessun codice QR rilevato.")
-            return redirect(url_for("scan_assistant_product"))
-        with connect() as db:
-            product = _find_product_by_scan(db, scanned)
-        if not product:
-            flash(f"Nessun prodotto trovato per il codice: {scanned}")
-            return redirect(url_for("scan_assistant_product"))
-        return redirect(url_for("price_check", q=product["brand_code"]))
-    scanner = product_scanner_html(url_for("scan_assistant_product"))
-    return page("Scanner Assistente Banco", """<p><a href="{{url_for('price_check')}}">← Assistente Banco</a></p><h1>Scansiona QR prodotto</h1><p class="muted">La scansione apre esclusivamente prezzo e disponibilità nell'Assistente Banco.</p>""" + scanner)
+    return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><a class="view" href="{{url_for(\'scan_product\',mode=\'assistant\')}}" style="display:flex;align-items:center;justify-content:center;margin-top:10px;padding:13px;border-radius:10px;text-decoration:none;color:white;font-weight:900">📷 SCANSIONA QR PRODOTTO</a><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
 
 @app.route("/products/scan",methods=["GET","POST"])
 @login_required
@@ -2814,9 +1971,9 @@ def products():
     q=request.args.get("q","").strip(); cat=request.args.get("category",""); mat=request.args.get("material",""); col=request.args.get("color",""); av=request.args.get("availability",""); status=request.args.get("status","active")
     can_manage=session.get("role") in ("admin","manager"); is_admin=session.get("role")=="admin"
     if can_manage:
-        sql="SELECT * FROM products WHERE deleted_at IS NULL AND (supplier_code LIKE ? OR brand_code LIKE ? OR COALESCE(notes,'') LIKE ?)"; params=[f"%{q}%",f"%{q}%",f"%{q}%"]
+        sql="SELECT * FROM products WHERE (supplier_code LIKE ? OR brand_code LIKE ? OR COALESCE(notes,'') LIKE ?)"; params=[f"%{q}%",f"%{q}%",f"%{q}%"]
     else:
-        sql="SELECT * FROM products WHERE deleted_at IS NULL AND (brand_code LIKE ? OR COALESCE(notes,'') LIKE ?)"; params=[f"%{q}%",f"%{q}%"]
+        sql="SELECT * FROM products WHERE (brand_code LIKE ? OR COALESCE(notes,'') LIKE ?)"; params=[f"%{q}%",f"%{q}%"]
     if status=="active": sql+=" AND active=1"
     elif status=="archived": sql+=" AND active=0"
     for field,val in [("category",cat),("material",mat),("color",col)]:
@@ -2842,7 +1999,7 @@ def products():
 .scan-product-btn:hover{opacity:.9}
 </style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
 {% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
-<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Spostare il prodotto nel cestino?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product"><div class="no-photo">📘</div><div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
+<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product"><div class="no-photo">📘</div><div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
 
 @app.post("/products/<int:product_id>/order")
 @role_required("admin","manager")
@@ -3277,24 +2434,7 @@ def discount_request_wait(token):
         session.pop("pending_discount_token",None);session.modified=True
         flash("Richiesta sconto non approvata." if req["status"]=="Rifiutata" else "Richiesta non più valida.")
         return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
-    return page("Attesa autorizzazione",'''<style>.wait-box{max-width:620px;margin:28px auto;text-align:center}.pulse{width:74px;height:74px;border-radius:50%;margin:20px auto;background:#d7b36a;animation:pulse 1.5s infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 #d7b36a99}70%{box-shadow:0 0 0 28px #d7b36a00}100%{box-shadow:0 0 0 0 #d7b36a00}}.live-state{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:99px;background:#ecfdf5;color:#065f46;font-weight:900}.live-dot{width:10px;height:10px;border-radius:50%;background:#10b981;box-shadow:0 0 0 5px rgba(16,185,129,.15)}</style><div class="wait-box card"><div class="pulse"></div><h1>Richiesta inviata</h1><p>Attendo la risposta di Admin o Gestore.</p><p><b>{{req.product_code}}</b><br>Listino € {{'%.2f'|format(req.original_price)}} → richiesto <b>€ {{'%.2f'|format(req.requested_price)}}</b><br>{{req.reason}}</p><div class="live-state"><span class="live-dot"></span><span id="liveText">Collegamento attivo</span></div><p class="muted">La risposta comparirà automaticamente, senza ricaricare la pagina.</p><form method="post" action="{{url_for('cancel_discount_request',token=req.request_token)}}"><button class="secondary">Annulla richiesta</button></form></div><script>(function(){const endpoint={{url_for('discount_request_status',token=req.request_token)|tojson}};let busy=false;async function poll(){if(busy)return;busy=true;try{const r=await fetch(endpoint,{headers:{'Accept':'application/json'},cache:'no-store'});if(r.status===401){location.href={{url_for('login')|tojson}};return;}if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();document.getElementById('liveText').textContent='Stato: '+d.status;if(d.finished){location.reload();return;}}catch(e){document.getElementById('liveText').textContent='Riconnessione…';}finally{busy=false;}}poll();setInterval(poll,1500);})();</script>''',req=req)
-
-@app.get("/api/discount-request/<token>/status")
-@login_required
-def discount_request_status(token):
-    with connect() as db:
-        req=db.execute("SELECT status,approver_username,counter_price,decision_note,decided_at FROM discount_requests WHERE request_token=? AND requester_user_id=?",(token,session.get("user_id"))).fetchone()
-    if not req:
-        return jsonify({"error":"not_found"}),404
-    status=req["status"]
-    return jsonify({
-        "status":status,
-        "finished":status not in ("In attesa",),
-        "approver_username":req["approver_username"],
-        "counter_price":req["counter_price"],
-        "decision_note":req["decision_note"],
-        "decided_at":req["decided_at"],
-    })
+    return page("Attesa autorizzazione",'''<style>.wait-box{max-width:620px;margin:28px auto;text-align:center}.pulse{width:74px;height:74px;border-radius:50%;margin:20px auto;background:#d7b36a;animation:pulse 1.5s infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 #d7b36a99}70%{box-shadow:0 0 0 28px #d7b36a00}100%{box-shadow:0 0 0 0 #d7b36a00}}</style><div class="wait-box card"><div class="pulse"></div><h1>Richiesta inviata</h1><p>Attendo la risposta di Admin o Gestore.</p><p><b>{{req.product_code}}</b><br>Listino € {{'%.2f'|format(req.original_price)}} → richiesto <b>€ {{'%.2f'|format(req.requested_price)}}</b><br>{{req.reason}}</p><p class="muted">La pagina si aggiorna automaticamente.</p><form method="post" action="{{url_for('cancel_discount_request',token=req.request_token)}}"><button class="secondary">Annulla richiesta</button></form></div><script>setTimeout(()=>location.reload(),3000)</script>''',req=req)
 
 @app.post("/discount-request/<token>/cancel")
 @login_required
@@ -3345,39 +2485,36 @@ def discount_approvals():
                 x['suggested_margin']=None
             rows.append(x)
         recent=db.execute("SELECT * FROM discount_requests WHERE status!='In attesa' ORDER BY COALESCE(decided_at,created_at) DESC,id DESC LIMIT 20").fetchall()
-    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}.price-advisor{grid-column:1/-1;background:#f6f0df;border:1px solid #d7b36a;border-radius:16px;padding:14px;margin:8px 0}.price-advisor strong{color:#72510d}.advisor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.advisor-value{font-size:22px;font-weight:900}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><div class="price-advisor"><h3>💡 Suggerimento prezzo</h3>{% if x.cost_price and x.cost_price>0 %}<div class="advisor-grid"><div><span class="muted">Pagato</span><div class="advisor-value">€ {{'%.2f'|format(x.cost_price)}}</div></div><div><span class="muted">Utile al prezzo richiesto</span><div class="advisor-value">€ {{'%.2f'|format(x.requested_profit)}}</div></div><div><span class="muted">Margine richiesto</span><div><b>{{'%.1f'|format(x.requested_margin)}}%</b></div></div><div><span class="muted">Prezzo consigliato</span><div class="advisor-value">€ {{'%.2f'|format(x.suggested_price)}}</div></div></div><p class="muted" style="margin-bottom:0">Il suggerimento tutela almeno il 50% di margine lordo, senza superare il listino.</p>{% else %}<p><b>Costo di acquisto non inserito.</b> Aggiungilo nella scheda prodotto per ottenere il suggerimento automatico.</p>{% endif %}</div><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><button name="decision" value="reject" class="danger" onclick="return confirm('Rifiutare questa richiesta di sconto?')" {% if not has_pin %}disabled{% endif %}>❌ Rifiuta</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure invia una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" value="{{'%.2f'|format(x.suggested_price)}}" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta suggerita</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div><script>(function(){let known={{rows|length}};async function sync(){try{const r=await fetch({{url_for('discount_pending_count')|tojson}},{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(Number(d.count)!==Number(known))location.reload();}catch(e){}}setInterval(sync,2500);})();</script>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
+    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}.price-advisor{grid-column:1/-1;background:#f6f0df;border:1px solid #d7b36a;border-radius:16px;padding:14px;margin:8px 0}.price-advisor strong{color:#72510d}.advisor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.advisor-value{font-size:22px;font-weight:900}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><div class="price-advisor"><h3>💡 Suggerimento prezzo</h3>{% if x.cost_price and x.cost_price>0 %}<div class="advisor-grid"><div><span class="muted">Pagato</span><div class="advisor-value">€ {{'%.2f'|format(x.cost_price)}}</div></div><div><span class="muted">Utile al prezzo richiesto</span><div class="advisor-value">€ {{'%.2f'|format(x.requested_profit)}}</div></div><div><span class="muted">Margine richiesto</span><div><b>{{'%.1f'|format(x.requested_margin)}}%</b></div></div><div><span class="muted">Prezzo consigliato</span><div class="advisor-value">€ {{'%.2f'|format(x.suggested_price)}}</div></div></div><p class="muted" style="margin-bottom:0">Il suggerimento tutela almeno il 50% di margine lordo, senza superare il listino.</p>{% else %}<p><b>Costo di acquisto non inserito.</b> Aggiungilo nella scheda prodotto per ottenere il suggerimento automatico.</p>{% endif %}</div><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure invia una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" value="{{'%.2f'|format(x.suggested_price)}}" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta suggerita</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
 
 @app.post("/discount-approvals/<int:request_id>/decision")
 @role_required("admin","manager")
 def decide_discount_request(request_id):
     pin=(request.form.get("pin") or "").strip()
     decision=request.form.get("decision")
-    return_endpoint = "notification_center" if request.form.get("return_to") == "notifications" else "discount_approvals"
     with connect() as db:
         me=db.execute("SELECT * FROM users WHERE id=? AND active=1",(session.get("user_id"),)).fetchone()
         req=db.execute("SELECT * FROM discount_requests WHERE id=?",(request_id,)).fetchone()
         if not me or not me["approval_pin_hash"] or not check_password_hash(me["approval_pin_hash"],pin):
             flash("PIN rapido errato.")
-            return redirect(url_for(return_endpoint))
+            return redirect(url_for("discount_approvals"))
         if not req or req["status"]!="In attesa":
             flash("La richiesta è già stata gestita.")
-            return redirect(url_for(return_endpoint))
+            return redirect(url_for("discount_approvals"))
         if decision=="approve":
             status="Approvata"; counter_price=None
-        elif decision=="reject":
-            status="Rifiutata"; counter_price=None
         elif decision=="counter":
             try: counter_price=round(float(request.form.get("counter_price")),2)
             except (TypeError,ValueError):
                 flash("Inserisci un prezzo valido per la controproposta.")
-                return redirect(url_for(return_endpoint))
+                return redirect(url_for("discount_approvals"))
             if counter_price < float(req["requested_price"]) or counter_price > float(req["original_price"]):
                 flash("La controproposta deve essere compresa tra il prezzo richiesto e il prezzo di listino.")
-                return redirect(url_for(return_endpoint))
+                return redirect(url_for("discount_approvals"))
             status="Controproposta"
         else:
             flash("Decisione non valida.")
-            return redirect(url_for(return_endpoint))
+            return redirect(url_for("discount_approvals"))
         note=(request.form.get("decision_note") or "").strip()
         db.execute("UPDATE discount_requests SET status=?,counter_price=?,decision_note=?,approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,counter_price,note,me["id"],me["username"],request_id))
         staff=db.execute("SELECT id,username FROM users WHERE active=1 AND role IN ('admin','manager')").fetchall()
@@ -3393,18 +2530,11 @@ def decide_discount_request(request_id):
                        (me['id'],me['username'],staff_user['id'],event_key))
         recipient=_current_user_for_identity(db,req['requester_user_id'],req['requester_username'])
         if recipient:
-            if status=='Approvata':
-                ntype,ntitle,nmessage,nsuffix='discount_approved','Sconto autorizzato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'approved'
-            elif status=='Rifiutata':
-                ntype,ntitle,nmessage,nsuffix='discount_rejected','Sconto rifiutato',f"{req['product_code']} · richiesta € {float(req['requested_price']):.2f} · {me['username']}",'rejected'
-            else:
-                ntype,ntitle,nmessage,nsuffix='discount_counter','Nuova proposta sconto',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(counter_price):.2f} · {me['username']}",'counter'
-            _notify_user(db,recipient['id'],ntype,ntitle,nmessage,'discount',request_id,f"discount:{request_id}:{nsuffix}",recipient['username'])
-        action_label={'Approvata':'Sconto remoto approvato','Rifiutata':'Sconto remoto rifiutato','Controproposta':'Controproposta sconto inviata'}[status]
-        log_action(db,action_label,details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; richiesto € {req['requested_price']:.2f}" + (f"; proposto € {counter_price:.2f}" if counter_price is not None else ""))
+            _notify_user(db,recipient['id'],'discount_approved' if status=='Approvata' else 'discount_counter','Sconto autorizzato' if status=='Approvata' else 'Nuova proposta sconto',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {(float(req['requested_price']) if status=='Approvata' else float(counter_price)):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:{'approved' if status=='Approvata' else 'counter'}",recipient['username'])
+        log_action(db,"Sconto remoto approvato" if status=="Approvata" else "Controproposta sconto inviata",details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; richiesto € {req['requested_price']:.2f}" + (f"; proposto € {counter_price:.2f}" if counter_price is not None else ""))
         db.commit()
-    flash("Sconto approvato." if status=="Approvata" else ("Richiesta rifiutata." if status=="Rifiutata" else "Controproposta inviata al Venditore."))
-    return redirect(url_for(return_endpoint))
+    flash("Sconto approvato." if status=="Approvata" else "Controproposta inviata al Venditore.")
+    return redirect(url_for("discount_approvals"))
 
 @app.route("/pos/authorize-price",methods=['GET','POST'])
 @login_required
@@ -3860,9 +2990,7 @@ def public_catalog_order(catalog_id):
         else:
             with connect() as db:
                 number=f"ORD-CAT-{now_rome().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
-                cur=db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,'Da ordinare','Boutique')""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"]))
-                request_id=cur.lastrowid
-                _notify_roles(db,("admin","manager"),"customer_order","Nuovo ordine cliente",f"{name} ha richiesto {qty} pz di {c['brand_code']}.","customer_order",request_id,f"customer-order:new:{request_id}")
+                db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,'Da ordinare','Boutique')""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"]))
                 db.commit()
             return public_page("Richiesta ricevuta","""<div class='client-card'><h1 class='luxury-title'>Richiesta ricevuta</h1><p>Codice <b>{{number}}</b>. Ti contatteremo per conferma. Consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla boutique</a></div>""",number=number)
     image=url_for("static",filename="catalog/"+c["image_file"]) if c["image_file"] else ""
@@ -3900,29 +3028,19 @@ def request_catalog_item(catalog_id):
         c=db.execute("SELECT * FROM supplier_catalog WHERE id=? AND active=1 AND excluded=0",(catalog_id,)).fetchone()
         if not c: flash("Articolo non disponibile nel catalogo."); return redirect(url_for("supplier_catalog"))
         number=f"ORD-CAT-{now_rome().strftime('%Y%m%d%H%M%S')}-{catalog_id}"
-        cur=db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,created_by)
+        db.execute("""INSERT INTO supplier_catalog_requests(request_number,catalog_id,supplier_code,brand_code,customer_name,customer_phone,notes,quantity,unit_price,created_by)
                       VALUES(?,?,?,?,?,?,?,?,?,?)""",(number,catalog_id,c["supplier_code"],c["brand_code"],name,phone,notes,qty,c["sale_price_eur"],session.get("user","sconosciuto")))
-        request_id=cur.lastrowid
         db.execute("INSERT INTO audit_log(username,action,product_code,details) VALUES(?,?,?,?)",(session.get("user","sconosciuto"),"Ordine articolo da catalogo",c["brand_code"],f"{number}; cliente {name}; quantità {qty}"))
-        _notify_roles(db,("admin","manager"),"customer_order","Nuovo ordine cliente",f"{session.get('user','Operatore')} ha inserito {qty} pz di {c['brand_code']} per {name}.","customer_order",request_id,f"customer-order:new:{request_id}")
         db.commit()
     flash(f"Ordine {number} creato. Articolo da ordinare al fornitore (15–20 giorni).")
     return redirect(url_for("supplier_catalog",q=c["brand_code"]))
 
 @app.get("/catalogo-ordinabili/richieste")
-@login_required
+@role_required("admin","manager")
 def catalog_requests():
-    role=session.get("role")
     with connect() as db:
-        if role=='seller':
-            rows=db.execute("""SELECT * FROM supplier_catalog_requests
-                WHERE created_by=?
-                ORDER BY CASE WHEN status IN ('Da ordinare','Nuovo') THEN 0 WHEN status='Accettato' THEN 1 WHEN status='Ordinato' THEN 2 WHEN status='Arrivato parzialmente' THEN 3 WHEN status='Arrivato' THEN 4 WHEN status='Cliente avvisato' THEN 5 WHEN status='Consegnato' THEN 6 ELSE 7 END,id DESC LIMIT 300""",(session.get('user'),)).fetchall()
-        else:
-            rows=db.execute("""SELECT * FROM supplier_catalog_requests
-                ORDER BY CASE WHEN status IN ('Da ordinare','Nuovo') THEN 0 WHEN status='Accettato' THEN 1 WHEN status='Ordinato' THEN 2 WHEN status='Arrivato parzialmente' THEN 3 WHEN status='Arrivato' THEN 4 WHEN status='Cliente avvisato' THEN 5 WHEN status='Consegnato' THEN 6 ELSE 7 END,id DESC LIMIT 500""").fetchall()
-        counts={}
-        for x in rows: counts[x['status']]=counts.get(x['status'],0)+1
+        rows=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY CASE WHEN status IN ('Da ordinare','Nuovo') THEN 0 WHEN status='Accettato' THEN 1 WHEN status='Ordinato' THEN 2 WHEN status='Arrivato parzialmente' THEN 3 WHEN status='Arrivato' THEN 4 WHEN status='Cliente avvisato' THEN 5 WHEN status='Consegnato' THEN 6 ELSE 7 END,id DESC LIMIT 500").fetchall()
+        counts={r['status']:r['n'] for r in db.execute("SELECT status,COUNT(*) n FROM supplier_catalog_requests GROUP BY status").fetchall()}
     active_groups=[
         ("Da approvare",[x for x in rows if x["status"] in ("Da ordinare","Nuovo")]),
         ("Da inviare al fornitore",[x for x in rows if x["status"]=="Accettato"]),
@@ -3931,26 +3049,8 @@ def catalog_requests():
         ("Da consegnare",[x for x in rows if x["status"]=="Cliente avvisato"]),
     ]
     history=[x for x in rows if x["status"] in ("Consegnato","Rifiutato","Annullato")]
-    body="""<style>.order-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:15px 0}.order-kpi{background:#fff;border:1px solid #ddd;border-radius:12px;padding:13px}.status-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#eef2ff;font-weight:800}.order-stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:15px}.order-stage{border-top:6px solid #1d4ed8}.order-item{padding:13px 0;border-bottom:1px solid #e5e7eb}.order-item:last-child{border:0}.progress{height:8px;background:#eee;border-radius:99px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:#16a34a}.history-order{opacity:.78}</style><div class='dash-head'><div><span class='eyebrow'>GESTIONE CLIENTI</span><h1>📦 {% if role=='seller' %}I miei ordini clienti{% else %}Ordini clienti{% endif %}</h1><p class='muted'>{% if role=='seller' %}Segui gli ordini che hai inserito. I codici fornitore restano riservati ad Admin e Gestore.{% else %}Accetta le richieste, aggregale nel PDF fornitore e gestisci arrivo, contatto e consegna pezzo per pezzo.{% endif %}</p></div><div><a class='secondary' href='{{url_for("supplier_catalog")}}'>＋ Nuovo ordine cliente</a>{% if role in ('admin','manager') %} <a class='secondary' href='{{url_for("reorders")}}'>🚚 Riordini fornitore</a>{% endif %}</div></div><div class='order-kpis'><div class='order-kpi'><b>Da approvare</b><div class='metric'>{{counts.get('Da ordinare',0)+counts.get('Nuovo',0)}}</div></div><div class='order-kpi'><b>Da ordinare</b><div class='metric'>{{counts.get('Accettato',0)}}</div></div><div class='order-kpi'><b>In arrivo</b><div class='metric'>{{counts.get('Ordinato',0)+counts.get('Arrivato parzialmente',0)}}</div></div><div class='order-kpi'><b>Da avvisare</b><div class='metric'>{{counts.get('Arrivato',0)}}</div></div><div class='order-kpi'><b>Da consegnare</b><div class='metric'>{{counts.get('Cliente avvisato',0)}}</div></div></div><div class='order-stage-grid'>{% for title,group in active_groups %}<section class='card order-stage'><h2>{{title}} <span class='badge'>{{group|length}}</span></h2>{% for x in group %}<div class='order-item'><b>{{x.customer_name}}</b> · <a href='tel:{{x.customer_phone}}'>{{x.customer_phone}}</a><br><b>{{x.brand_code}}</b>{% if role in ('admin','manager') %} / {{x.supplier_code}}{% endif %} · {{x.quantity}} pz<br><span class='status-pill'>{{x.status}}</span><div class='progress'><span style='width:{{(100*x.received_quantity/x.quantity) if x.quantity else 0}}%'></span></div><small class='muted'>{{x.request_number}} · ricevuti {{x.received_quantity}}/{{x.quantity}}{% if role in ('admin','manager') %} · inserito da {{x.created_by}}{% endif %}{% if x.notes %} · {{x.notes}}{% endif %}</small><div class='actions' style='margin-top:10px'>{% if role in ('admin','manager') and x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("accept_catalog_request",request_id=x.id)}}'><button class='success'>Accetta e aggiungi al riordino</button></form><form method='post' action='{{url_for("reject_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Rifiutare questa richiesta?")'><button class='danger'>Rifiuta</button></form>{% elif role=='seller' and x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("cancel_own_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Annullare questa richiesta cliente?")'><button class='danger'>Annulla richiesta</button></form>{% elif role in ('admin','manager') and x.status=='Arrivato' %}<a class='secondary' target='_blank' rel='noopener' href='https://wa.me/39{{x.customer_phone|replace(" ","")|replace("+39","")|replace("-","")}}?text=Ciao%20{{x.customer_name|urlencode}},%20il%20gioiello%20{{x.brand_code|urlencode}}%20che%20avevi%20ordinato%20%C3%A8%20arrivato%20presso%20Tattoo%20Beauty%20Saloon.%20Puoi%20contattarci%20per%20il%20ritiro.'>💬 Apri WhatsApp</a><form method='post' action='{{url_for("notify_catalog_request",request_id=x.id)}}'><button class='success'>Cliente contattato</button></form>{% elif role in ('admin','manager') and x.status=='Cliente avvisato' %}<form method='post' action='{{url_for("deliver_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Confermi che il gioiello è stato consegnato?")'><button class='success'>✅ Consegnato / Smarca</button></form>{% endif %}</div></div>{% else %}<p class='muted'>Nessun ordine.</p>{% endfor %}</section>{% endfor %}</div><details class='card' style='margin-top:16px'><summary><b>📚 Storico ordini conclusi ({{history|length}})</b></summary>{% for x in history %}<div class='order-item history-order'><b>{{x.customer_name}}</b> · {{x.brand_code}} · {{x.quantity}} pz <span class='status-pill'>{{x.status}}</span><br><small class='muted'>{{x.request_number}} · {{x.created_at|rome_time}}</small></div>{% else %}<p class='muted'>Storico vuoto.</p>{% endfor %}</details>"""
-    return page("Ordini clienti",body,counts=counts,active_groups=active_groups,history=history,role=role)
-
-@app.post("/catalogo-ordinabili/richieste/<int:request_id>/annulla-mia")
-@login_required
-def cancel_own_catalog_request(request_id):
-    if session.get('role')!='seller':
-        return redirect(url_for('catalog_requests'))
-    with connect() as db:
-        row=db.execute("SELECT * FROM supplier_catalog_requests WHERE id=? AND created_by=?",(request_id,session.get('user'))).fetchone()
-        if not row:
-            flash("Ordine non trovato.","error")
-        elif row['status'] not in ('Da ordinare','Nuovo'):
-            flash("L'ordine è già stato lavorato e non può più essere annullato.","warning")
-        else:
-            db.execute("UPDATE supplier_catalog_requests SET status='Annullato' WHERE id=?",(request_id,))
-            db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(request_id,'Annullato',session.get('user'),'Annullato dal venditore prima dell’approvazione'))
-            _notify_roles(db,("admin","manager"),"customer_order","Ordine cliente annullato",f"{row['customer_name']} · {row['brand_code']} · annullato da {session.get('user')}","customer_order",request_id,f"customer-order:cancelled:{request_id}")
-            db.commit(); flash("Richiesta annullata.","success")
-    return redirect(url_for('catalog_requests'))
+    body="""<style>.order-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:15px 0}.order-kpi{background:#fff;border:1px solid #ddd;border-radius:12px;padding:13px}.status-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#eef2ff;font-weight:800}.order-stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:15px}.order-stage{border-top:6px solid #1d4ed8}.order-item{padding:13px 0;border-bottom:1px solid #e5e7eb}.order-item:last-child{border:0}.progress{height:8px;background:#eee;border-radius:99px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:#16a34a}.history-order{opacity:.78}</style><h1>📦 Ordini clienti</h1><p class='muted'>Mostra solo ciò che richiede un'azione. Gli ordini consegnati vengono smarcati e restano nello storico.</p><div class='order-kpis'><div class='order-kpi'><b>Da approvare</b><div class='metric'>{{counts.get('Da ordinare',0)+counts.get('Nuovo',0)}}</div></div><div class='order-kpi'><b>Da ordinare</b><div class='metric'>{{counts.get('Accettato',0)}}</div></div><div class='order-kpi'><b>In arrivo</b><div class='metric'>{{counts.get('Ordinato',0)+counts.get('Arrivato parzialmente',0)}}</div></div><div class='order-kpi'><b>Da avvisare</b><div class='metric'>{{counts.get('Arrivato',0)}}</div></div><div class='order-kpi'><b>Da consegnare</b><div class='metric'>{{counts.get('Cliente avvisato',0)}}</div></div></div><div class='order-stage-grid'>{% for title,group in active_groups %}<section class='card order-stage'><h2>{{title}} <span class='badge'>{{group|length}}</span></h2>{% for x in group %}<div class='order-item'><b>{{x.customer_name}}</b> · <a href='tel:{{x.customer_phone}}'>{{x.customer_phone}}</a><br><b>{{x.brand_code}}</b> / {{x.supplier_code}} · {{x.quantity}} pz<br><span class='status-pill'>{{x.status}}</span><div class='progress'><span style='width:{{(100*x.received_quantity/x.quantity) if x.quantity else 0}}%'></span></div><small class='muted'>{{x.request_number}} · ricevuti {{x.received_quantity}}/{{x.quantity}}{% if x.notes %} · {{x.notes}}{% endif %}</small><div class='actions' style='margin-top:10px'>{% if x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("accept_catalog_request",request_id=x.id)}}'><button class='success'>Accetta</button></form><form method='post' action='{{url_for("reject_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Rifiutare questa richiesta?")'><button class='danger'>Rifiuta</button></form>{% elif x.status=='Arrivato' %}<button type='button' class='secondary' onclick="navigator.clipboard.writeText('Ciao {{x.customer_name}}, il gioiello {{x.brand_code}} che avevi ordinato è arrivato presso Tattoo Beauty Saloon. Puoi contattarci per il ritiro.')">💬 Copia WhatsApp</button><form method='post' action='{{url_for("notify_catalog_request",request_id=x.id)}}'><button class='success'>Cliente contattato</button></form>{% elif x.status=='Cliente avvisato' %}<form method='post' action='{{url_for("deliver_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Confermi che il gioiello è stato consegnato?")'><button class='success'>✅ Consegnato / Smarca</button></form>{% endif %}</div></div>{% else %}<p class='muted'>Nessun ordine.</p>{% endfor %}</section>{% endfor %}</div><details class='card' style='margin-top:16px'><summary><b>📚 Storico ordini conclusi ({{history|length}})</b></summary>{% for x in history %}<div class='order-item history-order'><b>{{x.customer_name}}</b> · {{x.brand_code}} · {{x.quantity}} pz <span class='status-pill'>{{x.status}}</span><br><small class='muted'>{{x.request_number}} · {{x.created_at|rome_time}}</small></div>{% else %}<p class='muted'>Storico vuoto.</p>{% endfor %}</details>"""
+    return page("Ordini clienti",body,counts=counts,active_groups=active_groups,history=history)
 
 @app.post("/catalogo-ordinabili/richieste/<int:request_id>/accetta")
 @role_required("admin","manager")
@@ -3964,7 +3064,6 @@ def accept_catalog_request(request_id):
             db.execute("UPDATE supplier_catalog_requests SET status='Accettato',accepted_at=CURRENT_TIMESTAMP,accepted_by=?,in_catalog=? WHERE id=?",(session.get("user","sconosciuto"),in_catalog,request_id))
             db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(request_id,"Accettato",session.get("user","sconosciuto"),f"{row['supplier_code']}; quantità {row['quantity']}"))
             log_action(db,"Ordine cliente accettato",details=f"{row['request_number']}; {row['supplier_code']}; {row['customer_name']}; {row['customer_phone']}")
-            _notify_roles(db,("admin","manager"),"customer_order","Ordine cliente accettato",f"{row['customer_name']} · {row['brand_code']} · {row['quantity']} pz inseriti nel prossimo riordino.","customer_order",request_id,f"customer-order:accepted:{request_id}")
             db.commit(); flash("Ordine accettato e inserito nel prossimo PDF fornitore.")
     return redirect(url_for("catalog_requests"))
 
@@ -3976,7 +3075,6 @@ def reject_catalog_request(request_id):
         if row and row['status'] in ('Da ordinare','Nuovo'):
             db.execute("UPDATE supplier_catalog_requests SET status='Rifiutato' WHERE id=?",(request_id,))
             db.execute("INSERT INTO catalog_request_events(request_id,event_type,username) VALUES(?,?,?)",(request_id,"Rifiutato",session.get("user","sconosciuto")))
-            _notify_roles(db,("admin","manager"),"customer_order","Ordine cliente rifiutato",f"{row['customer_name']} · {row['brand_code']} · richiesta archiviata.","customer_order",request_id,f"customer-order:rejected:{request_id}")
             db.commit(); flash("Richiesta rifiutata e conservata nello storico.")
     return redirect(url_for("catalog_requests"))
 
@@ -4022,57 +3120,12 @@ def universal_search():
 @app.post("/products/<int:product_id>/delete")
 @role_required("admin")
 def delete_product(product_id):
-    """Sposta il prodotto nel cestino: nessuna cancellazione fisica immediata."""
     with connect() as db:
-        p=db.execute("SELECT * FROM products WHERE id=? AND deleted_at IS NULL",(product_id,)).fetchone()
+        p=db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone()
         if p:
-            now=utc_now_string()
-            db.execute("UPDATE products SET active=0,deleted_at=?,deleted_by=? WHERE id=?",(now,session.get("user"),product_id))
-            db.execute("INSERT INTO recycle_bin_events(entity_type,entity_id,entity_label,action,username,details) VALUES(?,?,?,?,?,?)",("product",product_id,p["brand_code"],"Spostato nel cestino",session.get("user"),p["supplier_code"] or ""))
-            log_action(db,"Prodotto spostato nel cestino",p)
-            db.commit(); flash("Prodotto spostato nel cestino. Può essere ripristinato.","success")
-        else: flash("Prodotto non trovato.","error")
+            log_action(db,"Prodotto eliminato",p); db.execute("DELETE FROM products WHERE id=?",(product_id,)); db.commit(); flash("Prodotto eliminato.")
+        else: flash("Prodotto non trovato.")
     return redirect(url_for("products"))
-
-@app.get("/admin/recycle-bin")
-@role_required("admin")
-def recycle_bin():
-    with connect() as db:
-        products=db.execute("SELECT * FROM products WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").fetchall()
-        events=db.execute("SELECT * FROM recycle_bin_events ORDER BY id DESC LIMIT 100").fetchall()
-    body='''<div class="dash-head"><div><span class="eyebrow">SICUREZZA DATI</span><h1>Cestino intelligente</h1><p class="muted">I prodotti eliminati restano recuperabili. I movimenti economici non vengono cancellati: si correggono con operazioni tracciate.</p></div></div>
-    <div class="card"><h2>Prodotti nel cestino</h2><div class="table-wrap"><table><thead><tr><th>Codice</th><th>Quantità</th><th>Eliminato</th><th>Da</th><th>Azioni</th></tr></thead><tbody>{% for p in products %}<tr><td><b>{{p.brand_code}}</b><br><small class="muted">{{p.supplier_code}}</small></td><td>{{p.quantity}}</td><td>{{p.deleted_at|rome_time}}</td><td>{{p.deleted_by}}</td><td><form method="post" action="{{url_for('restore_product',product_id=p.id)}}" style="display:inline"><button class="success">Ripristina</button></form> <form method="post" action="{{url_for('purge_product',product_id=p.id)}}" style="display:inline" onsubmit="return confirm('Eliminazione definitiva: continuare?')"><button class="danger">Elimina definitivamente</button></form></td></tr>{% else %}<tr><td colspan="5">Il cestino è vuoto.</td></tr>{% endfor %}</tbody></table></div></div>
-    <div class="card"><h2>Registro cestino</h2>{% for e in events %}<p><b>{{e.entity_label or e.entity_id}}</b> · {{e.action}}<br><small class="muted">{{e.created_at|rome_time}} · {{e.username}}</small></p>{% else %}<p class="muted">Nessuna operazione.</p>{% endfor %}</div>'''
-    return page("Cestino intelligente",body,products=products,events=events)
-
-@app.post("/admin/recycle-bin/products/<int:product_id>/restore")
-@role_required("admin")
-def restore_product(product_id):
-    with connect() as db:
-        p=db.execute("SELECT * FROM products WHERE id=? AND deleted_at IS NOT NULL",(product_id,)).fetchone()
-        if not p:
-            flash("Prodotto non presente nel cestino.","error")
-        else:
-            db.execute("UPDATE products SET deleted_at=NULL,deleted_by=NULL,active=1 WHERE id=?",(product_id,))
-            db.execute("INSERT INTO recycle_bin_events(entity_type,entity_id,entity_label,action,username) VALUES(?,?,?,?,?)",("product",product_id,p["brand_code"],"Ripristinato",session.get("user")))
-            log_action(db,"Prodotto ripristinato dal cestino",p); db.commit(); flash("Prodotto ripristinato.","success")
-    return redirect(url_for("recycle_bin"))
-
-@app.post("/admin/recycle-bin/products/<int:product_id>/purge")
-@role_required("admin")
-def purge_product(product_id):
-    with connect() as db:
-        p=db.execute("SELECT * FROM products WHERE id=? AND deleted_at IS NOT NULL",(product_id,)).fetchone()
-        if not p:
-            flash("Prodotto non presente nel cestino.","error")
-        else:
-            refs=db.execute("SELECT (SELECT COUNT(*) FROM sales WHERE product_id=?)+(SELECT COUNT(*) FROM customer_order_items WHERE product_id=?)+(SELECT COUNT(*) FROM supplier_order_items WHERE product_id=?)",(product_id,product_id,product_id)).fetchone()[0]
-            if refs:
-                flash("Eliminazione definitiva bloccata: il prodotto ha vendite o ordini collegati. Resta nel cestino per preservare lo storico.","warning")
-            else:
-                db.execute("INSERT INTO recycle_bin_events(entity_type,entity_id,entity_label,action,username) VALUES(?,?,?,?,?)",("product",product_id,p["brand_code"],"Eliminato definitivamente",session.get("user")))
-                db.execute("DELETE FROM products WHERE id=?",(product_id,)); db.commit(); flash("Prodotto eliminato definitivamente.","success")
-    return redirect(url_for("recycle_bin"))
 
 
 @app.route("/discount-settings",methods=["GET","POST"])
@@ -4237,80 +3290,67 @@ def reset_user_password(user_id):
 @app.get("/admin/backup")
 @role_required("admin")
 def backup_database():
-    try:
-        backup_path = create_verified_backup("manuale")
-        with connect() as db:
-            log_action(db, "Backup database", details=os.path.basename(backup_path)); db.commit()
-        return send_file(backup_path, as_attachment=True, download_name=os.path.basename(backup_path), mimetype="application/octet-stream")
-    except Exception as exc:
-        flash(f"Backup non riuscito: {exc}")
-        return redirect(url_for("system_status"))
-
-@app.get("/admin/backups/<path:filename>")
-@role_required("admin")
-def download_saved_backup(filename):
-    safe=os.path.basename(filename); path=os.path.join(BACKUP_DIR,safe)
-    if not safe.endswith(".db") or not os.path.isfile(path):
-        flash("Backup non trovato."); return redirect(url_for("system_status"))
-    return send_file(path,as_attachment=True,download_name=safe,mimetype="application/octet-stream")
-
-@app.post("/admin/backups/<path:filename>/restore")
-@role_required("admin")
-def restore_saved_backup(filename):
-    safe=os.path.basename(filename); source=os.path.join(BACKUP_DIR,safe)
-    if not safe.endswith(".db") or not os.path.isfile(source):
-        flash("Backup non trovato."); return redirect(url_for("system_status"))
-    valid,detail=database_integrity(source)
-    if not valid:
-        flash(f"Ripristino annullato: backup non valido ({detail})."); return redirect(url_for("system_status"))
-    safety=create_verified_backup("prima_ripristino")
-    temp=DB_PATH+".restore.tmp"; shutil.copy2(source,temp); os.replace(temp,DB_PATH); init_db()
-    flash(f"Backup {safe} ripristinato. Copia di sicurezza: {os.path.basename(safety)}")
-    return redirect(url_for("system_status"))
-
-@app.post("/admin/backups/<path:filename>/delete")
-@role_required("admin")
-def delete_saved_backup(filename):
-    safe=os.path.basename(filename); path=os.path.join(BACKUP_DIR,safe)
-    if safe.endswith(".db") and os.path.isfile(path):
-        os.remove(path); flash("Backup eliminato.")
-    else: flash("Backup non trovato.")
-    return redirect(url_for("system_status"))
+    if not os.path.exists(DB_PATH):
+        flash("Database non trovato.")
+        return redirect(url_for("dashboard"))
+    stamp = now_rome().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(BACKUP_DIR, f"gestionale_tbs_backup_{stamp}.db")
+    make_consistent_backup(backup_path)
+    with connect() as db:
+        log_action(db, "Backup database", details=os.path.basename(backup_path))
+        db.commit()
+    return send_file(backup_path, as_attachment=True, download_name=os.path.basename(backup_path), mimetype="application/octet-stream")
 
 @app.route("/admin/system-status", methods=["GET", "POST"])
 @role_required("admin")
 def system_status():
     if request.method == "POST":
-        upload=request.files.get("database")
+        upload = request.files.get("database")
         if not upload or not upload.filename:
-            flash("Seleziona un file .db da ripristinare."); return redirect(url_for("system_status"))
-        fd,temp_path=tempfile.mkstemp(prefix="tbs_restore_",suffix=".db"); os.close(fd)
+            flash("Seleziona un file .db da ripristinare.")
+            return redirect(url_for("system_status"))
+        temp_fd, temp_path = tempfile.mkstemp(prefix="tbs_restore_", suffix=".db")
+        os.close(temp_fd)
         try:
-            upload.save(temp_path); valid,detail=database_integrity(temp_path)
+            upload.save(temp_path)
+            valid, detail = database_integrity(temp_path)
             if not valid:
-                flash(f"Ripristino annullato: database non valido ({detail})."); return redirect(url_for("system_status"))
-            safety=create_verified_backup("prima_ripristino") if os.path.exists(DB_PATH) else None
-            os.replace(temp_path,DB_PATH); init_db()
-            flash("Database ripristinato correttamente." + (f" Backup di sicurezza: {os.path.basename(safety)}." if safety else ""))
+                flash(f"Ripristino annullato: database non valido ({detail}).")
+                return redirect(url_for("system_status"))
+            safety = os.path.join(BACKUP_DIR, f"prima_ripristino_{now_rome().strftime('%Y%m%d_%H%M%S')}.db")
+            if os.path.exists(DB_PATH):
+                make_consistent_backup(safety)
+            os.replace(temp_path, DB_PATH)
+            init_db()
+            flash("Database ripristinato correttamente. È stato creato anche un backup di sicurezza.")
             return redirect(url_for("system_status"))
         finally:
-            if os.path.exists(temp_path): os.remove(temp_path)
-    valid,integrity=database_integrity(DB_PATH)
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    valid, integrity = database_integrity(DB_PATH)
     with connect() as db:
-        counts={}
-        for table in ("users","products","sales","customer_orders","supplier_orders","supplier_catalog"):
-            try: counts[table]=db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            except sqlite3.Error: counts[table]=0
-    files=sorted(Path(BACKUP_DIR).glob("*.db"),key=lambda x:x.stat().st_mtime,reverse=True)
-    backups=[]
-    for item in files[:50]:
-        ok,detail=database_integrity(str(item))
-        backups.append({"name":item.name,"date":datetime.fromtimestamp(item.stat().st_mtime,tz=ROME_TZ).strftime("%d/%m/%Y %H:%M"),"size":item.stat().st_size/(1024*1024),"valid":ok,"kind":"Automatico" if item.name.startswith("automatico_") else "Pre-ripristino" if item.name.startswith("prima_ripristino_") else "Manuale"})
-    last_backup=backups[0]["date"] if backups else None
-    size_mb=os.path.getsize(DB_PATH)/(1024*1024) if os.path.exists(DB_PATH) else 0
-    storage="Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
-    body="""<h1>💾 Backup e stato del sistema</h1><div class='grid'><div class='card'><div class='muted'>Database</div><div class='metric'>{{'OK' if valid else 'ERRORE'}}</div><p>{{integrity}}</p></div><div class='card'><div class='muted'>Archiviazione</div><div class='metric' style='font-size:22px'>{{storage}}</div><p class='muted'>{{db_path}}</p></div><div class='card'><div class='muted'>Versione</div><div class='metric' style='font-size:22px'>{{version}}</div><p>{{'%.2f'|format(size_mb)}} MB</p></div><div class='card'><div class='muted'>Ultimo backup</div><div class='metric' style='font-size:22px'>{{last_backup or 'Non presente'}}</div><p>Automatico giornaliero · conservazione {{retention}} giorni</p></div></div>{% if ephemeral %}<div class='card' style='border-left:5px solid #b45309'><h3>Attenzione</h3><p>Il database è in /tmp: configura il disco persistente Render.</p></div>{% endif %}<div class='grid'><div class='card'><h3>Crea backup</h3><p>Copia verificata e pronta da scaricare.</p><a class='view' style='display:inline-block;padding:12px 16px;border-radius:9px;text-decoration:none;color:white;font-weight:900' href='{{url_for("backup_database")}}'>⬇️ Crea e scarica backup</a></div><div class='card'><h3>Ripristina da file</h3><form method='post' enctype='multipart/form-data' onsubmit="return confirm('Confermi il ripristino?')"><input type='file' name='database' accept='.db,.sqlite,.sqlite3' required><button class='secondary'>Verifica e ripristina</button></form></div></div><div class='card'><h3>Storico backup</h3>{% if backups %}<div style='overflow-x:auto'><table><thead><tr><th>Tipo</th><th>Data</th><th>Dimensione</th><th>Integrità</th><th>Azioni</th></tr></thead><tbody>{% for b in backups %}<tr><td><b>{{b.kind}}</b><br><small>{{b.name}}</small></td><td>{{b.date}}</td><td>{{'%.2f'|format(b.size)}} MB</td><td>{{'OK' if b.valid else 'ERRORE'}}</td><td><div class='inline'><a href='{{url_for("download_saved_backup",filename=b.name)}}'>Scarica</a><form method='post' action='{{url_for("restore_saved_backup",filename=b.name)}}' onsubmit="return confirm('Ripristinare questo backup?')"><button class='secondary'>Ripristina</button></form><form method='post' action='{{url_for("delete_saved_backup",filename=b.name)}}' onsubmit="return confirm('Eliminare questo backup?')"><button class='danger'>Elimina</button></form></div></td></tr>{% endfor %}</tbody></table></div>{% else %}<p>Nessun backup presente.</p>{% endif %}</div>"""
-    return page("Backup e stato sistema",body,valid=valid,integrity=integrity,storage=storage,db_path=DB_PATH,version=APP_VERSION,size_mb=size_mb,last_backup=last_backup,counts=counts,ephemeral=DB_IS_EPHEMERAL,backups=backups,retention=_BACKUP_RETENTION_DAYS)
+        counts = {}
+        for table in ("users", "products", "sales", "customer_orders", "supplier_orders", "supplier_catalog"):
+            try:
+                counts[table] = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            except sqlite3.Error:
+                counts[table] = 0
+    backups = sorted(Path(BACKUP_DIR).glob("*.db"), key=lambda x: x.stat().st_mtime, reverse=True)
+    last_backup = datetime.fromtimestamp(backups[0].stat().st_mtime, tz=ROME_TZ).strftime("%d/%m/%Y %H:%M") if backups else None
+    size_mb = os.path.getsize(DB_PATH) / (1024 * 1024) if os.path.exists(DB_PATH) else 0
+    storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
+    body = '''<h1>Stato del sistema</h1>
+    <div class="grid">
+      <div class="card"><div class="muted">Database</div><div class="metric">{{ "OK" if valid else "ERRORE" }}</div><p>{{ integrity }}</p></div>
+      <div class="card"><div class="muted">Archiviazione</div><div class="metric" style="font-size:22px">{{ storage }}</div><p class="muted">{{ db_path }}</p></div>
+      <div class="card"><div class="muted">Versione</div><div class="metric" style="font-size:22px">{{ version }}</div><p>{{ "%.2f"|format(size_mb) }} MB</p></div>
+      <div class="card"><div class="muted">Ultimo backup locale</div><div class="metric" style="font-size:22px">{{ last_backup or "Non presente" }}</div></div>
+    </div>
+    <div class="card"><h3>Contenuto</h3><p>Utenti: <b>{{ counts.users }}</b> · Prodotti: <b>{{ counts.products }}</b> · Vendite: <b>{{ counts.sales }}</b> · Ordini clienti: <b>{{ counts.customer_orders }}</b> · Ordini fornitore: <b>{{ counts.supplier_orders }}</b> · Catalogo: <b>{{ counts.supplier_catalog }}</b></p></div>
+    {% if ephemeral %}<div class="card" style="border-left:5px solid #b45309"><h3>Intervento necessario</h3><p>Il database si trova in <code>/tmp</code>: Render può cancellarlo durante riavvii o deploy. Prima di usare questa versione in produzione configura un disco persistente montato su <code>/var/data</code>, oppure imposta <code>DATABASE_PATH</code> verso uno spazio persistente.</p></div>{% endif %}
+    <div class="card"><h3>Backup e ripristino</h3>{% if not ephemeral %}<p><b>Protezione attiva:</b> database e backup locali sono salvati sul disco persistente.</p>{% endif %}<p><a href="{{ url_for('backup_database') }}">Scarica backup verificato</a></p><form method="post" enctype="multipart/form-data" onsubmit="return confirm('Confermi il ripristino? Il database attuale sarà salvato prima della sostituzione.')"><label>Ripristina un backup SQLite</label><input type="file" name="database" accept=".db,.sqlite,.sqlite3" required><button class="secondary">Verifica e ripristina</button></form></div>'''
+    return page("Stato sistema", body, valid=valid, integrity=integrity, storage=storage, db_path=DB_PATH, version=APP_VERSION, size_mb=size_mb, last_backup=last_backup, counts=counts, ephemeral=DB_IS_EPHEMERAL)
 
 @app.get("/sales")
 @role_required("admin","manager")
@@ -4411,18 +3451,10 @@ def reorders():
         flash("Quantità aggiornate."); return redirect(url_for("reorders"))
     with connect() as db:
         rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.quantity AS stock,COALESCE(r.quantity,0) AS reorder_qty FROM products p JOIN reorder_pending r ON r.product_id=p.id WHERE r.quantity>0 ORDER BY p.supplier_code").fetchall()
-        customer_rows=db.execute("SELECT supplier_code,SUM(quantity) reorder_qty FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code ORDER BY supplier_code").fetchall()
-        preview={}
-        for x in rows:
-            code=x['supplier_code'] or 'CODICE MANCANTE'
-            preview[code]=preview.get(code,0)+int(x['reorder_qty'] or 0)
-        for x in customer_rows:
-            code=x['supplier_code'] or 'CODICE MANCANTE'
-            preview[code]=preview.get(code,0)+int(x['reorder_qty'] or 0)
-        supplier_preview=[{'supplier_code':code,'quantity':qty} for code,qty in sorted(preview.items()) if qty>0]
+        customer_rows=db.execute("SELECT supplier_code,brand_code,SUM(quantity) reorder_qty,COUNT(*) customers FROM supplier_catalog_requests WHERE status='Accettato' GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
         history=db.execute("SELECT o.*,COUNT(i.id) lines,COALESCE(SUM(i.quantity),0) pieces,COALESCE(SUM(i.received_quantity),0) received FROM supplier_orders o LEFT JOIN supplier_order_items i ON i.order_id=o.id GROUP BY o.id ORDER BY o.id DESC LIMIT 30").fetchall()
-    body="""<h1>🚚 Riordini fornitore</h1><div class='card'><h2>Prossimo PDF</h2><p class='muted'>Anteprima identica ai dati destinati al fornitore: esclusivamente codice fornitore e quantità totale. Codici brand, clienti, telefoni e note restano interni a TBS One.</p><div class='table-wrap'><table><thead><tr><th>Codice fornitore</th><th>Quantità</th></tr></thead><tbody>{% for x in supplier_preview %}<tr><td><b>{{x.supplier_code}}</b></td><td><b>{{x.quantity}}</b></td></tr>{% else %}<tr><td colspan='2'>Nessun articolo da ordinare.</td></tr>{% endfor %}</tbody></table></div>{% if supplier_preview %}<form method='post' action='{{url_for("generate_reorder_pdf")}}' onsubmit='return confirm("Generare e archiviare il PDF?")'><button class='success'>📄 Genera PDF e segna ordinato</button></form>{% endif %}</div><div class='card'><h2>Storico fornitori e ricezioni</h2>{% for o in history %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><b>{{o.order_number}}</b> · {{o.status}} · {{o.received}}/{{o.pieces}} pezzi · {{o.created_at|rome_time}}{% if o.status!='Ricevuto' %}<p><a class='secondary' style='display:inline-block;text-decoration:none;padding:9px 12px;border-radius:8px' href='{{url_for("receive_order_detail",order_id=o.id)}}'>Spunta merce arrivata</a></p>{% endif %}</div>{% else %}<p>Nessun ordine generato.</p>{% endfor %}</div>"""
-    return page("Riordini",body,supplier_preview=supplier_preview,history=history)
+    body="""<h1>🚚 Riordini fornitore</h1><div class='card'><h2>Prossimo PDF</h2><p class='muted'>Comprende scorte da reintegrare e ordini cliente accettati. Dopo la generazione, gli ordini cliente passano a “Ordinato” e non saranno duplicati.</p>{% for x in rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · magazzino {{x.stock}} · <b>{{x.reorder_qty}} pz</b></p>{% endfor %}{% for x in customer_rows %}<p><b>{{x.supplier_code}}</b> · {{x.brand_code}} · <b>{{x.reorder_qty}} pz clienti</b> · {{x.customers}} richieste</p>{% endfor %}{% if rows or customer_rows %}<form method='post' action='{{url_for("generate_reorder_pdf")}}' onsubmit='return confirm("Generare e archiviare il PDF?")'><button class='success'>📄 Genera PDF e segna ordinato</button></form>{% else %}<p>Nessun articolo da ordinare.</p>{% endif %}</div><div class='card'><h2>Storico fornitori e ricezioni</h2>{% for o in history %}<div style='border-bottom:1px solid #ddd;padding:12px 0'><b>{{o.order_number}}</b> · {{o.status}} · {{o.received}}/{{o.pieces}} pezzi · {{o.created_at|rome_time}}{% if o.status!='Ricevuto' %}<p><a class='secondary' style='display:inline-block;text-decoration:none;padding:9px 12px;border-radius:8px' href='{{url_for("receive_order_detail",order_id=o.id)}}'>Spunta merce arrivata</a></p>{% endif %}</div>{% else %}<p>Nessun ordine generato.</p>{% endfor %}</div>"""
+    return page("Riordini",body,rows=rows,customer_rows=customer_rows,history=history)
 
 @app.post("/reorders/pdf")
 @role_required("admin","manager")
@@ -4482,8 +3514,6 @@ def receive_order_detail(order_id):
                     status='Arrivato' if rq>=req['quantity'] else 'Arrivato parzialmente'
                     db.execute("UPDATE supplier_catalog_requests SET received_quantity=?,status=? WHERE id=?",(rq,status,req['id']))
                     db.execute("INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)",(req['id'],status,session.get('user','sconosciuto'),f"Ricevuti {rq}/{req['quantity']}"))
-                    if status=='Arrivato':
-                        _notify_roles(db,("admin","manager"),"customer_order","Merce cliente arrivata",f"Contattare {req['customer_name']} ({req['customer_phone']}): {req['brand_code']} · {req['quantity']} pz.","customer_order",req['id'],f"customer-order:arrived:{req['id']}")
                 elif item['product_id']:
                     db.execute("UPDATE products SET quantity=quantity+? WHERE id=?",(delta,item['product_id']))
             remaining=db.execute("SELECT COUNT(*) FROM supplier_order_items WHERE order_id=? AND received_quantity<quantity",(order_id,)).fetchone()[0]
@@ -4507,8 +3537,6 @@ def automatic_daily_closure():
     if request.endpoint and request.endpoint != "static":
         try: ensure_daily_closures()
         except sqlite3.Error as exc: app.logger.warning("Chiusura tesoreria non eseguita: %s",exc)
-        try: ensure_daily_backup()
-        except Exception as exc: app.logger.warning("Backup automatico non eseguito: %s", exc)
 
 
 
@@ -4517,10 +3545,9 @@ SELLER_ALLOWED_ENDPOINTS = {
     'home','login','logout','lock_register','unlock_register','pos','price_check',
     'products','product_detail','pos_add_code','add_to_cart','cart','update_cart','remove_from_cart',
     'clear_cart','checkout_cart','suspend_cart','suspended_carts','restore_suspended_cart_route',
-    'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart',
-    'notification_center','notification_count','notification_poll','notification_sales_group','archive_notification_group',
+    'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart','notification_center','notification_count',
     'notification_detail','archive_notification','universal_search','change_password',
-    'supplier_catalog','request_catalog_item','catalog_requests','cancel_own_catalog_request','app_install','static','pwa_manifest','pwa_icon_192','pwa_icon_512','pwa_icon_svg','service_worker','push_config','push_status','push_subscribe','push_unsubscribe'
+    'supplier_catalog','request_catalog_item','static'
 }
 
 @app.before_request
@@ -4529,11 +3556,8 @@ def enforce_v20_role_matrix():
     if not session.get('user_id') or request.endpoint is None:
         return None
     if session.get('role') == 'seller' and request.endpoint not in SELLER_ALLOWED_ENDPOINTS:
-        # /pos è sempre consentita: il controllo evita comunque ogni redirect riflessivo.
-        if request.endpoint == 'pos':
-            return None
         flash('Questa funzione non è disponibile per il ruolo Venditore.','error')
-        return redirect(url_for('pos'), code=303)
+        return redirect(url_for('pos'))
     return None
 
 
@@ -4547,10 +3571,11 @@ def v20_page_context():
 @app.after_request
 def v20_ui_headers(response):
     response.headers.setdefault('X-TBS-Version', APP_VERSION)
-    if request.endpoint in {'login','logout','home','lock_register','unlock_register'} or response.status_code in (301,302,303,307,308):
-        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
+    # Evita che Safari riutilizzi redirect/sessioni precedenti nelle pagine di accesso.
+    if request.endpoint in {'login','home','lock_register','unlock_register','logout'}:
+        response.headers['Cache-Control']='no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma']='no-cache'
+        response.headers['Expires']='0'
     return response
 
 
@@ -4776,7 +3801,7 @@ def enterprise_sales():
     margin=(totals['gross_profit']/totals['revenue']*100) if totals['revenue'] else 0
     body='''<div class="dash-head"><div><span class="eyebrow">V28 ENTERPRISE</span><h1>Vendite e marginalità</h1><p class="muted">Controllo economico, resi tracciati e ripristino automatico delle scorte.</p></div></div><div class="card"><form class="inline"><select name="days"><option value="7" {% if days==7 %}selected{% endif %}>7 giorni</option><option value="30" {% if days==30 %}selected{% endif %}>30 giorni</option><option value="90" {% if days==90 %}selected{% endif %}>90 giorni</option><option value="365" {% if days==365 %}selected{% endif %}>365 giorni</option></select><button>Aggiorna</button></form></div>
     <div class="kpi-grid"><div class="kpi"><strong>Incasso</strong><div class="metric">€ {{'%.2f'|format(totals.revenue)}}</div></div><div class="kpi"><strong>Utile lordo</strong><div class="metric">€ {{'%.2f'|format(totals.gross_profit)}}</div></div><div class="kpi"><strong>Margine</strong><div class="metric">{{'%.1f'|format(margin)}}%</div></div><div class="kpi"><strong>Scontrini</strong><div class="metric">{{totals.receipts}}</div></div></div>
-    <div class="card"><div class="table-wrap"><table><thead><tr><th>Vendita</th><th>Data</th><th>Operatore</th><th>Pagamento</th><th>Pezzi</th><th>Totale</th><th>Utile</th><th></th></tr></thead><tbody>{% for s in rows %}<tr><td><b>{{s.sale_number or 'Senza numero'}}</b></td><td>{{s.created_at|rome_time}}</td><td>{{s.username}}</td><td>{{s.payment_method}}</td><td>{{s.pieces}}</td><td>€ {{'%.2f'|format(s.total)}}</td><td>€ {{'%.2f'|format(s.profit)}}</td><td>{% if s.sale_number %}<a href="{{url_for('enterprise_sale_return',sale_number=s.sale_number)}}">Reso</a> · <a href="{{url_for('warranty_label_pdf',sale_number=s.sale_number)}}">Garanzia</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8">Nessuna vendita nel periodo.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><div class="table-wrap"><table><thead><tr><th>Vendita</th><th>Data</th><th>Operatore</th><th>Pagamento</th><th>Pezzi</th><th>Totale</th><th>Utile</th><th></th></tr></thead><tbody>{% for s in rows %}<tr><td><b>{{s.sale_number or 'Senza numero'}}</b></td><td>{{s.created_at|rome_time}}</td><td>{{s.username}}</td><td>{{s.payment_method}}</td><td>{{s.pieces}}</td><td>€ {{'%.2f'|format(s.total)}}</td><td>€ {{'%.2f'|format(s.profit)}}</td><td>{% if s.sale_number %}<a href="{{url_for('enterprise_sale_return',sale_number=s.sale_number)}}">Reso</a>{% endif %}</td></tr>{% else %}<tr><td colspan="8">Nessuna vendita nel periodo.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Ultimi resi</h2>{% for r in returns %}<p><b>{{r.product_code}}</b> · {{r.quantity}} pz · rimborso € {{'%.2f'|format(r.refund_amount)}}<br><small class="muted">{{r.created_at|rome_time}} · {{r.username}} · {{r.reason}}</small></p>{% else %}<p class="muted">Nessun reso registrato.</p>{% endfor %}</div>'''
     return page('Vendite Enterprise',body,totals=totals,rows=rows,returns=returns,margin=margin,days=days)
 
@@ -4880,9 +3905,9 @@ def enterprise_orders():
              FROM supplier_orders o LEFT JOIN suppliers s ON s.id=o.supplier_id
              LEFT JOIN supplier_order_items i ON i.order_id=o.id
              GROUP BY o.id ORDER BY o.id DESC LIMIT 100""").fetchall()
-        aggregate=db.execute("""SELECT supplier_code,SUM(quantity) qty
+        aggregate=db.execute("""SELECT supplier_code,brand_code,SUM(quantity) qty,COUNT(*) customers
              FROM supplier_catalog_requests WHERE status='Accettato'
-             GROUP BY supplier_code ORDER BY supplier_code""").fetchall()
+             GROUP BY supplier_code,brand_code ORDER BY supplier_code""").fetchall()
         counts=db.execute("""SELECT
              SUM(CASE WHEN status IN ('Da ordinare','Nuovo') THEN 1 ELSE 0 END) new_count,
              SUM(CASE WHEN status='Accettato' THEN 1 ELSE 0 END) accepted_count,
@@ -4891,7 +3916,7 @@ def enterprise_orders():
              FROM supplier_catalog_requests""").fetchone()
     body='''<div class="dash-head"><div><span class="eyebrow">V29 ENTERPRISE</span><h1>Centro ordini</h1><p class="muted">Richieste cliente separate dal PDF fornitore, quantità aggregate e ricezione pezzo per pezzo.</p></div><div><a class="secondary" href="{{url_for('enterprise_suppliers')}}">Fornitori</a> <a class="secondary" href="{{url_for('reorders')}}">Genera ordine</a></div></div>
     <div class="kpi-grid"><div class="kpi"><strong>Nuovi</strong><div class="metric">{{counts.new_count or 0}}</div></div><div class="kpi"><strong>Da ordinare</strong><div class="metric">{{counts.accepted_count or 0}}</div></div><div class="kpi"><strong>In arrivo</strong><div class="metric">{{counts.incoming_count or 0}}</div></div><div class="kpi"><strong>Pronti</strong><div class="metric">{{counts.ready_count or 0}}</div></div></div>
-    <div class="card"><h2>Quantità da inviare al fornitore</h2><p class="muted">Vista riservata al documento fornitore: vengono mostrati solo il codice del fornitore e la quantità totale.</p><div class="table-wrap"><table><thead><tr><th>Codice fornitore</th><th>Quantità totale</th></tr></thead><tbody>{% for a in aggregate %}<tr><td><b>{{a.supplier_code}}</b></td><td><b>{{a.qty}}</b></td></tr>{% else %}<tr><td colspan="2">Nessun articolo accettato da ordinare.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><h2>Quantità da inviare al fornitore</h2><div class="table-wrap"><table><thead><tr><th>Codice fornitore</th><th>Codice brand</th><th>Quantità totale</th><th>Clienti in attesa</th></tr></thead><tbody>{% for a in aggregate %}<tr><td><b>{{a.supplier_code}}</b></td><td>{{a.brand_code}}</td><td>{{a.qty}}</td><td>{{a.customers}}</td></tr>{% else %}<tr><td colspan="4">Nessun articolo accettato da ordinare.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Clienti in attesa</h2><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Articolo</th><th>Qtà</th><th>Stato</th><th>Ricevuti</th></tr></thead><tbody>{% for x in customer %}<tr><td><b>{{x.customer_name}}</b><br><a href="tel:{{x.customer_phone}}">{{x.customer_phone}}</a></td><td>{{x.brand_code}}<br><small>{{x.supplier_code}}</small></td><td>{{x.quantity}}</td><td><span class="badge">{{x.status}}</span></td><td>{{x.received_quantity or 0}} / {{x.quantity}}</td></tr>{% else %}<tr><td colspan="5">Nessun cliente in attesa.</td></tr>{% endfor %}</tbody></table></div></div>
     <div class="card"><h2>Ordini fornitori</h2>{% for o in suppliers %}<p><b>{{o.order_number}}</b> · {{o.supplier_name or 'Fornitore non assegnato'}} · {{o.status}}<br><small class="muted">Ricevuti {{o.received_qty}} / {{o.ordered_qty}} pezzi · {{o.created_at|rome_time}}</small></p>{% else %}<p class="muted">Nessun ordine fornitore.</p>{% endfor %}</div>'''
     return page('Ordini Enterprise',body,customer=customer,suppliers=suppliers,aggregate=aggregate,counts=counts)
@@ -5061,527 +4086,7 @@ def v35_release_center():
         with sqlite3.connect(DB_PATH) as source, sqlite3.connect(target) as dest: source.backup(dest)
         flash('Backup v35 creato correttamente.'); return redirect(url_for('v35_release_center'))
     health=_v35_health()
-    body="""<div class='dash-head'><div><span class='eyebrow'>V35 · ENTERPRISE</span><h1>Release Center</h1><p class='muted'>Controllo tecnico, backup e migrazioni additive senza perdita dati.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Database</strong><div class='metric'>{{health.database}}</div></div><div class='kpi'><strong>Integrità</strong><div class='metric'>{{health.integrity}}</div></div><div class='kpi'><strong>Storage</strong><div class='metric'>{{health.storage}}</div></div><div class='kpi'><strong>Ultimo backup</strong><div style='font-size:18px;font-weight:900;margin-top:12px'>{{health.backup}}</div></div></div><div class='grid'><a class='card' href='{{url_for("v31_dashboard")}}' style='text-decoration:none;color:inherit'><h2>Enterprise UX</h2><p>Home operativa.</p></a><a class='card' href='{{url_for("v32_inventory")}}' style='text-decoration:none;color:inherit'><h2>Smart Inventory</h2><p>Scorte e riordini.</p></a><a class='card' href='{{url_for("v33_assistant")}}' style='text-decoration:none;color:inherit'><h2>Business Assistant</h2><p>Priorità guidate.</p></a><a class='card' href='{{url_for("v34_analytics")}}' style='text-decoration:none;color:inherit'><h2>Analytics</h2><p>Grafici e KPI.</p></a></div><div class='card'><h2>Backup manuale</h2><form method='post'><input type='hidden' name='action' value='backup'><button>Crea backup ora</button></form></div>"""
+    body="""<div class='dash-head'><div><span class='eyebrow'>V35 · ENTERPRISE</span><h1>Release Center</h1><p class='muted'>Controllo tecnico e accesso ai moduli finali.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Database</strong><div class='metric'>{{health.database}}</div></div><div class='kpi'><strong>Integrità</strong><div class='metric'>{{health.integrity}}</div></div><div class='kpi'><strong>Storage</strong><div class='metric'>{{health.storage}}</div></div><div class='kpi'><strong>Ultimo backup</strong><div style='font-size:18px;font-weight:900;margin-top:12px'>{{health.backup}}</div></div></div><div class='grid'><a class='card' href='{{url_for("v31_dashboard")}}' style='text-decoration:none;color:inherit'><h2>Enterprise UX</h2><p>Home operativa.</p></a><a class='card' href='{{url_for("v32_inventory")}}' style='text-decoration:none;color:inherit'><h2>Smart Inventory</h2><p>Scorte e riordini.</p></a><a class='card' href='{{url_for("v33_assistant")}}' style='text-decoration:none;color:inherit'><h2>Business Assistant</h2><p>Priorità guidate.</p></a><a class='card' href='{{url_for("v34_analytics")}}' style='text-decoration:none;color:inherit'><h2>Analytics</h2><p>Grafici e KPI.</p></a></div><div class='card'><h2>Backup manuale</h2><form method='post'><input type='hidden' name='action' value='backup'><button>Crea backup ora</button></form></div>"""
     return page('V35 Release Center',body,health=health)
-
-
-# ============================================================
-# v40.0 TBS ONE APP FOUNDATION
-# ============================================================
-@app.get("/app")
-def app_install():
-    """Hub pubblico per installare separatamente le due applicazioni TBS."""
-    html = r"""<!doctype html><html lang="it"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080c14"><title>TBS One - Scegli applicazione</title>
-<style>
-:root{--bg:#080c14;--card:#121925;--gold:#d8b75c;--text:#f8f5ec;--muted:#aeb5c1}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#202938 0,#080c14 52%);color:var(--text);font-family:Inter,system-ui,sans-serif;padding:28px 18px}.wrap{max-width:900px;margin:auto}.brand{text-align:center;margin:22px 0 34px}.brand h1{font-family:Georgia,serif;font-size:48px;margin:0;color:var(--gold)}.brand p{color:var(--muted);font-size:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}.card{background:rgba(18,25,37,.95);border:1px solid rgba(216,183,92,.28);border-radius:24px;padding:26px;box-shadow:0 24px 60px rgba(0,0,0,.32)}.icon{width:82px;height:82px;border-radius:20px;display:block;margin-bottom:18px}.card h2{font-family:Georgia,serif;font-size:30px;margin:0 0 10px}.card p{color:var(--muted);line-height:1.55;min-height:72px}.btn{display:block;padding:15px 18px;border-radius:14px;text-align:center;text-decoration:none;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#111722}.note{text-align:center;color:var(--muted);margin-top:28px;line-height:1.5}
-</style></head><body><div class="wrap"><div class="brand"><h1>TBS ONE</h1><p>Due applicazioni separate, un unico sistema.</p></div><div class="grid">
-<div class="card"><img class="icon" src="/pwa-icon-192.png"><h2>TBS One Gestionale</h2><p>Per Admin, Gestore e Venditore: cassa, magazzino, ordini, tesoreria e sistema.</p><a class="btn" href="/app/gestionale">Installa Gestionale</a></div>
-<div class="card"><img class="icon" src="/jewelry-icon-192.png"><h2>TBS Jewelry</h2><p>Per i clienti: boutique, collezione, carrello e richieste d'ordine.</p><a class="btn" href="/app/jewelry">Installa Boutique</a></div>
-</div><p class="note">Apri ciascuna pagina in Chrome e installa le due app una alla volta.</p></div></body></html>"""
-    return render_template_string(html)
-
-
-def _install_page(app_name, subtitle, manifest_url, icon_url, open_url, theme):
-    """Pagina dedicata all'installazione di una singola PWA.
-
-    Ogni pagina espone un solo manifest: Chrome può quindi distinguere
-    TBS One Gestionale e TBS Jewelry anche se condividono lo stesso dominio.
-    """
-    html = r"""<!doctype html><html lang="it"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="{{theme}}"><meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="application-name" content="{{app_name}}"><meta name="apple-mobile-web-app-title" content="{{app_name}}">
-<meta name="description" content="{{subtitle}}"><title>Installa {{app_name}}</title>
-<link rel="manifest" href="{{manifest_url}}?v=4320"><link rel="icon" type="image/png" sizes="192x192" href="{{icon_url}}?v=4320"><link rel="apple-touch-icon" href="{{icon_url}}?v=4320">
-<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(circle at top,#202938,#080c14 58%);color:#f8f5ec;font-family:Inter,system-ui,sans-serif;padding:20px}.box{width:min(520px,100%);background:#121925;border:1px solid rgba(216,183,92,.35);border-radius:26px;padding:30px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.38)}img{width:112px;height:112px;border-radius:26px}.eyebrow{color:#d8b75c;letter-spacing:.16em;font-weight:900;font-size:12px}.box h1{font-family:Georgia,serif;font-size:38px;margin:14px 0 8px}.box p{color:#b9c0cb;line-height:1.55}.btn{width:100%;border:0;border-radius:15px;padding:16px;margin-top:12px;font-size:17px;font-weight:900;background:linear-gradient(135deg,#f0d27b,#b88928);color:#101722;cursor:pointer}.btn[disabled]{opacity:.62;cursor:wait}.secondary{display:block;color:#ead18a;text-decoration:none;margin-top:18px;font-weight:800}.help{font-size:14px;min-height:46px}.status{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:8px 12px;background:#0c1320;color:#d8b75c;font-size:12px;font-weight:800;margin:4px 0 8px}.dot{width:8px;height:8px;border-radius:50%;background:#d8b75c;box-shadow:0 0 12px rgba(216,183,92,.8)}</style></head><body><main class="box"><img src="{{icon_url}}?v=4320" alt=""><div class="eyebrow">APPLICAZIONE INSTALLABILE</div><h1>{{app_name}}</h1><p>{{subtitle}}</p><div class="status"><span class="dot"></span><span id="statusText">Preparazione installazione…</span></div><button class="btn" id="installBtn" disabled>Attendi…</button><p class="help" id="help">Chrome sta verificando manifest, icone e service worker.</p><a class="secondary" href="{{open_url}}">Apri senza installare</a><a class="secondary" href="/app">Torna alle due app</a></main>
-<script>
-let promptEvent=null;
-const btn=document.getElementById('installBtn');
-const help=document.getElementById('help');
-const statusText=document.getElementById('statusText');
-const isStandalone=window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
-function readyFallback(){btn.disabled=false;btn.textContent='Installa sul dispositivo';statusText.textContent='Pronta';help.textContent='Premi il pulsante. Se Chrome non mostra la finestra, usa il menu ⋮ e scegli Installa app.';}
-if(isStandalone){btn.disabled=true;btn.textContent='App già installata';statusText.textContent='Installata';help.textContent='Questa applicazione è già aperta in modalità app.';}
-window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;btn.disabled=false;btn.textContent='Installa sul dispositivo';statusText.textContent='Installazione disponibile';help.textContent='Premi il pulsante per installare questa app con la sua icona dedicata.';});
-btn.addEventListener('click',async()=>{if(isStandalone)return;if(promptEvent){promptEvent.prompt();const result=await promptEvent.userChoice;help.textContent=result.outcome==='accepted'?'Installazione avviata. Cerca l’icona nella schermata Home.':'Installazione annullata: puoi riprovare quando vuoi.';promptEvent=null;}else{help.textContent='Nel menu ⋮ di Chrome premi “Installa app”. Se appare “Apri TBS One”, disinstalla prima la vecchia app e ricarica questa pagina.';}});
-window.addEventListener('appinstalled',()=>{btn.disabled=true;btn.textContent='Installazione completata';statusText.textContent='Installata';help.textContent='Applicazione installata correttamente.';});
-(async()=>{if(isStandalone)return;try{if(!('serviceWorker' in navigator))throw new Error('Service worker non supportato');const reg=await navigator.serviceWorker.register('/service-worker.js?v=4320',{scope:'/',updateViaCache:'none'});await navigator.serviceWorker.ready;await reg.update();statusText.textContent='Service worker attivo';setTimeout(()=>{if(!promptEvent)readyFallback();},1200);}catch(err){btn.disabled=false;btn.textContent='Apri istruzioni';statusText.textContent='Controllo manuale';help.textContent='Ricarica la pagina. Se necessario usa il menu ⋮ di Chrome e scegli Installa app.';console.warn(err);}})();
-</script></body></html>"""
-    response = make_response(render_template_string(html, app_name=app_name, subtitle=subtitle, manifest_url=manifest_url, icon_url=icon_url, open_url=open_url, theme=theme))
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
-
-
-@app.get("/app/gestionale")
-def app_install_gestionale():
-    return _install_page("TBS One Gestionale", "Accesso riservato al personale TBS.", "/manifest-tbs-one.webmanifest", "/pwa-icon-192.png", "/app/gestionale/start", "#111722")
-
-
-@app.get("/app/jewelry")
-def app_install_jewelry():
-    return _install_page("TBS Jewelry", "Boutique clienti per catalogo, carrello e ordini.", "/manifest-tbs-jewelry.webmanifest", "/jewelry-icon-192.png", "/app/jewelry/start", "#050505")
-
-
-@app.get("/app/gestionale/start")
-def app_gestionale_start():
-    return redirect(url_for("home") if session.get("user_id") else url_for("login"))
-
-
-@app.get("/app/jewelry/start")
-def app_jewelry_start():
-    return redirect(url_for("boutique"))
-
-
-@app.get("/healthz")
-def healthz():
-    return jsonify({"ok": True, "version": APP_VERSION, "database": DB_PATH, "ephemeral": DB_IS_EPHEMERAL})
-
-# ============================================================
-# v35.4 PWA FOUNDATION
-# ============================================================
-@app.get("/manifest.webmanifest")
-def pwa_manifest():
-    # Compatibilità con installazioni precedenti: il manifest storico ora punta al gestionale.
-    return pwa_manifest_gestionale()
-
-
-@app.get("/manifest-tbs-one.webmanifest")
-def pwa_manifest_gestionale():
-    manifest = {
-        "id": "/app/gestionale",
-        "name": "TBS One Gestionale",
-        "short_name": "TBS One",
-        "description": "Gestionale operativo TBS One per personale autorizzato",
-        "lang": "it-IT",
-        "start_url": "/app/gestionale/start?source=pwa&v=4330",
-        "scope": "/",
-        "display": "standalone",
-        "prefer_related_applications": False,
-        "orientation": "any",
-        "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
-        "launch_handler": {"client_mode": ["navigate-existing", "auto"]},
-        "categories": ["business", "productivity"],
-        "shortcuts": [
-            {"name":"Cassa","short_name":"Cassa","url":"/pos","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
-            {"name":"Magazzino","short_name":"Magazzino","url":"/products","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]},
-            {"name":"Ordini","short_name":"Ordini","url":"/catalog-requests","icons":[{"src":"/pwa-icon-192.png","sizes":"192x192"}]}
-        ],
-        "background_color": "#080c14",
-        "theme_color": "#111722",
-        "icons": [
-            {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
-        ]
-    }
-    response = jsonify(manifest)
-    response.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
-
-
-@app.get("/manifest-tbs-jewelry.webmanifest")
-def pwa_manifest_jewelry():
-    manifest = {
-        "id": "/app/jewelry",
-        "name": "TBS Jewelry",
-        "short_name": "TBS Jewelry",
-        "description": "Boutique TBS Jewelry per catalogo, carrello e ordini clienti",
-        "lang": "it-IT",
-        "start_url": "/app/jewelry/start?source=pwa&v=4330",
-        "scope": "/",
-        "display": "standalone",
-        "prefer_related_applications": False,
-        "orientation": "any",
-        "categories": ["shopping", "lifestyle"],
-        "shortcuts": [
-            {"name":"Boutique","short_name":"Boutique","url":"/boutique","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]},
-            {"name":"Carrello","short_name":"Carrello","url":"/boutique/carrello","icons":[{"src":"/jewelry-icon-192.png","sizes":"192x192"}]}
-        ],
-        "background_color": "#050505",
-        "theme_color": "#050505",
-        "icons": [
-            {"src": "/jewelry-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": "/jewelry-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
-        ]
-    }
-    response = jsonify(manifest)
-    response.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
-
-
-def _pwa_icon_file(filename):
-    path = os.path.join(APP_DIR, filename)
-    if not os.path.isfile(path):
-        return ("Icona PWA non disponibile", 404)
-    return send_file(path, mimetype="image/png", max_age=86400)
-
-@app.get("/pwa-icon-192.png")
-def pwa_icon_192():
-    return _pwa_icon_file("pwa-icon-192.png")
-
-@app.get("/pwa-icon-512.png")
-def pwa_icon_512():
-    return _pwa_icon_file("pwa-icon-512.png")
-
-@app.get("/jewelry-icon-192.png")
-def jewelry_icon_192():
-    return _pwa_icon_file("jewelry-icon-192.png")
-
-@app.get("/jewelry-icon-512.png")
-def jewelry_icon_512():
-    return _pwa_icon_file("jewelry-icon-512.png")
-
-@app.get("/pwa-icon.svg")
-def pwa_icon_svg():
-    svg = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'>
-    <rect width='512' height='512' rx='92' fill='#080c14'/>
-    <rect x='34' y='34' width='444' height='444' rx='70' fill='none' stroke='#dcb246' stroke-width='12'/>
-    <path d='M128 155 L256 62 L384 155' fill='none' stroke='#dcb246' stroke-width='12'/>
-    <text x='256' y='155' text-anchor='middle' font-family='Georgia,serif' font-weight='700' font-size='92' fill='#f6d98f'>1</text>
-    <text x='256' y='310' text-anchor='middle' font-family='Georgia,serif' font-weight='800' font-size='142' fill='#f6d98f'>TBS</text>
-    <text x='256' y='385' text-anchor='middle' font-family='Georgia,serif' font-weight='700' font-size='48' letter-spacing='10' fill='#dcb246'>ONE</text>
-    </svg>"""
-    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
-
-@app.get("/service-worker.js")
-def service_worker():
-    # Configurazione pubblica Firebase incorporata nel service worker; nessuna chiave privata è esposta.
-    config_json=json.dumps(FIREBASE_WEB_CONFIG,separators=(',',':'))
-    script = f"""
-const CACHE_NAME = 'tbs-one-dual-app-v43-2-0';
-const STATIC_ASSETS = ['/manifest-tbs-one.webmanifest','/manifest-tbs-jewelry.webmanifest','/pwa-icon.svg','/pwa-icon-192.png','/pwa-icon-512.png','/jewelry-icon-192.png','/jewelry-icon-512.png'];
-const FIREBASE_CONFIG = {config_json};
-
-self.addEventListener('install', event => {{
-  event.waitUntil((async () => {{
-    const cache = await caches.open(CACHE_NAME);
-    await Promise.all(STATIC_ASSETS.map(async asset => {{
-      try {{
-        const response = await fetch(asset, {{cache:'reload'}});
-        if (response.ok) await cache.put(asset, response.clone());
-      }} catch (error) {{
-        console.warn('Risorsa PWA non precaricata:', asset, error);
-      }}
-    }}));
-  }})());
-  self.skipWaiting();
-}});
-self.addEventListener('activate', event => {{
-  event.waitUntil(Promise.all([
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))),
-    self.clients.claim()
-  ]));
-}});
-
-/*
- * IMPORTANTE: il listener del click va registrato PRIMA delle librerie Firebase.
- * Firebase Messaging può installare un proprio notificationclick e intercettare il click
- * se il listener personalizzato viene dichiarato dopo importScripts().
- */
-self.addEventListener('notificationclick', event => {{
-  event.stopImmediatePropagation();
-  event.notification.close();
-  const payloadData=(event.notification && event.notification.data) || {{}};
-  const rawTarget=payloadData.url || payloadData.link || '/notifications';
-  let target;
-  try {{
-    target=new URL(rawTarget, self.location.origin).href;
-  }} catch (_err) {{
-    target=self.location.origin + '/notifications';
-  }}
-  if(!target.startsWith(self.location.origin)) target=self.location.origin + '/notifications';
-
-  event.waitUntil((async () => {{
-    const windows=await self.clients.matchAll({{type:'window',includeUncontrolled:true}});
-    for(const client of windows) {{
-      try {{
-        if('navigate' in client && client.url !== target) await client.navigate(target);
-        if('focus' in client) {{
-          await client.focus();
-          return;
-        }}
-      }} catch (_err) {{}}
-    }}
-    if(self.clients.openWindow) await self.clients.openWindow(target);
-  }})());
-}});
-
-self.addEventListener('fetch', event => {{
-  const req=event.request;
-  if(req.method!=='GET') return;
-  const url=new URL(req.url);
-  if(url.origin!==self.location.origin) return;
-  if(STATIC_ASSETS.includes(url.pathname)) {{
-    event.respondWith(caches.match(req).then(hit => hit || fetch(req)));
-    return;
-  }}
-  event.respondWith(fetch(req));
-}});
-
-if(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.appId) {{
-  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
-  importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
-  firebase.initializeApp(FIREBASE_CONFIG);
-  const messaging=firebase.messaging();
-  messaging.onBackgroundMessage(payload => {{
-    const data=payload.data || {{}};
-    const title=data.title || (payload.notification && payload.notification.title) || 'TBS One';
-    let target;
-    try {{ target=new URL(data.url || '/notifications', self.location.origin).href; }}
-    catch (_err) {{ target=self.location.origin + '/notifications'; }}
-    const options={{
-      body:data.body || (payload.notification && payload.notification.body) || '',
-      icon:'/pwa-icon-192.png',
-      badge:'/pwa-icon-192.png',
-      tag:data.kind ? 'tbs-'+data.kind+'-'+(data.reference_id||'') : 'tbs-push',
-      requireInteraction:data.kind==='discount_request',
-      renotify:true,
-      data:{{url:target,kind:data.kind||'',reference_id:data.reference_id||''}}
-    }};
-    return self.registration.showNotification(title,options);
-  }});
-}}
-"""
-    return Response(script, mimetype="application/javascript", headers={
-        "Cache-Control":"no-cache, no-store, must-revalidate",
-        "Service-Worker-Allowed":"/"
-    })
-
-# ============================================================
-# v43.5.0 DEV · RELEASE 3 COMPLETA
-# Magazzino PRO, etichette QR, cassa, ordini e garanzie
-# ============================================================
-def _v435_init():
-    with connect() as db:
-        db.executescript("""
-        CREATE TABLE IF NOT EXISTS cash_sessions(
-            id INTEGER PRIMARY KEY,
-            business_date TEXT NOT NULL,
-            opening_amount REAL NOT NULL DEFAULT 0,
-            opening_username TEXT NOT NULL,
-            opened_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            closing_counted REAL,
-            closing_theoretical REAL,
-            closing_difference REAL,
-            closing_notes TEXT,
-            closing_username TEXT,
-            closed_at TEXT,
-            status TEXT NOT NULL DEFAULT 'Aperta'
-        );
-        CREATE TABLE IF NOT EXISTS warranty_prints(
-            id INTEGER PRIMARY KEY,
-            sale_number TEXT NOT NULL,
-            product_code TEXT NOT NULL,
-            username TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS order_item_receipts(
-            id INTEGER PRIMARY KEY,
-            source_type TEXT NOT NULL,
-            source_id INTEGER NOT NULL,
-            product_code TEXT NOT NULL,
-            expected_quantity INTEGER NOT NULL DEFAULT 1,
-            received_quantity INTEGER NOT NULL DEFAULT 0,
-            username TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(source_type,source_id,product_code)
-        );
-        """)
-        db.commit()
-_v435_init()
-
-
-def _draw_qr(c, value, x, y, size):
-    widget=qr.QrCodeWidget(str(value))
-    bounds=widget.getBounds()
-    width=bounds[2]-bounds[0]; height=bounds[3]-bounds[1]
-    drawing=Drawing(size,size,transform=[size/width,0,0,size/height,0,0])
-    drawing.add(widget)
-    renderPDF.draw(drawing,c,x,y)
-
-
-def _label_products(mode='available', selected_ids=None):
-    selected_ids=selected_ids or []
-    with connect() as db:
-        sql="SELECT * FROM products WHERE COALESCE(active,1)=1"
-        args=[]
-        if mode=='available': sql += " AND COALESCE(quantity,0)>0"
-        elif mode=='new': sql += " AND COALESCE(is_new,0)=1"
-        elif mode=='selected' and selected_ids:
-            marks=','.join('?' for _ in selected_ids); sql += f" AND id IN ({marks})"; args.extend(selected_ids)
-        sql += " ORDER BY brand_code"
-        return db.execute(sql,args).fetchall()
-
-@app.get('/inventory/labels')
-@login_required
-@role_required('admin','manager')
-def label_print_center():
-    with connect() as db:
-        rows=db.execute("SELECT id,brand_code,category,quantity FROM products WHERE COALESCE(active,1)=1 ORDER BY brand_code").fetchall()
-        total_pieces=sum(max(0,int(x['quantity'] or 0)) for x in rows)
-    body='''<div class="dash-head"><div><span class="eyebrow">RELEASE 3</span><h1>Stampa etichette QR</h1><p class="muted">Etichette reali 35 × 15 mm, QR ad alto contrasto e codice interno grande.</p></div></div>
-    <div class="kpi-grid"><div class="kpi"><strong>Referenze</strong><div class="metric">{{rows|length}}</div></div><div class="kpi"><strong>Pezzi disponibili</strong><div class="metric">{{total_pieces}}</div></div></div>
-    <div class="grid"><div class="card"><h2>Stampa rapida</h2><p><a class="view" href="{{url_for('product_labels_pdf',mode='available',copies='pieces')}}">Tutti i pezzi disponibili</a></p><p><a href="{{url_for('product_labels_pdf',mode='available',copies='one')}}">Una per ogni referenza disponibile</a></p><p><a href="{{url_for('product_labels_pdf',mode='all',copies='one')}}">Tutte le referenze</a></p><p><a href="{{url_for('product_labels_pdf',mode='new',copies='pieces')}}">Solo ultimi inserimenti</a></p></div>
-    <div class="card"><h2>Selezione manuale</h2><form method="post" action="{{url_for('product_labels_selected_pdf')}}"><div style="max-height:430px;overflow:auto">{% for p in rows %}<label style="display:flex;gap:10px;align-items:center;border-bottom:1px solid #eee;padding:8px 0"><input type="checkbox" name="product_ids" value="{{p.id}}" style="width:auto"><b>{{p.brand_code}}</b><span class="muted">{{p.category or 'Altro'}} · {{p.quantity}} pz</span></label>{% endfor %}</div><label>Copie</label><select name="copies"><option value="one">Una per referenza</option><option value="pieces">Una per ogni pezzo disponibile</option></select><button>Genera PDF selezione</button></form></div></div>'''
-    return page('Stampa etichette QR',body,rows=rows,total_pieces=total_pieces)
-
-
-def _build_product_labels_pdf(products,copies_mode='one'):
-    items=[]
-    for p in products:
-        copies=max(1,int(p['quantity'] or 0)) if copies_mode=='pieces' else 1
-        for _ in range(copies): items.append(p)
-    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4)
-    label_w,label_h=35*mm,15*mm
-    cols,rows_per_page=6,19
-    x0=(A4[0]-cols*label_w)/2; y_top=(A4[1]+rows_per_page*label_h)/2
-    for i,p in enumerate(items):
-        slot=i%(cols*rows_per_page)
-        if i and slot==0: c.showPage()
-        col=slot%cols; row=slot//cols
-        x=x0+col*label_w; y=y_top-(row+1)*label_h
-        c.setStrokeColor(colors.Color(.75,.75,.75)); c.setLineWidth(.25); c.rect(x,y,label_w,label_h)
-        qr_size=13*mm
-        _draw_qr(c,p['brand_code'],x+1*mm,y+1*mm,qr_size)
-        c.setFillColor(colors.black); c.setFont('Helvetica-Bold',10)
-        code=str(p['brand_code'] or '')
-        c.drawString(x+15*mm,y+8.2*mm,code[:15])
-        c.setFont('Helvetica',5.5)
-        c.drawString(x+15*mm,y+4.8*mm,str(p['category'] or 'Gioiello')[:22])
-        c.setFont('Helvetica',4.5); c.drawString(x+15*mm,y+2.1*mm,'TBS · CODICE INTERNO')
-    c.save(); out.seek(0); return out,len(items)
-
-@app.get('/inventory/labels.pdf')
-@login_required
-@role_required('admin','manager')
-def product_labels_pdf():
-    mode=request.args.get('mode','available'); copies=request.args.get('copies','one')
-    products=_label_products(mode)
-    pdf,count=_build_product_labels_pdf(products,copies)
-    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'TBS_etichette_{count}_{mode}.pdf')
-
-@app.post('/inventory/labels/selected.pdf')
-@login_required
-@role_required('admin','manager')
-def product_labels_selected_pdf():
-    ids=[]
-    for raw in request.form.getlist('product_ids'):
-        try: ids.append(int(raw))
-        except ValueError: pass
-    if not ids:
-        flash('Seleziona almeno un prodotto.','warning'); return redirect(url_for('label_print_center'))
-    products=_label_products('selected',ids)
-    pdf,count=_build_product_labels_pdf(products,request.form.get('copies','one'))
-    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'TBS_etichette_selezione_{count}.pdf')
-
-@app.get('/inventory/labels/product/<int:product_id>.pdf')
-@login_required
-@role_required('admin','manager')
-def single_product_label_pdf(product_id):
-    with connect() as db: p=db.execute('SELECT * FROM products WHERE id=?',(product_id,)).fetchone()
-    if not p: flash('Prodotto non trovato.','error'); return redirect(url_for('products'))
-    pdf,_=_build_product_labels_pdf([p],'one')
-    return send_file(pdf,mimetype='application/pdf',as_attachment=True,download_name=f'etichetta_{p["brand_code"]}.pdf')
-
-@app.get('/sales/<sale_number>/warranty.pdf')
-@login_required
-def warranty_label_pdf(sale_number):
-    with connect() as db:
-        items=db.execute("""SELECT s.product_code,s.created_at,p.material,p.brand_code
-                            FROM sales s LEFT JOIN products p ON p.id=s.product_id
-                            WHERE s.sale_number=? AND COALESCE(s.status,'Confermata')='Confermata' ORDER BY s.id""",(sale_number,)).fetchall()
-        if not items:
-            flash('Vendita non trovata.','error'); return redirect(url_for('sales_log'))
-        for x in items: db.execute('INSERT INTO warranty_prints(sale_number,product_code,username) VALUES(?,?,?)',(sale_number,x['product_code'],session.get('user')))
-        db.commit()
-    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4)
-    w,h=70*mm,35*mm; cols=2; x0=(A4[0]-cols*w)/2; y_top=A4[1]-20*mm
-    for i,x in enumerate(items):
-        col=i%2; row=i//2; px=x0+col*w; py=y_top-(row+1)*h
-        if py<15*mm: c.showPage(); row=0; py=y_top-h
-        c.setLineWidth(.6); c.roundRect(px,py,w,h,3*mm)
-        _draw_qr(c,f'VENDITA:{sale_number}|PRODOTTO:{x["product_code"]}',px+3*mm,py+5*mm,25*mm)
-        c.setFont('Helvetica-Bold',10); c.drawString(px+31*mm,py+26*mm,'TBS · GARANZIA')
-        c.setFont('Helvetica-Bold',9); c.drawString(px+31*mm,py+20*mm,str(x['product_code']))
-        c.setFont('Helvetica',7); c.drawString(px+31*mm,py+15*mm,f"Materiale: {x['material'] or 'Non indicato'}")
-        c.drawString(px+31*mm,py+10.5*mm,f"Vendita: {sale_number}")
-        c.drawString(px+31*mm,py+6*mm,f"Data: {format_rome(x['created_at'],'%d/%m/%Y')}")
-    c.save(); out.seek(0)
-    return send_file(out,mimetype='application/pdf',as_attachment=True,download_name=f'garanzia_{sale_number}.pdf')
-
-@app.route('/treasury/cash-session',methods=['GET','POST'])
-@login_required
-@role_required('admin','manager')
-def cash_session():
-    today=now_rome().date().isoformat()
-    with connect() as db:
-        current=db.execute("SELECT * FROM cash_sessions WHERE business_date=? ORDER BY id DESC LIMIT 1",(today,)).fetchone()
-        if request.method=='POST':
-            action=request.form.get('action')
-            if action=='open':
-                if current and current['status']=='Aperta': flash('La cassa di oggi è già aperta.','warning')
-                else:
-                    amount=max(0,float(request.form.get('opening_amount','0') or 0))
-                    db.execute('INSERT INTO cash_sessions(business_date,opening_amount,opening_username) VALUES(?,?,?)',(today,amount,session.get('user')))
-                    log_action(db,'Apertura cassa',details=f'Fondo iniziale € {amount:.2f}'); db.commit(); flash('Cassa aperta.','success')
-                return redirect(request.url)
-            if action=='close' and current and current['status']=='Aperta':
-                counted=max(0,float(request.form.get('counted_amount','0') or 0))
-                theoretical=float(current['opening_amount'] or 0)+float(treasury_cash_balance(db) or 0)
-                diff=counted-theoretical; notes=request.form.get('notes','').strip()
-                db.execute("UPDATE cash_sessions SET closing_counted=?,closing_theoretical=?,closing_difference=?,closing_notes=?,closing_username=?,closed_at=CURRENT_TIMESTAMP,status='Chiusa' WHERE id=?",(counted,theoretical,diff,notes,session.get('user'),current['id']))
-                log_action(db,'Chiusura cassa',details=f'Teorico € {theoretical:.2f}; contato € {counted:.2f}; differenza € {diff:.2f}'); db.commit(); flash('Cassa chiusa e differenza registrata.','success'); return redirect(request.url)
-        history=db.execute('SELECT * FROM cash_sessions ORDER BY id DESC LIMIT 30').fetchall()
-    body='''<div class="dash-head"><div><span class="eyebrow">TESORERIA PRO</span><h1>Apertura e chiusura cassa</h1><p class="muted">Riconciliazione del contante con differenza tracciata.</p></div></div>{% if not current or current.status!='Aperta' %}<div class="card"><h2>Apri la cassa di oggi</h2><form method="post"><input type="hidden" name="action" value="open"><label>Fondo cassa iniziale</label><input type="number" step="0.01" min="0" name="opening_amount" value="0" required><button>Apri cassa</button></form></div>{% else %}<div class="card"><h2>Cassa aperta</h2><p>Fondo iniziale: <b>€ {{'%.2f'|format(current.opening_amount)}}</b><br>Aperta da {{current.opening_username}} · {{current.opened_at|rome_time}}</p><form method="post"><input type="hidden" name="action" value="close"><label>Contante realmente contato</label><input type="number" step="0.01" min="0" name="counted_amount" required><label>Nota</label><textarea name="notes"></textarea><button class="danger" onclick="return confirm('Confermi la chiusura della cassa?')">Chiudi e riconcilia</button></form></div>{% endif %}<div class="card"><h2>Ultime chiusure</h2><div class="table-wrap"><table><thead><tr><th>Giorno</th><th>Apertura</th><th>Teorico</th><th>Contato</th><th>Differenza</th><th>Stato</th></tr></thead><tbody>{% for x in history %}<tr><td>{{x.business_date}}</td><td>€ {{'%.2f'|format(x.opening_amount)}}</td><td>{% if x.closing_theoretical is not none %}€ {{'%.2f'|format(x.closing_theoretical)}}{% else %}-{% endif %}</td><td>{% if x.closing_counted is not none %}€ {{'%.2f'|format(x.closing_counted)}}{% else %}-{% endif %}</td><td>{% if x.closing_difference is not none %}€ {{'%.2f'|format(x.closing_difference)}}{% else %}-{% endif %}</td><td>{{x.status}}</td></tr>{% endfor %}</tbody></table></div></div>'''
-    return page('Apertura e chiusura cassa',body,current=current,history=history)
-
-@app.get('/orders/pro')
-@login_required
-@role_required('admin','manager')
-def orders_pro():
-    with connect() as db:
-        catalog=db.execute("SELECT * FROM supplier_catalog_requests ORDER BY CASE status WHEN 'Da ordinare' THEN 1 WHEN 'Ordinato' THEN 2 WHEN 'Arrivato' THEN 3 ELSE 4 END,id DESC").fetchall()
-        boutique=db.execute("SELECT * FROM customer_orders ORDER BY CASE status WHEN 'Nuovo' THEN 1 WHEN 'Ordinato' THEN 2 WHEN 'Arrivato' THEN 3 ELSE 4 END,id DESC LIMIT 200").fetchall()
-        pending=db.execute("SELECT supplier_code,brand_code,SUM(quantity) quantity,COUNT(*) customers FROM supplier_catalog_requests WHERE status IN ('Da ordinare','Ordinato') GROUP BY supplier_code,brand_code ORDER BY brand_code").fetchall()
-    body='''<div class="dash-head"><div><span class="eyebrow">ORDINI PRO</span><h1>Ordini e clienti in attesa</h1><p class="muted">Quantità aggregate, arrivi articolo per articolo e consegne tracciate.</p></div><div><a class="view" href="{{url_for('orders_pro_supplier_pdf')}}">PDF fornitore</a></div></div><div class="kpi-grid"><div class="kpi"><strong>Referenze da gestire</strong><div class="metric">{{pending|length}}</div></div><div class="kpi"><strong>Clienti catalogo</strong><div class="metric">{{catalog|length}}</div></div><div class="kpi"><strong>Ordini boutique</strong><div class="metric">{{boutique|length}}</div></div></div><div class="card"><h2>Riepilogo fornitore</h2><div class="table-wrap"><table><thead><tr><th>Codice interno</th><th>Codice fornitore</th><th>Quantità</th><th>Clienti</th></tr></thead><tbody>{% for x in pending %}<tr><td><b>{{x.brand_code}}</b></td><td>{{x.supplier_code}}</td><td>{{x.quantity}}</td><td>{{x.customers}}</td></tr>{% else %}<tr><td colspan="4">Nessun riordino aperto.</td></tr>{% endfor %}</tbody></table></div></div><div class="card"><h2>Clienti in attesa</h2>{% for x in catalog %}<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid #eee;padding:10px 0"><div><b>{{x.customer_name}}</b> · {{x.customer_phone}}<br><span>{{x.brand_code}} · {{x.quantity}} pz · {{x.status}}</span></div><form method="post" action="{{url_for('orders_pro_status',request_id=x.id)}}"><select name="status"><option>Da ordinare</option><option>Ordinato</option><option>Arrivato</option><option>Cliente contattato</option><option>Consegnato</option></select><button>Aggiorna</button></form></div>{% else %}<p>Nessun cliente in attesa.</p>{% endfor %}</div>'''
-    return page('Ordini PRO',body,catalog=catalog,boutique=boutique,pending=pending)
-
-@app.post('/orders/pro/catalog/<int:request_id>/status')
-@login_required
-@role_required('admin','manager')
-def orders_pro_status(request_id):
-    status=request.form.get('status','').strip()
-    allowed={'Da ordinare','Ordinato','Arrivato','Cliente contattato','Consegnato'}
-    if status not in allowed: flash('Stato non valido.','error'); return redirect(url_for('orders_pro'))
-    with connect() as db:
-        row=db.execute('SELECT * FROM supplier_catalog_requests WHERE id=?',(request_id,)).fetchone()
-        if not row: flash('Ordine non trovato.','error'); return redirect(url_for('orders_pro'))
-        db.execute('UPDATE supplier_catalog_requests SET status=? WHERE id=?',(status,request_id))
-        db.execute('INSERT INTO catalog_request_events(request_id,event_type,username,details) VALUES(?,?,?,?)',(request_id,status,session.get('user'),f'{row["brand_code"]} · {row["customer_name"]}'))
-        log_action(db,'Stato ordine cliente',details=f'{row["request_number"]}: {status}'); db.commit()
-    flash('Stato ordine aggiornato.','success'); return redirect(url_for('orders_pro'))
-
-@app.get('/orders/pro/supplier.pdf')
-@login_required
-@role_required('admin','manager')
-def orders_pro_supplier_pdf():
-    with connect() as db:
-        rows=db.execute("SELECT supplier_code,brand_code,SUM(quantity) quantity FROM supplier_catalog_requests WHERE status IN ('Da ordinare','Ordinato') GROUP BY supplier_code,brand_code ORDER BY supplier_code").fetchall()
-    out=BytesIO(); c=canvas.Canvas(out,pagesize=A4); y=A4[1]-22*mm
-    c.setFont('Helvetica-Bold',16); c.drawString(18*mm,y,'TBS · ORDINE FORNITORE'); y-=10*mm
-    c.setFont('Helvetica',9); c.drawString(18*mm,y,f'Generato il {now_rome().strftime("%d/%m/%Y %H:%M")}'); y-=10*mm
-    c.setFont('Helvetica-Bold',9); c.drawString(18*mm,y,'CODICE FORNITORE'); c.drawString(90*mm,y,'CODICE INTERNO'); c.drawRightString(190*mm,y,'Q.TÀ'); y-=5*mm
-    c.line(18*mm,y,190*mm,y); y-=6*mm
-    c.setFont('Helvetica',9)
-    for r in rows:
-        if y<20*mm: c.showPage(); y=A4[1]-20*mm
-        c.drawString(18*mm,y,str(r['supplier_code'])); c.drawString(90*mm,y,str(r['brand_code'])); c.drawRightString(190*mm,y,str(r['quantity'])); y-=7*mm
-    c.save(); out.seek(0)
-    return send_file(out,mimetype='application/pdf',as_attachment=True,download_name=f'ordine_fornitore_{now_rome().strftime("%Y%m%d")}.pdf')
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
