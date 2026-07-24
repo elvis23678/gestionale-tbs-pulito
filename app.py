@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.2.1 TBS ONE · Contrasto Altro Cassa"
+APP_VERSION = "v36.2.2 TBS ONE · Dashboard & Lock Polish"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -483,6 +483,34 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
 .order-kpi .metric{color:#f2c75d!important}
 .order-stage{color:#fff!important}
 
+
+/* v36.2.2 · Dashboard polish */
+.tbs-action{position:relative}
+.tbs-action .tbs-action-icon{flex:0 0 auto}
+.tbs-action b{max-width:100%;text-align:center}
+.tbs-action[href*="inventory"] b,
+.tbs-action[href*="products"] b{font-size:clamp(14px,3.65vw,17px)!important;letter-spacing:-.025em!important}
+.tbs-kpi small,.tbs-kpi .muted{color:#c8c2b8!important}
+@media(max-width:620px){
+ .tbs-actions{align-items:stretch}
+ .tbs-action{min-height:116px!important;padding:12px 9px!important}
+ .tbs-action b{font-size:clamp(15px,4.1vw,18px)!important}
+ .tbs-action[href*="inventory"] b,
+ .tbs-action[href*="products"] b{font-size:clamp(13px,3.55vw,16px)!important;letter-spacing:-.035em!important}
+ .tbs-action-icon{margin-bottom:12px!important}
+ .tbs-kpi{padding:13px!important}
+ .tbs-kpi small{font-size:12px!important;line-height:1.25!important}
+ main{padding-bottom:128px!important}
+ .mobile-dock{gap:3px!important;padding:7px!important}
+ .mobile-dock a,.mobile-dock button{min-width:0!important;padding:8px 5px!important}
+ .mobile-dock a span,.mobile-dock button span{margin-bottom:3px!important}
+}
+@media(max-width:360px){
+ .tbs-action[href*="inventory"] b,
+ .tbs-action[href*="products"] b{font-size:12.5px!important;letter-spacing:-.045em!important}
+ .mobile-dock{left:8px!important;right:8px!important}
+}
+
 </style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/more' %}active{% endif %}" href="{{url_for('more_page')}}" aria-label="Apri altre funzioni"><span>≡</span>Altro</a></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
@@ -867,16 +895,42 @@ def start_user_session(db, user, audit_action="Login badge"):
     session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
     log_action(db,audit_action); db.commit()
 
-def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=True):
+def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=True, privacy_blur=False):
     """Scanner QR compatibile con Safari macOS/iPhone, Chrome ed Edge."""
     auto_value = "true" if auto_start else "false"
-    return r'''<div class="card badge-login" style="max-width:520px;margin:20px auto;text-align:center">
+    privacy_class = " badge-privacy" if privacy_blur else ""
+    privacy_overlay = """
+  <div class="badge-privacy-overlay" aria-hidden="true">
+    <div class="badge-lock-icon">🔒</div>
+    <strong>Avvicina il badge</strong>
+    <span>La fotocamera è attiva</span>
+  </div>""" if privacy_blur else ""
+    return r'''<div class="card badge-login{privacy_class}" style="max-width:520px;margin:20px auto;text-align:center">
 <h2 style="margin-top:0">📷 Inquadra il badge</h2>
 <p class="muted">La fotocamera si avvia automaticamente. Inquadra il QR nel riquadro.</p>
-<div style="position:relative;overflow:hidden;border-radius:16px;background:#111;min-height:250px">
+<style>
+.badge-privacy{background:linear-gradient(145deg,#15130d,#080808)!important;border:1px solid rgba(232,190,91,.48)!important;color:#fff!important}
+.badge-privacy h2{color:#fff!important}
+.badge-privacy .muted{color:#d6d0c5!important}
+.badge-camera-shell{position:relative;overflow:hidden;border-radius:18px;background:#050505;min-height:250px;border:1px solid rgba(232,190,91,.44)}
+.badge-privacy #badgeVideo{filter:blur(14px) brightness(.38) saturate(.72);transform:scale(1.08);transition:filter .25s ease,transform .25s ease}
+.badge-privacy #badgeGuide{border-color:#e5bd5d!important;box-shadow:0 0 0 999px rgba(0,0,0,.30),0 0 22px rgba(229,189,93,.28)!important}
+.badge-privacy-overlay{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.08),rgba(0,0,0,.28));text-align:center}
+.badge-privacy-overlay .badge-lock-icon{display:grid;width:68px;height:68px;place-items:center;margin-bottom:12px;border:1px solid rgba(239,202,112,.68);border-radius:22px;background:rgba(4,4,4,.72);font-size:31px;box-shadow:0 0 28px rgba(218,174,70,.22)}
+.badge-privacy-overlay strong{color:#fff;font-size:24px;font-family:Georgia,"Times New Roman",serif;text-shadow:0 2px 12px #000}
+.badge-privacy-overlay span{margin-top:6px;color:#efd792;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.badge-privacy.badge-success #badgeVideo{filter:blur(5px) brightness(.58);transform:scale(1.04)}
+.badge-privacy.badge-success .badge-privacy-overlay{opacity:0;transition:opacity .18s ease}
+@media(max-width:560px){
+ .badge-privacy-overlay .badge-lock-icon{width:58px;height:58px;font-size:27px}
+ .badge-privacy-overlay strong{font-size:21px}
+}
+</style>
+<div class="badge-camera-shell">
   <video id="badgeVideo" playsinline webkit-playsinline muted autoplay style="width:100%;height:300px;object-fit:cover;display:block;background:#111"></video>
   <canvas id="badgeCanvas" style="display:none"></canvas>
-  <div id="badgeGuide" style="position:absolute;inset:16%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div>
+  <div id="badgeGuide" style="position:absolute;z-index:3;inset:16%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div>
+  {privacy_overlay}
 </div>
 <form id="badgeForm" method="post" action="{target}" style="margin-top:12px">
   <input id="badgePayload" name="badge_payload" placeholder="Codice badge o lettore USB" autocomplete="off">
@@ -946,6 +1000,8 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     field.value=clean;
     status.textContent='✓ Badge letto. Accesso in corso…';
     guide.style.borderColor='#34d399';
+    const badgeCard=video.closest('.badge-login');
+    if(badgeCard) badgeCard.classList.add('badge-success');
     halt().finally(()=>form.submit());
   }}
 
@@ -1041,7 +1097,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     }}
   }}
 }})();
-</script>'''.format(target=target_url,label=button_label,auto=auto_value)
+</script>'''.format(target=target_url,label=button_label,auto=auto_value,privacy_class=privacy_class,privacy_overlay=privacy_overlay)
 
 def product_scanner_html(target_url):
     """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
@@ -2050,8 +2106,14 @@ def unlock_register():
                 if not same_user and locked_cart_id: flash(f"Il carrello di {locked_username} è rimasto sospeso e non è stato perso.")
                 return redirect(url_for("cart") if same_user and locked_cart_id else url_for("home"))
         flash("Badge o credenziali non validi; account eventualmente disattivato.")
-    scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True)
-    return page("Cassa bloccata",'''<div style="max-width:560px;margin:22px auto;text-align:center"><div style="font-size:48px">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Mostra il badge alla webcam.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
+    scanner=badge_scanner_html(url_for("unlock_register"),"Sblocca con badge",auto_start=True,privacy_blur=True)
+    return page("Cassa bloccata",'''<style>
+.lock-head{max-width:560px;margin:22px auto 14px;padding:22px;text-align:center;border:1px solid rgba(232,190,91,.42);border-radius:22px;background:linear-gradient(145deg,#17140d,#080808)}
+.lock-head .lock-symbol{display:grid;width:62px;height:62px;margin:0 auto 12px;place-items:center;border:1px solid rgba(232,190,91,.55);border-radius:20px;background:#080808;font-size:30px}
+.lock-head h1{margin:0;color:#fff}
+.lock-head p{margin:9px 0 0;color:#d8d2c8}
+.lock-head b{color:#f1ca68}
+</style><div class="lock-head"><div class="lock-symbol">🔒</div><h1>Cassa bloccata</h1><p>Sessione di <b>{{locked_username}}</b> protetta. Avvicina il badge al riquadro.</p>{% if has_cart %}<p class="flash">Il carrello è stato salvato e non andrà perso.</p>{% endif %}</div>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:700;padding:6px">Sblocca con username e password</summary><form method="post" style="margin-top:14px"><p><input name="username" value="{{locked_username}}" required></p><p><input name="password" type="password" placeholder="Password" required></p><button>Sblocca cassa</button></form><p class="muted">Un altro utente può accedere: il carrello precedente resterà sospeso.</p></details>''',locked_username=locked_username,has_cart=bool(locked_cart_id),scanner=scanner)
 
 @app.get("/logout")
 def logout():
