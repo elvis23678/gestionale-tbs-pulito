@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.0.3 TBS ONE · Dashboard Mobile First RC4"
+APP_VERSION = "v36.0.4 TBS ONE · CRM Contatti Hotfix RC5"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3681,13 +3681,12 @@ def inventory_pro():
 def customers_crm():
     q=request.args.get('q','').strip()
     with connect() as db:
-        _ensure_catalog_requests(db)
         # Unifica i clienti presenti negli ordini boutique e nelle richieste catalogo.
         sql='''SELECT customer_name name, customer_phone phone, COUNT(*) orders,
                MAX(created_at) last_activity, GROUP_CONCAT(DISTINCT status) statuses
                FROM (SELECT customer_name,customer_phone,status,created_at FROM customer_orders
                      UNION ALL
-                     SELECT customer_name,customer_phone,status,created_at FROM catalog_requests)
+                     SELECT customer_name,customer_phone,status,created_at FROM supplier_catalog_requests)
                WHERE TRIM(COALESCE(customer_name,''))<>'''''
         params=[]
         if q:
