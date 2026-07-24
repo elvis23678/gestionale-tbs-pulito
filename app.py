@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.8 TBS ONE · UI Rollout"
+APP_VERSION = "v35.0.9 TBS ONE · Login Recovery"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -747,10 +747,13 @@ def badge_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 def normalize_badge_payload(value):
+    """Normalizza il contenuto QR/lettore senza alterare il token reale."""
     value=(value or "").strip()
+    # Alcuni scanner mobili aggiungono virgolette tipografiche o delimitatori.
+    value=value.strip("\"'“”‘’` \t\r\n")
     if value.upper().startswith(BADGE_PREFIX):
         value=value[len(BADGE_PREFIX):]
-    return value.strip()
+    return value.strip().strip("\"'“”‘’` \t\r\n")
 
 def find_badge_user(db, payload):
     token=normalize_badge_payload(payload)
@@ -1806,8 +1809,9 @@ def login():
                     return redirect(url_for("home"))
                 flash("Badge non valido, revocato o account disattivato.")
             else:
-                user=db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
-                if user and check_password_hash(user["password_hash"],request.form.get("password","")):
+                username=request.form.get("username","").strip()
+                user=db.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",(username,)).fetchone()
+                if user and user["password_hash"] and check_password_hash(user["password_hash"],request.form.get("password","")):
                     start_user_session(db,user,"Login")
                     return redirect(url_for("home"))
                 flash("Credenziali non corrette o account disattivato.")
@@ -3543,6 +3547,59 @@ def audit_log():
     return page("Storico",'''<h1>Storico operazioni</h1><div class="card">{% if rows %}{% for x in rows %}<p><b>{{x.created_at|rome_time}}</b> · {{x.username}} · {{x.action}}{% if x.product_code %} · <b>{{x.product_code}}</b>{% endif %}{% if x.details %}<br><span class="muted">{{x.details}}</span>{% endif %}</p><hr>{% endfor %}{% else %}<p>Nessuna operazione registrata.</p>{% endif %}</div>''',rows=rows)
 
 init_db()
+
+def apply_login_recovery():
+    """Ripristino controllato dell'accesso tramite variabili Render.
+
+    Per usarlo nel solo ambiente DEV impostare temporaneamente:
+      TBS_RECOVERY_PASSWORD = nuova password (minimo 8 caratteri)
+      TBS_RECOVERY_USERNAME = admin  (facoltativo, default admin)
+      TBS_RECOVERY_BADGE_TOKEN = token badge senza prefisso TBSLOGIN: (facoltativo)
+
+    Dopo il primo accesso, rimuovere le variabili da Render.
+    Nessuna password viene scritta nei log.
+    """
+    password=os.environ.get("TBS_RECOVERY_PASSWORD","")
+    if not password:
+        return
+    username=(os.environ.get("TBS_RECOVERY_USERNAME","admin") or "admin").strip()
+    badge_token=normalize_badge_payload(os.environ.get("TBS_RECOVERY_BADGE_TOKEN",""))
+    if len(password)<8:
+        app.logger.error("Login Recovery ignorato: TBS_RECOVERY_PASSWORD deve avere almeno 8 caratteri.")
+        return
+    with connect() as db:
+        user=db.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE",(username,)).fetchone()
+        password_hash=generate_password_hash(password)
+        if user:
+            updates=["password_hash=?","active=1"]
+            params=[password_hash]
+            if badge_token:
+                updates.extend(["badge_token_hash=?","badge_created_at=CURRENT_TIMESTAMP"])
+                params.append(badge_hash(badge_token))
+            params.append(user["id"])
+            db.execute(f"UPDATE users SET {','.join(updates)} WHERE id=?",params)
+            recovered_username=user["username"]
+        else:
+            columns=["username","password_hash","role","active","badge_name"]
+            values=[username,password_hash,"admin",1,username]
+            placeholders=["?"]*len(columns)
+            if badge_token:
+                columns.extend(["badge_token_hash","badge_created_at"])
+                values.extend([badge_hash(badge_token),now_rome().isoformat()])
+                placeholders.extend(["?","?"])
+            db.execute(
+                f"INSERT INTO users({','.join(columns)}) VALUES({','.join(placeholders)})",
+                values,
+            )
+            recovered_username=username
+        try:
+            log_action(db,"Login Recovery applicato",details=recovered_username)
+        except Exception:
+            pass
+        db.commit()
+    app.logger.warning("Login Recovery applicato all'utente %s. Rimuovere le variabili TBS_RECOVERY_* dopo il test.",recovered_username)
+
+apply_login_recovery()
 
 @app.before_request
 def automatic_daily_closure():
