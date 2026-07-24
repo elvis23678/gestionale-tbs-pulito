@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.4.0 TBS ONE · Final Audit"
+APP_VERSION = "v36.4.1 TBS ONE · Scanner QR + PDF Hotfix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1226,216 +1226,201 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     )
 
 def product_scanner_html(target_url):
-    """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
-    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
-    replacements={
-        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
-        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
-        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
-        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
-        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
-        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
-        "Badge camera error":"Product QR camera error",
-        "Fotocamera non avviata.":"Fotocamera pronta.",
-    }
-    for old,new in replacements.items():
-        html=html.replace(old,new)
+    """Scanner QR prodotti autonomo e stabile, senza dipendere dallo scanner badge."""
+    target_json = repr(target_url)
+    return r"""
+    <style>
+      .product-scanner{max-width:760px;margin:0 auto}
+      .scanner-shell{position:relative;overflow:hidden;border-radius:22px;
+        border:1px solid rgba(224,182,71,.64);background:#050505;
+        min-height:420px;box-shadow:0 18px 45px rgba(0,0,0,.28)}
+      .scanner-shell video{width:100%;height:420px;object-fit:cover;display:block;background:#050505}
+      .scanner-guide{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+        width:min(64vw,270px);height:min(64vw,270px);border:3px solid rgba(255,255,255,.92);
+        border-radius:24px;box-shadow:0 0 0 9999px rgba(0,0,0,.32);
+        transition:.18s ease;pointer-events:none}
+      .scanner-line{position:absolute;left:10%;right:10%;height:2px;top:16%;
+        background:linear-gradient(90deg,transparent,#f1d179,transparent);
+        box-shadow:0 0 10px #f1d179;animation:tbsScanLine 2s ease-in-out infinite}
+      @keyframes tbsScanLine{0%,100%{top:16%}50%{top:82%}}
+      .scanner-status{position:absolute;left:12px;right:12px;bottom:12px;
+        padding:11px 13px;border-radius:13px;background:rgba(0,0,0,.78);
+        color:#fff;text-align:center;font-weight:800;backdrop-filter:blur(8px)}
+      .scanner-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+      .manual-box{margin-top:12px;padding:14px;border:1px solid rgba(224,182,71,.38);
+        border-radius:16px;background:#0b0b0a}
+      .manual-box form{display:grid;grid-template-columns:1fr auto;gap:10px}
+      .scanner-error{color:#ffb4b4}
+      @media(max-width:620px){
+        .scanner-shell,.scanner-shell video{min-height:360px;height:360px}
+        .scanner-controls,.manual-box form{grid-template-columns:1fr}
+      }
+    </style>
+    <div class="product-scanner">
+      <div class="scanner-shell">
+        <video id="productScannerVideo" playsinline muted></video>
+        <div class="scanner-guide" id="productScannerGuide"><div class="scanner-line"></div></div>
+        <div class="scanner-status" id="productScannerStatus">Avvio fotocamera…</div>
+      </div>
 
-    # Ottimizzazioni dedicate ai piccoli QR delle etichette articoli.
-    html=html.replace(
-        "width:{ideal:1280},height:{ideal:720}",
-        "width:{ideal:1920,min:1280},height:{ideal:1080,min:720}",
-        1
-    )
+      <div class="scanner-controls">
+        <button type="button" id="productScannerStart">Avvia fotocamera</button>
+        <button type="button" class="secondary" id="productScannerTorch">Torcia</button>
+      </div>
 
-    old_product_scan = r"""  function scanFrame(){
-    if(!running||submitted) return;
-    if(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0 && window.jsQR){
-      const maxWidth=900;
-      const scale=Math.min(1,maxWidth/video.videoWidth);
-      canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-      canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-        const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-        if(code&&code.data){submitBadge(code.data);return;}
-      }catch(e){}
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
+      <div class="manual-box">
+        <form method="post" action="__TARGET_URL__" id="productScannerForm">
+          <input type="hidden" name="badge_payload" id="productScannerPayload">
+          <input type="text" name="code" id="productScannerManual"
+                 placeholder="Inserisci codice prodotto" autocomplete="off">
+          <button type="submit">Cerca prodotto</button>
+        </form>
+      </div>
+      <canvas id="productScannerCanvas" hidden></canvas>
+    </div>
 
-    new_product_scan = r"""  let productDetector=null;
-  let lastProductScanAt=0;
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script>
+    (() => {
+      const video=document.getElementById('productScannerVideo');
+      const canvas=document.getElementById('productScannerCanvas');
+      const ctx=canvas.getContext('2d',{willReadFrequently:true})||canvas.getContext('2d');
+      const status=document.getElementById('productScannerStatus');
+      const guide=document.getElementById('productScannerGuide');
+      const startBtn=document.getElementById('productScannerStart');
+      const torchBtn=document.getElementById('productScannerTorch');
+      const payload=document.getElementById('productScannerPayload');
+      const form=document.getElementById('productScannerForm');
 
-  function enhanceProductImage(imageData){
-    const data=imageData.data;
-    let min=255,max=0;
-    for(let i=0;i<data.length;i+=4){
-      const lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
-      if(lum<min)min=lum;if(lum>max)max=lum;
-    }
-    const range=Math.max(35,max-min);
-    for(let i=0;i<data.length;i+=4){
-      let lum=Math.round(data[i]*.299+data[i+1]*.587+data[i+2]*.114);
-      lum=Math.max(0,Math.min(255,((lum-min)*255/range-128)*1.38+128));
-      data[i]=data[i+1]=data[i+2]=lum;
-    }
-    return imageData;
-  }
+      let stream=null,track=null,raf=null,submitted=false,detector=null,torchOn=false,lastScan=0;
 
-  function decodeProductCanvas(sourceCanvas,sourceContext){
-    if(!window.jsQR)return null;
-    try{
-      const normal=sourceContext.getImageData(0,0,sourceCanvas.width,sourceCanvas.height);
-      let result=window.jsQR(normal.data,normal.width,normal.height,{inversionAttempts:'attemptBoth'});
-      if(result&&result.data)return result.data;
-      const enhanced=enhanceProductImage(sourceContext.getImageData(0,0,sourceCanvas.width,sourceCanvas.height));
-      result=window.jsQR(enhanced.data,enhanced.width,enhanced.height,{inversionAttempts:'attemptBoth'});
-      return result&&result.data?result.data:null;
-    }catch(e){return null;}
-  }
+      function setStatus(message,error=false){
+        status.textContent=message;
+        status.classList.toggle('scanner-error',error);
+      }
 
-  async function scanFrame(){
-    if(!running||submitted)return;
-    const now=performance.now();
-    if(now-lastProductScanAt<55){scanTimer=requestAnimationFrame(scanFrame);return;}
-    lastProductScanAt=now;
+      async function stopCamera(){
+        if(raf)cancelAnimationFrame(raf);
+        raf=null;
+        if(stream)stream.getTracks().forEach(t=>t.stop());
+        stream=null;track=null;
+      }
 
-    if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
-      if('BarcodeDetector' in window){
+      async function submitCode(value){
+        const clean=(value||'').trim();
+        if(!clean||submitted)return;
+        submitted=true;
+        payload.value=clean;
+        guide.style.borderColor='#34d399';
+        guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.18),0 0 0 9999px rgba(0,0,0,.32)';
+        setStatus('✓ QR riconosciuto. Apertura prodotto…');
+        try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
+        await stopCamera();
+        form.submit();
+      }
+
+      function decodeCanvas(){
+        if(!window.jsQR||!ctx)return null;
         try{
-          productDetector=productDetector||new BarcodeDetector({formats:['qr_code']});
-          const found=await productDetector.detect(video);
-          if(found.length&&found[0].rawValue){submitBadge(found[0].rawValue);return;}
-        }catch(e){}
+          const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+          const result=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+          return result&&result.data?result.data:null;
+        }catch(e){return null}
       }
 
-      const vw=video.videoWidth,vh=video.videoHeight;
-      const cropRatio=.68;
-      const sw=Math.round(vw*cropRatio),sh=Math.round(vh*cropRatio);
-      const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
-      const targetWidth=Math.min(1280,Math.max(900,sw));
-      const targetHeight=Math.round(targetWidth*sh/sw);
+      async function scan(){
+        if(!stream||submitted)return;
+        const now=performance.now();
+        if(now-lastScan<70){raf=requestAnimationFrame(scan);return}
+        lastScan=now;
 
-      canvas.width=targetWidth;
-      canvas.height=targetHeight;
-      ctx.imageSmoothingEnabled=true;
-      ctx.imageSmoothingQuality='high';
-      ctx.drawImage(video,sx,sy,sw,sh,0,0,targetWidth,targetHeight);
+        if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
+          if('BarcodeDetector' in window){
+            try{
+              detector=detector||new BarcodeDetector({formats:['qr_code']});
+              const found=await detector.detect(video);
+              if(found.length&&found[0].rawValue){submitCode(found[0].rawValue);return}
+            }catch(e){}
+          }
 
-      let value=decodeProductCanvas(canvas,ctx);
-      if(value){submitBadge(value);return;}
+          if(ctx&&window.jsQR){
+            const vw=video.videoWidth,vh=video.videoHeight;
+            const ratio=.66;
+            const sw=Math.round(vw*ratio),sh=Math.round(vh*ratio);
+            const sx=Math.round((vw-sw)/2),sy=Math.round((vh-sh)/2);
+            const targetW=Math.min(1280,Math.max(900,sw));
+            canvas.width=targetW;
+            canvas.height=Math.round(targetW*sh/sw);
+            ctx.imageSmoothingEnabled=true;
+            ctx.imageSmoothingQuality='high';
+            ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+            let value=decodeCanvas();
+            if(value){submitCode(value);return}
 
-      // Secondo tentativo sull'intero fotogramma per QR fuori centro.
-      const fullWidth=Math.min(1120,vw);
-      const fullHeight=Math.round(fullWidth*vh/vw);
-      canvas.width=fullWidth;canvas.height=fullHeight;
-      ctx.drawImage(video,0,0,vw,vh,0,0,fullWidth,fullHeight);
-      value=decodeProductCanvas(canvas,ctx);
-      if(value){submitBadge(value);return;}
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
+            const fullW=Math.min(1100,vw);
+            canvas.width=fullW;
+            canvas.height=Math.round(fullW*vh/vw);
+            ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);
+            value=decodeCanvas();
+            if(value){submitCode(value);return}
+          }
+        }
+        raf=requestAnimationFrame(scan);
+      }
 
-    if old_product_scan not in html:
-        raise RuntimeError("Funzione scanFrame prodotto non trovata")
-    html=html.replace(old_product_scan,new_product_scan,1)
-
-    old_stream_ready = r"""      video.srcObject=stream;
-      video.setAttribute('playsinline','');"""
-    new_stream_ready = r"""      const productTrack=stream.getVideoTracks()[0];
-      try{
-        const caps=productTrack.getCapabilities?productTrack.getCapabilities():{};
-        const advanced=[];
-        if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
-        if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
-        if(advanced.length)await productTrack.applyConstraints({advanced});
-      }catch(e){}
-      video.srcObject=stream;
-      video.setAttribute('playsinline','');"""
-    if old_stream_ready not in html:
-        raise RuntimeError("Avvio stream prodotto non trovato")
-    html=html.replace(old_stream_ready,new_stream_ready,1)
-
-    feedback_js = r"""
-  let productScanAudioContext=null;
-
-  function productTone(success){
-    try{
-      const AudioCtx=window.AudioContext||window.webkitAudioContext;
-      if(!AudioCtx)return;
-      productScanAudioContext=productScanAudioContext||new AudioCtx();
-      if(productScanAudioContext.state==='suspended')productScanAudioContext.resume().catch(()=>{});
-      const now=productScanAudioContext.currentTime;
-      const osc=productScanAudioContext.createOscillator();
-      const gain=productScanAudioContext.createGain();
-      osc.type=success?'square':'sawtooth';
-      osc.frequency.setValueAtTime(success?1850:310,now);
-      osc.frequency.exponentialRampToValueAtTime(success?1450:190,now+(success?.075:.16));
-      gain.gain.setValueAtTime(.0001,now);
-      gain.gain.exponentialRampToValueAtTime(success?.16:.12,now+.006);
-      gain.gain.exponentialRampToValueAtTime(.0001,now+(success?.10:.19));
-      osc.connect(gain);gain.connect(productScanAudioContext.destination);
-      osc.start(now);osc.stop(now+(success?.11:.20));
-    }catch(e){}
-  }
-
-  async function verifyProductCode(clean){
-    const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{
-      cache:'no-store',
-      headers:{'Accept':'application/json'}
-    });
-    let data={};
-    try{data=await response.json()}catch(e){}
-    return {ok:response.ok&&data.ok,data:data};
-  }
-
-"""
-    html=html.replace("  function submitBadge(value){", feedback_js+"  async function submitBadge(value){", 1)
-
-    old_submit = """    submitted=true;
-    field.value=clean;
-    status.textContent='✓ QR letto. Ricerca del prodotto…';
-    guide.style.borderColor='#34d399';
-    halt().finally(()=>form.submit());"""
-
-    new_submit = """    submitted=true;
-    field.value=clean;
-    status.textContent='Verifica prodotto…';
-    guide.style.borderColor='#d6ae58';
-    try{
-      const result=await verifyProductCode(clean);
-      if(!result.ok){
-        productTone(false);
-        guide.style.borderColor='#ef4444';
-        guide.style.boxShadow='0 0 0 4px rgba(239,68,68,.18)';
-        status.textContent='✕ Prodotto non trovato: '+clean;
+      async function startCamera(){
         submitted=false;
-        setTimeout(()=>{
-          guide.style.borderColor='rgba(255,255,255,.9)';
-          guide.style.boxShadow='none';
-        },1400);
-        return;
-      }
-      productTone(true);
-      try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
-      status.textContent='✓ '+result.data.brand_code+' riconosciuto. Apertura…';
-      guide.style.borderColor='#34d399';
-      guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.16)';
-      await halt();
-      form.submit();
-    }catch(e){
-      productTone(false);
-      guide.style.borderColor='#ef4444';
-      status.textContent='Impossibile verificare il prodotto. Riprova.';
-      submitted=false;
-    }"""
+        await stopCamera();
+        setStatus('Richiesta accesso alla fotocamera…');
+        try{
+          stream=await navigator.mediaDevices.getUserMedia({
+            video:{
+              facingMode:{ideal:'environment'},
+              width:{ideal:1920},
+              height:{ideal:1080}
+            },
+            audio:false
+          });
+          track=stream.getVideoTracks()[0];
+          video.srcObject=stream;
+          await video.play();
 
-    if old_submit not in html:
-        raise RuntimeError("Submit scanner prodotto non trovato")
-    html=html.replace(old_submit,new_submit,1)
-    return html
+          try{
+            const caps=track.getCapabilities?track.getCapabilities():{};
+            const advanced=[];
+            if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.push({focusMode:'continuous'});
+            if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.push({exposureMode:'continuous'});
+            if(advanced.length)await track.applyConstraints({advanced});
+            torchBtn.disabled=!(caps.torch);
+          }catch(e){torchBtn.disabled=true}
+
+          setStatus('Fotocamera attiva. Avvicina il QR al centro.');
+          scan();
+        }catch(error){
+          console.error('Product scanner camera error',error);
+          setStatus('Fotocamera non disponibile. Controlla i permessi oppure inserisci il codice.',true);
+        }
+      }
+
+      startBtn.addEventListener('click',startCamera);
+      torchBtn.addEventListener('click',async()=>{
+        if(!track)return;
+        try{
+          torchOn=!torchOn;
+          await track.applyConstraints({advanced:[{torch:torchOn}]});
+          torchBtn.textContent=torchOn?'Spegni torcia':'Torcia';
+        }catch(e){
+          torchOn=false;
+          setStatus('Torcia non supportata su questo dispositivo.',true);
+        }
+      });
+
+      document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
+      window.addEventListener('pagehide',stopCamera);
+      startCamera();
+    })();
+    </script>
+    """.replace("__TARGET_URL__", target_json[1:-1])
 
 def create_badge_pdf(badge_name, token):
     """Crea un badge A6 verticale fronte/retro, pronto per stampa duplex."""
@@ -2587,7 +2572,7 @@ def scan_product_check():
 
 
 # ============================================================
-# v36.4.0 · Centro Etichette QR
+# v36.4.1 · Centro Etichette QR
 # ============================================================
 @app.route("/products/qr-labels", methods=["GET", "POST"])
 @role_required("admin","manager")
@@ -2618,7 +2603,7 @@ def product_qr_labels():
     <p class="muted">Formato A4 con etichette 35×15 mm. Il QR contiene il codice interno del prodotto.</p></div>
     <a class="secondary" href="{{url_for('products')}}">← Catalogo</a></div>
 
-    <form method="post" action="{{url_for('product_qr_labels_pdf')}}" target="_blank" class="card" id="qrLabelsForm">
+    <form method="post" action="{{url_for('product_qr_labels_pdf')}}" class="card" id="qrLabelsForm">
       <div class="qr-filter-grid">
         <label>Gruppo da stampare
           <select name="scope" id="qrScope">
@@ -2643,11 +2628,13 @@ def product_qr_labels():
         </label>
       </div>
 
-      <p><input id="qrSearch" placeholder="Cerca codice, categoria, materiale o colore" type="search"></p>
-      <div class="actions">
+      <div class="qr-actions" style="position:static;margin:16px 0">
+        <button type="submit">Genera PDF etichette</button>
         <button type="button" class="secondary" id="selectVisible">Seleziona visibili</button>
         <button type="button" class="secondary" id="clearSelection">Deseleziona tutto</button>
       </div>
+
+      <p><input id="qrSearch" placeholder="Cerca codice, categoria, materiale o colore" type="search"></p>
 
       <div class="qr-list" id="qrProductList">
       {% for p in rows %}
@@ -2661,10 +2648,7 @@ def product_qr_labels():
       {% endfor %}
       </div>
 
-      <div class="qr-actions">
-        <button type="submit">Genera PDF etichette</button>
-        <span class="muted">Si aprirà il PDF pronto per la stampa.</span>
-      </div>
+      <p class="muted" style="margin-top:12px">Il PDF verrà scaricato automaticamente ed è pronto per la stampa in scala 100%.</p>
     </form>
     <script>
     (()=>{const search=document.getElementById('qrSearch'),items=[...document.querySelectorAll('.qr-item')];
@@ -2683,93 +2667,126 @@ def product_qr_labels():
 @app.post("/products/qr-labels/pdf")
 @role_required("admin","manager")
 def product_qr_labels_pdf():
-    scope=(request.form.get("scope") or "selected").strip()
-    copies=max(1,min(20,int(request.form.get("copies") or 1)))
-    last_count=max(1,min(300,int(request.form.get("last_count") or 20)))
-    extra=(request.form.get("extra") or "stock").strip()
-    selected=[]
-    for value in request.form.getlist("product_ids"):
-        try:selected.append(int(value))
-        except (TypeError,ValueError):pass
+    try:
+        scope=(request.form.get("scope") or "selected").strip()
+        copies=max(1,min(20,int(request.form.get("copies") or 1)))
+        last_count=max(1,min(300,int(request.form.get("last_count") or 20)))
+        extra=(request.form.get("extra") or "stock").strip()
 
-    where="active=1"
-    params=[]
-    order="brand_code"
-    if scope=="selected":
-        if not selected:
-            flash("Seleziona almeno un articolo.")
+        selected=[]
+        for value in request.form.getlist("product_ids"):
+            try:
+                selected.append(int(value))
+            except (TypeError,ValueError):
+                pass
+
+        where="active=1"
+        params=[]
+        order="brand_code"
+
+        if scope=="selected":
+            if not selected:
+                flash("Seleziona almeno un articolo oppure scegli un altro gruppo.")
+                return redirect(url_for("product_qr_labels"))
+            marks=",".join("?" for _ in selected)
+            where+=f" AND id IN ({marks})"
+            params.extend(selected)
+        elif scope=="available":
+            where+=" AND quantity>0"
+        elif scope=="last":
+            order="id DESC"
+        elif scope=="low":
+            where+=" AND quantity<=1"
+        elif scope!="all":
+            scope="all"
+
+        sql=f"SELECT * FROM products WHERE {where} ORDER BY {order}"
+        if scope=="last":
+            sql+=" LIMIT ?"
+            params.append(last_count)
+
+        with connect() as db:
+            product_rows=db.execute(sql,params).fetchall()
+
+        if not product_rows:
+            flash("Nessun articolo corrisponde alla selezione.")
             return redirect(url_for("product_qr_labels"))
-        marks=",".join("?" for _ in selected)
-        where+=f" AND id IN ({marks})"; params.extend(selected)
-    elif scope=="available":
-        where+=" AND quantity>0"
-    elif scope=="last":
-        order="id DESC"
-    elif scope=="low":
-        where+=" AND quantity<=1"
-    elif scope!="all":
-        scope="all"
 
-    sql=f"SELECT * FROM products WHERE {where} ORDER BY {order}"
-    if scope=="last":
-        sql+=" LIMIT ?"; params.append(last_count)
-    with connect() as db:
-        rows=db.execute(sql,params).fetchall()
-    if not rows:
-        flash("Nessun articolo corrisponde alla selezione.")
+        labels=[]
+        for product in product_rows:
+            labels.extend([product]*copies)
+
+        buffer=BytesIO()
+        page_w,page_h=A4
+        c=canvas.Canvas(buffer,pagesize=A4)
+
+        label_w,label_h=35*mm,15*mm
+        margin_x,margin_y=8*mm,8*mm
+        cols=int((page_w-2*margin_x)//label_w)
+        rows_per_page=int((page_h-2*margin_y)//label_h)
+        per_page=max(1,cols*rows_per_page)
+
+        def draw_label(product,slot):
+            col=slot%cols
+            row=slot//cols
+            x=margin_x+col*label_w
+            y=page_h-margin_y-(row+1)*label_h
+
+            c.saveState()
+            c.setStrokeColor(colors.HexColor("#B88A2E"))
+            c.setLineWidth(.35)
+            c.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.3*mm,stroke=1,fill=0)
+
+            payload=(product["brand_code"] or "").strip()
+            qr_size=12*mm
+            widget=qr.QrCodeWidget(payload)
+            widget.barLevel="H"
+            bounds=widget.getBounds()
+            qr_w=bounds[2]-bounds[0]
+            qr_h=bounds[3]-bounds[1]
+            scale=qr_size/max(qr_w,qr_h)
+            drawing=Drawing(
+                qr_size,
+                qr_size,
+                transform=[scale,0,0,scale,-bounds[0]*scale,-bounds[1]*scale]
+            )
+            drawing.add(widget)
+            renderPDF.draw(drawing,c,x+1.2*mm,y+1.5*mm)
+
+            tx=x+14.2*mm
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica-Bold",7.2)
+            c.drawString(tx,y+10.1*mm,payload[:18])
+            c.setFont("Helvetica-Bold",7)
+            c.drawString(tx,y+6.7*mm,f"EUR {float(product['price'] or 0):.2f}")
+            c.setFont("Helvetica",5.2)
+            c.drawString(tx,y+3.9*mm,"TBS ONE")
+
+            if extra=="stock" and int(product["quantity"] or 0)<=1:
+                c.setFillColor(colors.HexColor("#9A1F22"))
+                c.setFont("Helvetica-Bold",5)
+                c.drawString(tx,y+1.7*mm,"ULTIMO PEZZO")
+            c.restoreState()
+
+        for index,product in enumerate(labels):
+            slot=index%per_page
+            if index and slot==0:
+                c.showPage()
+            draw_label(product,slot)
+
+        c.save()
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name="TBS_ONE_Etichette_QR_35x15.pdf"
+        )
+
+    except Exception as exc:
+        app.logger.exception("Errore generazione PDF etichette QR")
+        flash(f"Errore durante la generazione del PDF: {exc}")
         return redirect(url_for("product_qr_labels"))
-
-    labels=[]
-    for row in rows:
-        for _ in range(copies):
-            labels.append(row)
-
-    buffer=BytesIO()
-    pdf=canvas.Canvas(buffer,pagesize=A4)
-    page_w,page_h=A4
-    label_w,label_h=35*mm,15*mm
-    margin_x,margin_y=8*mm,8*mm
-    cols=max(1,int((page_w-2*margin_x)//label_w))
-    rows_per_page=max(1,int((page_h-2*margin_y)//label_h))
-    per_page=cols*rows_per_page
-
-    for index,p in enumerate(labels):
-        slot=index%per_page
-        if index and slot==0:
-            pdf.showPage()
-        col=slot%cols
-        row=slot//cols
-        x=margin_x+col*label_w
-        y=page_h-margin_y-(row+1)*label_h
-
-        pdf.setStrokeColor(colors.HexColor("#B88A2E"))
-        pdf.setLineWidth(.35)
-        pdf.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.3*mm,stroke=1,fill=0)
-
-        qr_size=12.2*mm
-        qr_widget=qr.QrCodeWidget(str(p["brand_code"]))
-        bounds=qr_widget.getBounds()
-        bw,bh=bounds[2]-bounds[0],bounds[3]-bounds[1]
-        drawing=Drawing(qr_size,qr_size,transform=[qr_size/bw,0,0,qr_size/bh,0,0])
-        drawing.add(qr_widget)
-        renderPDF.draw(drawing,pdf,x+1.2*mm,y+1.4*mm)
-
-        tx=x+14.4*mm
-        pdf.setFillColor(colors.black)
-        pdf.setFont("Helvetica-Bold",7.4)
-        pdf.drawString(tx,y+10.2*mm,str(p["brand_code"])[:18])
-        pdf.setFont("Helvetica-Bold",7.2)
-        pdf.drawString(tx,y+6.7*mm,f"EUR {float(p['price'] or 0):.2f}")
-        pdf.setFont("Helvetica",5.2)
-        pdf.drawString(tx,y+3.9*mm,"TBS ONE")
-        if extra=="stock" and int(p["quantity"] or 0)<=1:
-            pdf.setFillColor(colors.HexColor("#9A1F22"))
-            pdf.setFont("Helvetica-Bold",5.1)
-            pdf.drawString(tx,y+1.7*mm,"ULTIMO PEZZO")
-
-    pdf.save()
-    buffer.seek(0)
-    return send_file(buffer,as_attachment=False,download_name="TBS_ONE_Etichette_QR.pdf",mimetype="application/pdf")
 
 
 @app.route("/products/scan",methods=["GET","POST"])
