@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.1.1 TBS ONE · Scanner Beep RC2"
+APP_VERSION = "v36.2.0 TBS ONE · Mobile UX Stable"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1030,44 +1030,83 @@ def product_scanner_html(target_url):
     for old,new in replacements.items():
         html=html.replace(old,new)
 
-    # Feedback da cassa: beep breve + vibrazione quando il QR prodotto viene acquisito.
-    feedback_js = r'''
+    feedback_js = r"""
   let productScanAudioContext=null;
-  function playProductScanFeedback(){
+
+  function productTone(success){
     try{
       const AudioCtx=window.AudioContext||window.webkitAudioContext;
-      if(AudioCtx){
-        productScanAudioContext=productScanAudioContext||new AudioCtx();
-        if(productScanAudioContext.state==='suspended'){
-          productScanAudioContext.resume().catch(()=>{});
-        }
-        const now=productScanAudioContext.currentTime;
-        const oscillator=productScanAudioContext.createOscillator();
-        const gain=productScanAudioContext.createGain();
-        oscillator.type='square';
-        oscillator.frequency.setValueAtTime(1850,now);
-        oscillator.frequency.exponentialRampToValueAtTime(1450,now+0.075);
-        gain.gain.setValueAtTime(0.0001,now);
-        gain.gain.exponentialRampToValueAtTime(0.18,now+0.006);
-        gain.gain.exponentialRampToValueAtTime(0.0001,now+0.095);
-        oscillator.connect(gain);
-        gain.connect(productScanAudioContext.destination);
-        oscillator.start(now);
-        oscillator.stop(now+0.10);
-      }
-    }catch(e){}
-    try{
-      if(navigator.vibrate) navigator.vibrate(55);
+      if(!AudioCtx)return;
+      productScanAudioContext=productScanAudioContext||new AudioCtx();
+      if(productScanAudioContext.state==='suspended')productScanAudioContext.resume().catch(()=>{});
+      const now=productScanAudioContext.currentTime;
+      const osc=productScanAudioContext.createOscillator();
+      const gain=productScanAudioContext.createGain();
+      osc.type=success?'square':'sawtooth';
+      osc.frequency.setValueAtTime(success?1850:310,now);
+      osc.frequency.exponentialRampToValueAtTime(success?1450:190,now+(success?.075:.16));
+      gain.gain.setValueAtTime(.0001,now);
+      gain.gain.exponentialRampToValueAtTime(success?.16:.12,now+.006);
+      gain.gain.exponentialRampToValueAtTime(.0001,now+(success?.10:.19));
+      osc.connect(gain);gain.connect(productScanAudioContext.destination);
+      osc.start(now);osc.stop(now+(success?.11:.20));
     }catch(e){}
   }
 
-'''
-    html=html.replace("  function submitBadge(value){", feedback_js+"  function submitBadge(value){", 1)
-    html=html.replace(
-        "    submitted=true;\n    field.value=clean;",
-        "    submitted=true;\n    playProductScanFeedback();\n    field.value=clean;",
-        1
-    )
+  async function verifyProductCode(clean){
+    const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{
+      cache:'no-store',
+      headers:{'Accept':'application/json'}
+    });
+    let data={};
+    try{data=await response.json()}catch(e){}
+    return {ok:response.ok&&data.ok,data:data};
+  }
+
+"""
+    html=html.replace("  function submitBadge(value){", feedback_js+"  async function submitBadge(value){", 1)
+
+    old_submit = """    submitted=true;
+    field.value=clean;
+    status.textContent='✓ QR letto. Ricerca del prodotto…';
+    guide.style.borderColor='#34d399';
+    halt().finally(()=>form.submit());"""
+
+    new_submit = """    submitted=true;
+    field.value=clean;
+    status.textContent='Verifica prodotto…';
+    guide.style.borderColor='#d6ae58';
+    try{
+      const result=await verifyProductCode(clean);
+      if(!result.ok){
+        productTone(false);
+        guide.style.borderColor='#ef4444';
+        guide.style.boxShadow='0 0 0 4px rgba(239,68,68,.18)';
+        status.textContent='✕ Prodotto non trovato: '+clean;
+        submitted=false;
+        setTimeout(()=>{
+          guide.style.borderColor='rgba(255,255,255,.9)';
+          guide.style.boxShadow='none';
+        },1400);
+        return;
+      }
+      productTone(true);
+      try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
+      status.textContent='✓ '+result.data.brand_code+' riconosciuto. Apertura…';
+      guide.style.borderColor='#34d399';
+      guide.style.boxShadow='0 0 0 4px rgba(52,211,153,.16)';
+      await halt();
+      form.submit();
+    }catch(e){
+      productTone(false);
+      guide.style.borderColor='#ef4444';
+      status.textContent='Impossibile verificare il prodotto. Riprova.';
+      submitted=false;
+    }"""
+
+    if old_submit not in html:
+        raise RuntimeError("Submit scanner prodotto non trovato")
+    html=html.replace(old_submit,new_submit,1)
     return html
 
 def create_badge_pdf(badge_name, token):
@@ -1921,11 +1960,26 @@ def login():
                 flash("Badge non valido, revocato o account disattivato.")
             else:
                 username=request.form.get("username","").strip()
+                password=request.form.get("password","")
                 user=db.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",(username,)).fetchone()
-                if user and user["password_hash"] and check_password_hash(user["password_hash"],request.form.get("password","")):
+
+                # L'account tecnico Admin usa sempre la password configurata su Render.
+                # Non dipende dall'hash eventualmente presente nel database.
+                if username.lower()=="admin":
+                    admin_password=os.environ.get("TBS_ADMIN_PASSWORD","").strip()
+                    admin_user=db.execute("SELECT * FROM users WHERE role='admin' AND active=1 ORDER BY is_system_admin DESC,id LIMIT 1").fetchone()
+                    if not admin_password:
+                        flash("Accesso Admin non configurato: manca TBS_ADMIN_PASSWORD su Render.","error")
+                    elif admin_user and secrets.compare_digest(password,admin_password):
+                        start_user_session(db,admin_user,"Login Admin tecnico")
+                        return redirect(url_for("home"))
+                    else:
+                        flash("Password Admin non corretta.","error")
+                elif user and user["password_hash"] and check_password_hash(user["password_hash"],password):
                     start_user_session(db,user,"Login")
                     return redirect(url_for("home"))
-                flash("Credenziali non corrette o account disattivato.")
+                else:
+                    flash("Credenziali non corrette o account disattivato.","error")
     scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
     return login_page("Accesso · TBS Gestionale",'''<section class="login-intro"><span class="login-eyebrow">ACCESSO SICURO</span><h1>Benvenuto in<br><em>TBS ONE.</em></h1><p>Inquadra il badge oppure accedi con le tue credenziali.</p></section>{{scanner|safe}}<details class="card" style="max-width:520px;margin:16px auto"><summary style="cursor:pointer;font-weight:800;padding:4px 2px">Accedi con username e password</summary><form method="post" style="margin-top:16px"><p><input name="username" autocomplete="username" placeholder="Utente" required></p><p class="password-wrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" required><button class="password-toggle" type="button" aria-label="Mostra password" onclick="const p=document.getElementById('loginPassword');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'👁':'🙈'">👁</button></p><button class="login-submit">Accedi</button></form><p class="muted" style="text-align:center;margin-bottom:0">Blocco automatico dopo {{minutes}} minuti.</p></details>''',minutes=max(1,LOCK_TIMEOUT_SECONDS//60),scanner=scanner)
 
@@ -1946,8 +2000,17 @@ def unlock_register():
     if request.method=="POST":
         with connect() as db:
             badge_payload=request.form.get("badge_payload","")
-            user=find_badge_user(db,badge_payload) if badge_payload else db.execute("SELECT * FROM users WHERE username=? AND active=1",(request.form.get("username","").strip(),)).fetchone()
-            valid=bool(user) if badge_payload else bool(user and check_password_hash(user["password_hash"],request.form.get("password","")))
+            unlock_username=request.form.get("username","").strip()
+            unlock_password=request.form.get("password","")
+            user=find_badge_user(db,badge_payload) if badge_payload else db.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE AND active=1",(unlock_username,)).fetchone()
+            if badge_payload:
+                valid=bool(user)
+            elif unlock_username.lower()=="admin":
+                admin_password=os.environ.get("TBS_ADMIN_PASSWORD","").strip()
+                user=db.execute("SELECT * FROM users WHERE role='admin' AND active=1 ORDER BY is_system_admin DESC,id LIMIT 1").fetchone()
+                valid=bool(user and admin_password and secrets.compare_digest(unlock_password,admin_password))
+            else:
+                valid=bool(user and user["password_hash"] and check_password_hash(user["password_hash"],unlock_password))
             if valid:
                 same_user=user["id"]==locked_user_id
                 session.clear(); session.permanent=True; session["user_id"]=user["id"]; session["user"]=user["username"]; session["role"]=user["role"]
@@ -2043,6 +2106,23 @@ def price_check():
     is_manager=session.get("role") in ("admin","manager")
     return page("Assistente banco",'<style>\n.counter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.counter-title{font-size:clamp(34px,7vw,54px);line-height:1.02;margin:0;letter-spacing:-1.5px}.recent-link{text-decoration:none;background:#fff4d6;color:#765300;border:1px solid #e7c96d;padding:9px 12px;border-radius:999px;font-weight:800;white-space:nowrap}.price-search{position:sticky;top:0;z-index:3;background:#f5f6f8;padding:8px 0 12px}.price-search .card{box-shadow:0 8px 28px rgba(17,24,39,.07)}.price-search form{display:grid;grid-template-columns:1fr auto;gap:10px}.price-search input{font-size:20px;padding:17px}.price-search button{font-size:18px;padding:14px 24px}.search-hint{font-size:13px;margin:9px 2px 0;color:#6b7280}.counter-card{border:1px solid #e2c477;border-top:7px solid #c4932f;box-shadow:0 12px 34px rgba(17,24,39,.09);padding:20px}.counter-grid{display:grid;grid-template-columns:minmax(190px,330px) 1fr;gap:28px;align-items:center}.counter-photo{width:100%;height:330px;object-fit:contain;border-radius:16px;background:linear-gradient(145deg,#fafafa,#eceff3);border:1px solid #e5e7eb}.counter-name{font-size:clamp(25px,5vw,38px);line-height:1.1;margin:0}.counter-price{font-size:clamp(48px,10vw,76px);line-height:1;font-weight:950;margin:16px 0 18px;letter-spacing:-2px;color:#111827}.stock{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;font-weight:900;font-size:17px}.stock-ok{background:#dff5e6;color:#176b32}.stock-low{background:#fff0bf;color:#805b00}.stock-out{background:#f8d7da;color:#8a1c26}.product-meta{margin:18px 0 8px}.code-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:11px;padding:11px 13px;margin-top:13px}.counter-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px}.counter-actions form{margin:0}.counter-actions button,.counter-actions a{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border-radius:10px;text-decoration:none;color:white;font-weight:800}.recent-card{scroll-margin-top:90px}.recent-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 10px;scroll-snap-type:x proximity}.recent-item{min-width:175px;border:1px solid #ddd;border-radius:13px;padding:11px;text-decoration:none;color:inherit;background:white;scroll-snap-align:start}.recent-item img{width:100%;height:105px;object-fit:contain}.similar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.similar-item{border:1px solid #ddd;border-radius:10px;padding:10px;text-decoration:none;color:inherit;background:#fff}.similar-item img{width:100%;height:90px;object-fit:contain}.empty-state{text-align:center;padding:28px 16px}.empty-state .icon{font-size:42px}@media(max-width:650px){.counter-head{align-items:flex-start}.counter-title{max-width:72%}.price-search{position:static}.price-search form{grid-template-columns:1fr}.counter-card{padding:14px}.counter-grid{grid-template-columns:1fr;gap:15px}.counter-photo{height:300px}.counter-price{margin:12px 0 15px}.counter-actions{grid-template-columns:1fr}.recent-link{padding:8px 10px;font-size:13px}.search-hint{display:none}}</style><div class="counter-head"><h1 class="counter-title">💰 Assistente banco</h1>{% if recent_rows %}<a class="recent-link" href="#recenti">⭐ Recenti</a>{% endif %}</div><p class="muted">Controlla prezzo e disponibilità senza modificare il magazzino.</p><div class="price-search"><div class="card"><form method="get" id="priceSearch"><input id="priceQuery" name="q" value="{{q}}" placeholder="Nome, codice interno o codice fornitore" autocomplete="off" autofocus required><button>Cerca prezzo</button></form><a class="view" href="{{url_for(\'scan_product\',mode=\'assistant\')}}" style="display:flex;align-items:center;justify-content:center;margin-top:10px;padding:13px;border-radius:10px;text-decoration:none;color:white;font-weight:900">📷 SCANSIONA QR PRODOTTO</a><div class="search-hint">La ricerca parte automaticamente dopo 3 caratteri.</div></div></div>{% if not q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Consultati di recente</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span><br><small class="muted">{{p.quantity}} disponibili</small></a>{% endfor %}</div></div>{% endif %}{% if q and not rows %}<div class="card empty-state"><div class="icon">🔎</div><h2>Nessun prodotto trovato</h2><p>Non risultano articoli per <b>{{q}}</b>.</p><a class="view" href="{{url_for(\'price_check\')}}" style="padding:12px 18px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Nuova ricerca</a></div>{% endif %}{% for p in rows %}<div class="card counter-card"><div class="counter-grid"><div>{% if p.photo_data %}<img class="counter-photo" src="{{p.photo_data}}" alt="{{p.brand_code}}">{% else %}<div class="no-photo counter-photo">Nessuna foto</div>{% endif %}</div><div><h2 class="counter-name">{{p.brand_code}}</h2><div class="counter-price">€ {{\'%.2f\'|format(p.price)}}</div>{% if p.quantity > 1 %}<span class="stock stock-ok">🟢 Disponibili: {{p.quantity}}</span>{% elif p.quantity == 1 %}<span class="stock stock-low">🟡 Ultimo pezzo</span>{% else %}<span class="stock stock-out">🔴 Esaurito</span>{% endif %}<div class="product-meta"><span class="badge">{{p.category or \'Altro\'}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}</div><div class="code-box">Codice interno: <b>{{p.brand_code}}</b>{% if p.location %}<br>📍 Posizione: <b>{{p.location}}</b>{% endif %}</div>{% if is_manager %}<div class="code-box"><b>Dati riservati</b><br>Codice fornitore: {{p.supplier_code}}{% if p.notes %}<br>Note: {{p.notes}}{% endif %}</div>{% endif %}<div class="counter-actions"><form method="post" action="{{url_for(\'add_to_cart\',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success" {% if p.quantity<=0 %}disabled{% endif %}>🛒 Aggiungi al carrello</button></form><a class="view" href="{{url_for(\'product_detail\',product_id=p.id)}}">📄 Apri scheda</a><a class="secondary" href="{{url_for(\'price_check\')}}">🔍 Nuova ricerca</a></div>{% if p.quantity<=0 and similar.get(p.id) %}<div style="margin-top:22px"><h3>Alternative disponibili</h3><div class="similar-grid">{% for x in similar.get(p.id) %}<a class="similar-item" href="{{url_for(\'price_check\',q=x.brand_code)}}">{% if x.photo_data %}<img src="{{x.photo_data}}" alt="{{x.brand_code}}">{% endif %}<b>{{x.brand_code}}</b><br>€ {{\'%.2f\'|format(x.price)}} · {{x.quantity}} pz</a>{% endfor %}</div></div>{% endif %}</div></div></div>{% endfor %}{% if q and recent_rows %}<div class="card recent-card" id="recenti"><h3>⭐ Ultimi articoli consultati</h3><div class="recent-strip">{% for p in recent_rows %}<a class="recent-item" href="{{url_for(\'price_check\',q=p.brand_code)}}">{% if p.photo_data %}<img src="{{p.photo_data}}" alt="{{p.brand_code}}">{% endif %}<b>{{p.brand_code}}</b><br><span class="price">€ {{\'%.2f\'|format(p.price)}}</span></a>{% endfor %}</div></div>{% endif %}<script>(function(){const input=document.getElementById(\'priceQuery\');const form=document.getElementById(\'priceSearch\');let timer;input.addEventListener(\'input\',function(){clearTimeout(timer);const value=this.value.trim();if(value.length>=3){timer=setTimeout(()=>form.submit(),650)}})})();</script>',q=q,rows=rows,recent_rows=recent_rows,similar=similar,is_manager=is_manager)
 
+@app.get("/products/scan-check")
+@login_required
+def scan_product_check():
+    code=(request.args.get("code") or "").strip()
+    if not code:
+        return jsonify({"ok":False,"message":"Codice vuoto"}),400
+    with connect() as db:
+        product=_find_product_by_scan(db,code)
+    if not product:
+        return jsonify({"ok":False,"message":"Prodotto non trovato"}),404
+    return jsonify({
+        "ok":True,
+        "brand_code":product["brand_code"],
+        "quantity":int(product["quantity"] or 0),
+        "price":float(product["price"] or 0)
+    })
+
 @app.route("/products/scan",methods=["GET","POST"])
 @login_required
 def scan_product():
@@ -2057,7 +2137,7 @@ def scan_product():
         with connect() as db:
             product=_find_product_by_scan(db,scanned)
         if not product:
-            flash(f"Nessun prodotto trovato per il codice: {scanned}")
+            flash(f"Nessun prodotto trovato per il codice: {scanned}","error")
             return redirect(url_for("scan_product",mode=mode))
         if mode=="assistant":
             return redirect(url_for("price_check",q=product["brand_code"]))
@@ -2374,31 +2454,23 @@ function closeM(id){document.getElementById(id).classList.remove('open')}
 function openCash(){cashModal.classList.add('open');received.focus()}
 function changeCalc(){change.textContent='€ '+Math.max(0,parseFloat(received.value||0)-{{total}}).toFixed(2).replace('.',',')}
 let stream=null,running=false,scanFrameId=null,scannerSubmitted=false,jsQRPromise=null,productScanAudioContext=null;
-function playProductScanFeedback(){
+function productTone(success){
   try{
     const AudioCtx=window.AudioContext||window.webkitAudioContext;
-    if(AudioCtx){
-      productScanAudioContext=productScanAudioContext||new AudioCtx();
-      if(productScanAudioContext.state==='suspended'){
-        productScanAudioContext.resume().catch(()=>{});
-      }
-      const now=productScanAudioContext.currentTime;
-      const oscillator=productScanAudioContext.createOscillator();
-      const gain=productScanAudioContext.createGain();
-      oscillator.type='square';
-      oscillator.frequency.setValueAtTime(1850,now);
-      oscillator.frequency.exponentialRampToValueAtTime(1450,now+0.075);
-      gain.gain.setValueAtTime(0.0001,now);
-      gain.gain.exponentialRampToValueAtTime(0.18,now+0.006);
-      gain.gain.exponentialRampToValueAtTime(0.0001,now+0.095);
-      oscillator.connect(gain);
-      gain.connect(productScanAudioContext.destination);
-      oscillator.start(now);
-      oscillator.stop(now+0.10);
-    }
-  }catch(e){}
-  try{
-    if(navigator.vibrate) navigator.vibrate(55);
+    if(!AudioCtx)return;
+    productScanAudioContext=productScanAudioContext||new AudioCtx();
+    if(productScanAudioContext.state==='suspended')productScanAudioContext.resume().catch(()=>{});
+    const now=productScanAudioContext.currentTime;
+    const osc=productScanAudioContext.createOscillator();
+    const gain=productScanAudioContext.createGain();
+    osc.type=success?'square':'sawtooth';
+    osc.frequency.setValueAtTime(success?1850:310,now);
+    osc.frequency.exponentialRampToValueAtTime(success?1450:190,now+(success?.075:.16));
+    gain.gain.setValueAtTime(.0001,now);
+    gain.gain.exponentialRampToValueAtTime(success?.16:.12,now+.006);
+    gain.gain.exponentialRampToValueAtTime(.0001,now+(success?.10:.19));
+    osc.connect(gain);gain.connect(productScanAudioContext.destination);
+    osc.start(now);osc.stop(now+(success?.11:.20));
   }catch(e){}
 }
 const qrCanvas=document.createElement('canvas');
@@ -2426,16 +2498,36 @@ function loadJsQR(){
   });
   return jsQRPromise;
 }
-function submitProductCode(value){
+async function submitProductCode(value){
   if(scannerSubmitted)return;
   const clean=(value||'').trim();
   if(!clean)return;
   scannerSubmitted=true;
-  playProductScanFeedback();
   scanCode.value=clean;
-  camStatus.textContent='✓ QR letto: '+clean+'. Aggiunta al carrello…';
-  stopProductCamera();
-  document.getElementById('productScanForm').submit();
+  camStatus.textContent='Verifica prodotto…';
+  try{
+    const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{cache:'no-store'});
+    let data={};try{data=await response.json()}catch(e){}
+    if(!response.ok||!data.ok){
+      productTone(false);
+      camStatus.textContent='✕ Prodotto non trovato: '+clean;
+      camera.style.border='3px solid #ef4444';
+      scannerSubmitted=false;
+      setTimeout(()=>{camera.style.border='';camStatus.textContent='Inquadra un altro QR.'},1400);
+      return;
+    }
+    productTone(true);
+    try{if(navigator.vibrate)navigator.vibrate(55)}catch(e){}
+    camera.style.border='3px solid #34d399';
+    camStatus.textContent='✓ '+data.brand_code+' riconosciuto. Aggiunta al carrello…';
+    stopProductCamera();
+    document.getElementById('productScanForm').submit();
+  }catch(e){
+    productTone(false);
+    camera.style.border='3px solid #ef4444';
+    camStatus.textContent='Impossibile verificare il prodotto. Riprova.';
+    scannerSubmitted=false;
+  }
 }
 async function startProductCamera(){
   camera.style.display='block';
@@ -3207,7 +3299,7 @@ def catalog_requests():
         ("Da consegnare",[x for x in rows if x["status"]=="Cliente avvisato"]),
     ]
     history=[x for x in rows if x["status"] in ("Consegnato","Rifiutato","Annullato")]
-    body="""<style>.order-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:15px 0}.order-kpi{background:#fff;border:1px solid #ddd;border-radius:12px;padding:13px}.status-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#eef2ff;font-weight:800}.order-stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:15px}.order-stage{border-top:6px solid #1d4ed8}.order-item{padding:13px 0;border-bottom:1px solid #e5e7eb}.order-item:last-child{border:0}.progress{height:8px;background:#eee;border-radius:99px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:#16a34a}.history-order{opacity:.78}</style><h1>📦 Ordini clienti</h1><p class='muted'>Mostra solo ciò che richiede un'azione. Gli ordini consegnati vengono smarcati e restano nello storico.</p><div class='order-kpis'><div class='order-kpi'><b>Da approvare</b><div class='metric'>{{counts.get('Da ordinare',0)+counts.get('Nuovo',0)}}</div></div><div class='order-kpi'><b>Da ordinare</b><div class='metric'>{{counts.get('Accettato',0)}}</div></div><div class='order-kpi'><b>In arrivo</b><div class='metric'>{{counts.get('Ordinato',0)+counts.get('Arrivato parzialmente',0)}}</div></div><div class='order-kpi'><b>Da avvisare</b><div class='metric'>{{counts.get('Arrivato',0)}}</div></div><div class='order-kpi'><b>Da consegnare</b><div class='metric'>{{counts.get('Cliente avvisato',0)}}</div></div></div><div class='order-stage-grid'>{% for title,group in active_groups %}<section class='card order-stage'><h2>{{title}} <span class='badge'>{{group|length}}</span></h2>{% for x in group %}<div class='order-item'><b>{{x.customer_name}}</b> · <a href='tel:{{x.customer_phone}}'>{{x.customer_phone}}</a><br><b>{{x.brand_code}}</b> / {{x.supplier_code}} · {{x.quantity}} pz<br><span class='status-pill'>{{x.status}}</span><div class='progress'><span style='width:{{(100*x.received_quantity/x.quantity) if x.quantity else 0}}%'></span></div><small class='muted'>{{x.request_number}} · ricevuti {{x.received_quantity}}/{{x.quantity}}{% if x.notes %} · {{x.notes}}{% endif %}</small><div class='actions' style='margin-top:10px'>{% if x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("accept_catalog_request",request_id=x.id)}}'><button class='success'>Accetta</button></form><form method='post' action='{{url_for("reject_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Rifiutare questa richiesta?")'><button class='danger'>Rifiuta</button></form>{% elif x.status=='Arrivato' %}<button type='button' class='secondary' onclick="navigator.clipboard.writeText('Ciao {{x.customer_name}}, il gioiello {{x.brand_code}} che avevi ordinato è arrivato presso Tattoo Beauty Saloon. Puoi contattarci per il ritiro.')">💬 Copia WhatsApp</button><form method='post' action='{{url_for("notify_catalog_request",request_id=x.id)}}'><button class='success'>Cliente contattato</button></form>{% elif x.status=='Cliente avvisato' %}<form method='post' action='{{url_for("deliver_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Confermi che il gioiello è stato consegnato?")'><button class='success'>✅ Consegnato / Smarca</button></form>{% endif %}</div></div>{% else %}<p class='muted'>Nessun ordine.</p>{% endfor %}</section>{% endfor %}</div><details class='card' style='margin-top:16px'><summary><b>📚 Storico ordini conclusi ({{history|length}})</b></summary>{% for x in history %}<div class='order-item history-order'><b>{{x.customer_name}}</b> · {{x.brand_code}} · {{x.quantity}} pz <span class='status-pill'>{{x.status}}</span><br><small class='muted'>{{x.request_number}} · {{x.created_at|rome_time}}</small></div>{% else %}<p class='muted'>Storico vuoto.</p>{% endfor %}</details>"""
+    body="""<style>.order-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:15px 0}.order-kpi{min-width:0;min-height:112px;background:linear-gradient(145deg,#151515,#080808);border:1px solid rgba(214,169,70,.34);border-radius:17px;padding:15px;color:#f7f1e4}.order-kpi b{display:block;color:#e8ddc5;font-size:14px;line-height:1.15;word-break:normal;overflow-wrap:normal}.order-kpi .metric{color:#e4bd65!important;font-size:clamp(31px,8vw,45px)!important;margin-top:12px}.status-pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#211b0d;color:#efca72;border:1px solid rgba(214,169,70,.35);font-weight:800}.order-stage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:15px}.order-stage{border-top:5px solid #d6a946!important;background:linear-gradient(145deg,#151515,#080808)!important;color:#f7f1e4!important}.order-stage h2{color:#f4d47e!important}.order-stage a{color:#f0c75e}.order-item{padding:13px 0;border-bottom:1px solid rgba(214,169,70,.18);color:#f2eee6}.order-item:last-child{border:0}.progress{height:8px;background:#29251d;border-radius:99px;overflow:hidden;margin:8px 0}.progress span{display:block;height:100%;background:#34d399}.history-order{opacity:.82}@media(max-width:620px){.order-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.order-kpi{min-height:105px;padding:13px}.order-stage-grid{grid-template-columns:1fr}.order-stage{min-height:auto!important}.order-stage h2{font-size:20px!important}}</style><h1>📦 Ordini clienti</h1><p class='muted'>Mostra solo ciò che richiede un'azione. Gli ordini consegnati vengono smarcati e restano nello storico.</p><div class='order-kpis'><div class='order-kpi'><b>Da approvare</b><div class='metric'>{{counts.get('Da ordinare',0)+counts.get('Nuovo',0)}}</div></div><div class='order-kpi'><b>Da ordinare</b><div class='metric'>{{counts.get('Accettato',0)}}</div></div><div class='order-kpi'><b>In arrivo</b><div class='metric'>{{counts.get('Ordinato',0)+counts.get('Arrivato parzialmente',0)}}</div></div><div class='order-kpi'><b>Da avvisare</b><div class='metric'>{{counts.get('Arrivato',0)}}</div></div><div class='order-kpi'><b>Da consegnare</b><div class='metric'>{{counts.get('Cliente avvisato',0)}}</div></div></div><div class='order-stage-grid'>{% for title,group in active_groups %}<section class='card order-stage'><h2>{{title}} <span class='badge'>{{group|length}}</span></h2>{% for x in group %}<div class='order-item'><b>{{x.customer_name}}</b> · <a href='tel:{{x.customer_phone}}'>{{x.customer_phone}}</a><br><b>{{x.brand_code}}</b> / {{x.supplier_code}} · {{x.quantity}} pz<br><span class='status-pill'>{{x.status}}</span><div class='progress'><span style='width:{{(100*x.received_quantity/x.quantity) if x.quantity else 0}}%'></span></div><small class='muted'>{{x.request_number}} · ricevuti {{x.received_quantity}}/{{x.quantity}}{% if x.notes %} · {{x.notes}}{% endif %}</small><div class='actions' style='margin-top:10px'>{% if x.status in ('Da ordinare','Nuovo') %}<form method='post' action='{{url_for("accept_catalog_request",request_id=x.id)}}'><button class='success'>Accetta</button></form><form method='post' action='{{url_for("reject_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Rifiutare questa richiesta?")'><button class='danger'>Rifiuta</button></form>{% elif x.status=='Arrivato' %}<button type='button' class='secondary' onclick="navigator.clipboard.writeText('Ciao {{x.customer_name}}, il gioiello {{x.brand_code}} che avevi ordinato è arrivato presso Tattoo Beauty Saloon. Puoi contattarci per il ritiro.')">💬 Copia WhatsApp</button><form method='post' action='{{url_for("notify_catalog_request",request_id=x.id)}}'><button class='success'>Cliente contattato</button></form>{% elif x.status=='Cliente avvisato' %}<form method='post' action='{{url_for("deliver_catalog_request",request_id=x.id)}}' onsubmit='return confirm("Confermi che il gioiello è stato consegnato?")'><button class='success'>✅ Consegnato / Smarca</button></form>{% endif %}</div></div>{% else %}<p class='muted'>Nessun ordine.</p>{% endfor %}</section>{% endfor %}</div><details class='card' style='margin-top:16px'><summary><b>📚 Storico ordini conclusi ({{history|length}})</b></summary>{% for x in history %}<div class='order-item history-order'><b>{{x.customer_name}}</b> · {{x.brand_code}} · {{x.quantity}} pz <span class='status-pill'>{{x.status}}</span><br><small class='muted'>{{x.request_number}} · {{x.created_at|rome_time}}</small></div>{% else %}<p class='muted'>Storico vuoto.</p>{% endfor %}</details>"""
     return page("Ordini clienti",body,counts=counts,active_groups=active_groups,history=history)
 
 @app.post("/catalogo-ordinabili/richieste/<int:request_id>/accetta")
@@ -3875,18 +3967,18 @@ def dashboard_smart():
 .tbs-welcome{padding:22px 24px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:18px;overflow:hidden;position:relative}
 .tbs-welcome:after{content:"";position:absolute;width:170px;height:170px;right:-85px;top:-100px;border:1px solid rgba(214,169,70,.18);transform:rotate(45deg)}
 .tbs-welcome-copy{min-width:0;position:relative;z-index:1}.tbs-eyebrow{display:block;color:#d9ad51;font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;margin-bottom:7px}
-.tbs-welcome h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(30px,4vw,48px);line-height:1;margin:0;color:#fff;overflow-wrap:anywhere}.tbs-welcome h1 em{color:#e5bd63;font-style:normal}
+.tbs-welcome h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(30px,4vw,48px);line-height:1.04;margin:0;color:#fff;word-break:normal;overflow-wrap:normal;hyphens:none}.tbs-welcome h1 em{color:#e5bd63;font-style:normal}
 .tbs-welcome p{font-size:15px;color:#aaa49a;margin:9px 0 0}.tbs-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;position:relative;z-index:1}.tbs-chip{border:1px solid rgba(214,169,70,.28);border-radius:999px;padding:8px 11px;color:#d8c9a8;font-size:12px;background:#0a0a0a;white-space:nowrap}
-.tbs-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.tbs-action{min-height:126px;padding:17px;text-decoration:none!important;color:#fff!important;display:flex;flex-direction:column;justify-content:space-between;transition:.18s}.tbs-action:hover{transform:translateY(-2px);border-color:#d9ad51}.tbs-action-icon{width:44px;height:44px;border-radius:14px;border:1px solid rgba(214,169,70,.38);display:grid;place-items:center;color:#e4bd65;font-size:23px;background:radial-gradient(circle at 30% 25%,#31343a,#111)}.tbs-action b{font-family:Georgia,"Times New Roman",serif;font-size:20px}.tbs-action small{color:#9d978e;font-size:12px}
-.tbs-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.tbs-kpi{padding:17px;min-height:125px}.tbs-kpi-label{color:#d3c4a4;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.tbs-kpi-value{font-family:Georgia,"Times New Roman",serif;color:#e4bd65;font-size:clamp(31px,4vw,46px);line-height:1;margin:15px 0 6px;overflow-wrap:anywhere}.tbs-kpi-meta{color:#8f8a82;font-size:12px;line-height:1.35}
+.tbs-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.tbs-action{min-height:126px;padding:17px;text-decoration:none!important;color:#fff!important;display:flex;flex-direction:column;justify-content:space-between;transition:.18s}.tbs-action:hover{transform:translateY(-2px);border-color:#d9ad51}.tbs-action-icon{width:44px;height:44px;border-radius:14px;border:1px solid rgba(214,169,70,.38);display:grid;place-items:center;color:#e4bd65;font-size:23px;background:radial-gradient(circle at 30% 25%,#31343a,#111)}.tbs-action b{font-family:Georgia,"Times New Roman",serif;font-size:clamp(16px,2.1vw,20px);line-height:1.08;word-break:keep-all;overflow-wrap:normal;hyphens:none;white-space:nowrap}.tbs-action small{color:#9d978e;font-size:12px}
+.tbs-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.tbs-kpi{padding:17px;min-height:125px}.tbs-kpi-label{color:#d3c4a4;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.tbs-kpi-value{font-family:Georgia,"Times New Roman",serif;color:#e4bd65;font-size:clamp(31px,4vw,46px);line-height:1;margin:15px 0 6px;word-break:normal;overflow-wrap:normal}.tbs-kpi-meta{color:#8f8a82;font-size:12px;line-height:1.35}
 .tbs-content{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.tbs-panel{padding:20px}.tbs-panel h2{font-size:14px;color:#d9ad51;letter-spacing:.08em;text-transform:uppercase;margin:0 0 14px}.tbs-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(214,169,70,.13)}.tbs-row:last-child{border-bottom:0}.tbs-row b{color:#f2eee6}.tbs-row small{color:#8f8a82}.tbs-amount{color:#e4bd65;font-weight:900;text-align:right}.tbs-stock{min-width:36px;text-align:center;border-radius:999px;padding:6px 9px;background:#19150c;color:#e4bd65;border:1px solid rgba(214,169,70,.3);font-weight:900}.tbs-priority{display:grid;gap:9px}.tbs-priority a{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px;border:1px solid rgba(214,169,70,.2);border-radius:14px;background:#090909;color:#eee7d8;text-decoration:none}.tbs-priority a span:last-child{color:#d9ad51}.tbs-empty{padding:22px 8px;text-align:center;color:#8f8a82}.tbs-footer-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.tbs-footer-actions a{text-align:center;padding:11px;border-radius:12px;border:1px solid rgba(214,169,70,.28);color:#d9ad51;text-decoration:none;background:#090909;font-weight:800;font-size:12px}
 @media(max-width:900px){.tbs-actions,.tbs-kpis{grid-template-columns:1fr 1fr}.tbs-content{grid-template-columns:1fr}.tbs-meta{display:none}}
 @media(max-width:620px){
-html,body{max-width:100%;overflow-x:hidden}main{width:100%;max-width:100%;padding:0 10px!important;margin:12px auto 0!important;box-sizing:border-box}.tbs-shell{padding:0 0 106px;overflow:hidden}.tbs-welcome{padding:16px 16px;margin-bottom:10px;border-radius:17px;align-items:flex-start}.tbs-eyebrow{font-size:9px;letter-spacing:.13em;margin-bottom:6px}.tbs-welcome h1{font-size:28px!important;line-height:1.04;white-space:normal;word-break:normal;overflow-wrap:anywhere}.tbs-welcome h1 br{display:none}.tbs-welcome h1 em{display:inline}.tbs-welcome p{font-size:13px;line-height:1.35;margin-top:7px}.tbs-meta{display:none}
-.tbs-actions{grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}.tbs-action{min-width:0;min-height:106px;padding:13px;border-radius:16px}.tbs-action-icon{width:38px;height:38px;font-size:20px;border-radius:12px}.tbs-action b{font-size:17px}.tbs-action small{display:none}
+html,body{max-width:100%;overflow-x:hidden}main{width:100%;max-width:100%;padding:0 10px!important;margin:12px auto 0!important;box-sizing:border-box}.tbs-shell{padding:0 0 106px;overflow:hidden}.tbs-welcome{padding:16px 16px;margin-bottom:10px;border-radius:17px;align-items:flex-start}.tbs-eyebrow{font-size:9px;letter-spacing:.13em;margin-bottom:6px}.tbs-welcome h1{font-size:27px!important;line-height:1.06;white-space:normal;word-break:normal;overflow-wrap:normal;hyphens:none}.tbs-welcome h1 br{display:none}.tbs-welcome h1 em{display:inline}.tbs-welcome p{font-size:13px;line-height:1.35;margin-top:7px}.tbs-meta{display:none}
+.tbs-actions{grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}.tbs-action{min-width:0;min-height:118px;padding:13px;border-radius:16px}.tbs-action-icon{width:38px;height:38px;font-size:20px;border-radius:12px}.tbs-action b{font-size:clamp(15px,4.25vw,18px);line-height:1.08;white-space:nowrap;word-break:keep-all;overflow-wrap:normal}.tbs-action small{display:none}
 .tbs-kpis{grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}.tbs-kpi{min-width:0;min-height:104px;padding:13px;border-radius:16px}.tbs-kpi-label{font-size:9px;letter-spacing:.07em}.tbs-kpi-value{font-size:29px;margin:12px 0 4px}.tbs-kpi-meta{font-size:10px}.tbs-content{gap:10px}.tbs-panel{padding:15px;border-radius:16px}.tbs-row{grid-template-columns:minmax(0,1fr) auto}.tbs-footer-actions{grid-template-columns:1fr}.tbs-priority a{padding:12px}.tbs-panel h2{font-size:12px}
 }
-@media(max-width:360px){.tbs-welcome h1{font-size:25px!important}.tbs-actions,.tbs-kpis{gap:7px}.tbs-action{min-height:98px;padding:11px}.tbs-kpi{min-height:98px;padding:11px}.tbs-action b{font-size:15px}.tbs-kpi-value{font-size:26px}}
+@media(max-width:360px){.tbs-welcome h1{font-size:24px!important}.tbs-actions,.tbs-kpis{gap:7px}.tbs-action{min-height:108px;padding:10px}.tbs-kpi{min-height:98px;padding:11px}.tbs-action b{font-size:14px;letter-spacing:-.01em}.tbs-kpi-value{font-size:26px}}
 </style>
 <div class="tbs-shell">
 <section class="tbs-panel tbs-welcome"><div class="tbs-welcome-copy"><span class="tbs-eyebrow">TBS ONE · Centro operativo</span><h1>Bentornato, <em>{{ 'Elvis' if session.get('role')=='admin' else session.get('user') }}</em></h1><p>Vendite, ordini, clienti e scorte in un’unica schermata.</p></div><div class="tbs-meta"><span class="tbs-chip">{{now_label}}</span><span class="tbs-chip">{{role_label}}</span></div></section>
