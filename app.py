@@ -3715,6 +3715,24 @@ def customers_crm():
 
 
 
+
+
+# === v35.0.5 TBS ONE UI FRAMEWORK ===
+CSS += r"""
+.tbs-dashboard{display:grid;gap:18px;padding-bottom:8px}
+.tbs-hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:18px;align-items:stretch}
+.tbs-hero-copy,.tbs-overview{position:relative;overflow:hidden;border:1px solid var(--tbs-border);border-radius:26px;background:linear-gradient(145deg,rgba(18,18,20,.98),rgba(6,6,7,.99));box-shadow:var(--tbs-shadow)}
+.tbs-hero-copy{padding:30px}.tbs-hero-copy:after{content:"";position:absolute;right:-45px;bottom:-75px;width:230px;height:230px;border:1px solid rgba(215,170,67,.17);transform:rotate(45deg);box-shadow:0 0 80px rgba(215,170,67,.07)}
+.tbs-hero-copy h1{margin:8px 0 12px;font-size:clamp(42px,5vw,72px);line-height:.92}.tbs-hero-copy p{font-size:17px;max-width:620px;margin:0}
+.tbs-overview{padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.tbs-mini-kpi{padding:16px;border:1px solid rgba(215,170,67,.18);border-radius:16px;background:rgba(255,255,255,.018)}.tbs-mini-kpi span{display:block;color:var(--tbs-muted);font-size:11px;text-transform:uppercase;letter-spacing:.11em;font-weight:900}.tbs-mini-kpi strong{display:block;margin-top:7px;color:var(--tbs-gold-light)!important;font:700 29px/1 Georgia,serif}.tbs-mini-kpi small{display:block;margin-top:7px}
+.tbs-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.tbs-action{position:relative;min-height:120px;padding:18px;text-decoration:none;border:1px solid var(--tbs-border);border-radius:20px;background:linear-gradient(145deg,#151517,#080809);box-shadow:var(--tbs-shadow);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}.tbs-action:before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.07),transparent 42%);pointer-events:none}.tbs-action-icon{position:absolute;top:17px;left:17px;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(215,170,67,.32);color:var(--tbs-gold-light);font-size:24px;background:#151517}.tbs-action b{font-size:18px}.tbs-action small{margin-top:4px}.tbs-action:hover{transform:translateY(-2px);border-color:rgba(242,210,118,.5)}
+.tbs-section-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-top:4px}.tbs-section-head h2{margin:0;font-size:27px}.tbs-section-head a{font-size:13px;text-decoration:none}
+.tbs-dashboard-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.tbs-stack{display:grid;gap:18px}.tbs-panel{border:1px solid var(--tbs-border);border-radius:22px;background:linear-gradient(145deg,rgba(18,18,20,.98),rgba(7,7,8,.99));box-shadow:var(--tbs-shadow);overflow:hidden}.tbs-panel-head{display:flex;align-items:center;justify-content:space-between;padding:17px 19px;border-bottom:1px solid rgba(215,170,67,.16)}.tbs-panel-head h3{margin:0;font-size:20px}.tbs-panel-body{padding:10px 18px 16px}.tbs-list-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.06)}.tbs-list-row:last-child{border-bottom:0}.tbs-list-row b{font-size:14px}.tbs-list-row .value{color:var(--tbs-gold-light);font-weight:900;white-space:nowrap}.tbs-alert-dot{width:9px;height:9px;border-radius:50%;background:#dc4f45;box-shadow:0 0 0 4px rgba(220,79,69,.12);flex:0 0 auto}.tbs-empty{padding:24px;text-align:center;color:var(--tbs-muted)}
+.tbs-priority-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.tbs-priority{display:block;padding:16px;text-decoration:none;border:1px solid rgba(215,170,67,.18);border-radius:16px;background:rgba(255,255,255,.018)}.tbs-priority h4{margin:8px 0 4px;font-size:17px}.tbs-priority span{font-size:12px;color:var(--tbs-gold)}
+@media(max-width:900px){.tbs-hero{grid-template-columns:1fr}.tbs-dashboard-grid{grid-template-columns:1fr}.tbs-actions{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){main{padding-inline:14px!important}.tbs-dashboard{gap:14px}.tbs-hero{gap:12px}.tbs-hero-copy{padding:22px 20px}.tbs-hero-copy h1{font-size:44px}.tbs-hero-copy p{font-size:15px}.tbs-overview{padding:14px;gap:9px}.tbs-mini-kpi{padding:13px}.tbs-mini-kpi strong{font-size:27px}.tbs-actions{gap:10px}.tbs-action{min-height:112px;padding:14px}.tbs-action-icon{top:14px;left:14px;width:42px;height:42px;font-size:21px}.tbs-action b{font-size:16px}.tbs-action small{font-size:11px}.tbs-section-head h2{font-size:23px}.tbs-panel-head{padding:15px 16px}.tbs-panel-body{padding:7px 15px 13px}.tbs-priority-grid{grid-template-columns:1fr}.main-header{padding-left:18px!important;padding-right:10px!important}.header-brand{max-width:150px!important}.header-brand strong{font-size:23px!important}.header-brand span{font-size:8px!important;letter-spacing:.12em!important}.user-menu{gap:4px!important}.user-menu a{width:38px!important;height:38px!important}}
+"""
+
 # --- v20 rev.7: Dashboard Smart ---
 @app.get('/dashboard-smart')
 @login_required
@@ -3744,7 +3762,35 @@ def dashboard_smart():
         if low: alerts.append(('Scorte',f'{low} prodotti da riordinare',url_for('inventory_pro')))
         if waiting: alerts.append(('Clienti',f'{waiting} clienti in attesa',url_for('catalog_requests')))
         if pending_reorders: alerts.append(('Fornitori',f'{pending_reorders} riordini aperti',url_for('reorders')))
-    body='''<div class="dash-head"><div><span class="eyebrow">CENTRO OPERATIVO</span><h1>Bentornato, {% if session.get('role') == 'admin' %}<span class="welcome-name">Elvis</span>{% else %}<span class="welcome-name">{{session.get('user')}}</span>{% endif %}.</h1><p class="muted">Vendite, ordini e scorte. Tutto sotto controllo.</p></div><div class="quick-actions"><a href="{{url_for('pos')}}"><span>€</span><b>Cassa</b><small>Nuova vendita</small></a><a href="{{url_for('scan_product')}}"><span>⌗</span><b>Scanner</b><small>Leggi QR prodotto</small></a><a href="{{url_for('inventory_pro')}}"><span>◇</span><b>Magazzino</b><small>Scorte e riordini</small></a><a href="{{url_for('customers_crm')}}"><span>◎</span><b>Clienti</b><small>Ordini e contatti</small></a></div></div><div class="kpi-grid"><div class="kpi"><strong>Incasso oggi</strong><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite</span></div><div class="kpi"><strong>Scorte basse</strong><div class="metric">{{low}}</div></div><div class="kpi"><strong>Clienti in attesa</strong><div class="metric">{{waiting}}</div></div><div class="kpi"><strong>Riordini aperti</strong><div class="metric">{{pending_reorders}}</div></div></div><h2>Da fare</h2><div class="grid">{% for kind,text,link in alerts %}<a class="card" href="{{link}}" style="text-decoration:none;color:inherit"><span class="eyebrow">{{kind}}</span><h3>{{text}}</h3><span>Apri →</span></a>{% else %}<div class="card"><h3>Tutto sotto controllo</h3><p class="muted">Non risultano priorità operative.</p></div>{% endfor %}</div>'''
+    body='''<div class="tbs-dashboard">
+<div class="tbs-hero">
+  <section class="tbs-hero-copy"><span class="eyebrow">CENTRO OPERATIVO</span><h1>Bentornato,<br><span class="welcome-name">{% if session.get('role') == 'admin' %}Elvis{% else %}{{session.get('user')}}{% endif %}</span>.</h1><p>Vendite, ordini e scorte in un unico spazio operativo.</p></section>
+  <section class="tbs-overview">
+    <div class="tbs-mini-kpi"><span>Incasso oggi</span><strong>€ {{'%.2f'|format(today.revenue)}}</strong><small>{{today.receipts}} vendite</small></div>
+    <div class="tbs-mini-kpi"><span>Scorte basse</span><strong>{{low}}</strong><small>articoli da controllare</small></div>
+    <div class="tbs-mini-kpi"><span>Clienti in attesa</span><strong>{{waiting}}</strong><small>ordini aperti</small></div>
+    <div class="tbs-mini-kpi"><span>Riordini</span><strong>{{pending_reorders}}</strong><small>fornitori aperti</small></div>
+  </section>
+</div>
+<div class="tbs-actions">
+  <a class="tbs-action" href="{{url_for('pos')}}"><span class="tbs-action-icon">€</span><b>Cassa</b><small>Avvia una nuova vendita</small></a>
+  <a class="tbs-action" href="{{url_for('scan_product')}}"><span class="tbs-action-icon">⌗</span><b>Scanner</b><small>Leggi QR e codici prodotto</small></a>
+  <a class="tbs-action" href="{{url_for('inventory_pro')}}"><span class="tbs-action-icon">◇</span><b>Magazzino</b><small>Scorte, movimenti e riordini</small></a>
+  <a class="tbs-action" href="{{url_for('customers_crm')}}"><span class="tbs-action-icon">◎</span><b>Clienti</b><small>Ordini, contatti e attività</small></a>
+</div>
+<div class="tbs-section-head"><h2>Priorità operative</h2><a href="{{url_for('enterprise')}}">Centro completo →</a></div>
+<div class="tbs-dashboard-grid">
+  <div class="tbs-stack">
+    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Da fare oggi</h3><span class="eyebrow">LIVE</span></div><div class="tbs-panel-body">
+      {% for kind,text,link in alerts %}<a class="tbs-list-row" href="{{link}}" style="text-decoration:none;color:inherit"><span style="display:flex;align-items:center;gap:12px"><i class="tbs-alert-dot"></i><span><b>{{kind}}</b><br><small>{{text}}</small></span></span><span class="value">Apri →</span></a>{% else %}<div class="tbs-empty">Tutto sotto controllo. Non risultano priorità operative.</div>{% endfor %}
+    </div></section>
+    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Accesso rapido</h3></div><div class="tbs-panel-body"><div class="tbs-priority-grid"><a class="tbs-priority" href="{{url_for('catalog_requests')}}"><span>ORDINI</span><h4>Richieste clienti</h4><small>Gestisci attese e consegne</small></a><a class="tbs-priority" href="{{url_for('reorders')}}"><span>FORNITORI</span><h4>Riordini</h4><small>Controlla merce ordinata</small></a><a class="tbs-priority" href="{{url_for('sales_log')}}"><span>VENDITE</span><h4>Registro</h4><small>Consulta incassi e movimenti</small></a></div></div></section>
+  </div>
+  <div class="tbs-stack">
+    <section class="tbs-panel"><div class="tbs-panel-head"><h3>Stato attività</h3></div><div class="tbs-panel-body"><div class="tbs-list-row"><span><b>Vendite di oggi</b><br><small>Transazioni confermate</small></span><span class="value">{{today.receipts}}</span></div><div class="tbs-list-row"><span><b>Scorte critiche</b><br><small>Quantità minima raggiunta</small></span><span class="value">{{low}}</span></div><div class="tbs-list-row"><span><b>Clienti da contattare</b><br><small>Richieste ancora aperte</small></span><span class="value">{{waiting}}</span></div><div class="tbs-list-row"><span><b>Ordini fornitore</b><br><small>Non ancora ricevuti</small></span><span class="value">{{pending_reorders}}</span></div></div></section>
+  </div>
+</div>
+</div>'''
     return page('Dashboard Smart',body,today=today,low=low,waiting=waiting,pending_reorders=pending_reorders,alerts=alerts)
 
 
