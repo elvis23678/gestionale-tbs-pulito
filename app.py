@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.3.1 TBS ONE · Scanner Articoli PRO"
+APP_VERSION = "v36.4.0 TBS ONE · Final Audit"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -458,6 +458,99 @@ table{max-width:100%}
 
 '''
 
+
+CSS += r'''
+/* ============================================================
+   v36.4.0 FINAL AUDIT · Contrasto e controlli uniformi
+   ============================================================ */
+:root{
+  --tbs-black:#080808;
+  --tbs-panel:#11110f;
+  --tbs-gold:#e0b647;
+  --tbs-gold-light:#f4d77d;
+  --tbs-ink:#171717;
+  --tbs-muted-dark:#4b4b4b;
+  --tbs-paper:#f7f5ef;
+}
+.card, .panel, .tbs-panel{overflow-wrap:anywhere}
+.card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.card select,.card textarea,
+form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+form select,form textarea{
+  color:#f8f8f8!important;
+  background:#090909!important;
+  border-color:rgba(224,182,71,.62)!important;
+  caret-color:var(--tbs-gold-light)!important;
+}
+input::placeholder,textarea::placeholder{color:#bdb8ae!important;opacity:1!important}
+select option{color:#fff!important;background:#111!important}
+label{color:inherit}
+.card label,.card label b,.card label span{opacity:1!important}
+input[type="checkbox"],input[type="radio"]{
+  appearance:none;-webkit-appearance:none;
+  width:24px!important;height:24px!important;min-width:24px;
+  display:inline-grid;place-content:center;vertical-align:middle;
+  margin:0 8px 0 0;border:2px solid #b99437!important;
+  border-radius:6px;background:#080808!important;
+}
+input[type="radio"]{border-radius:50%}
+input[type="checkbox"]::before{
+  content:"";width:12px;height:7px;border-left:3px solid #111;
+  border-bottom:3px solid #111;transform:rotate(-45deg) scale(0);
+}
+input[type="radio"]::before{
+  content:"";width:11px;height:11px;border-radius:50%;
+  background:#111;transform:scale(0);
+}
+input[type="checkbox"]:checked,input[type="radio"]:checked{
+  background:var(--tbs-gold)!important;border-color:var(--tbs-gold)!important;
+}
+input[type="checkbox"]:checked::before,input[type="radio"]:checked::before{transform:rotate(-45deg) scale(1)}
+input[type="radio"]:checked::before{transform:scale(1)}
+input[type="file"]{
+  color:#eee!important;background:#090909!important;
+  border:1px solid rgba(224,182,71,.62)!important;
+  border-radius:14px;padding:8px!important;max-width:100%;
+}
+input[type="file"]::file-selector-button{
+  border:0;border-radius:10px;padding:11px 14px;margin-right:10px;
+  background:linear-gradient(135deg,#f0ce6b,#bd8e28);
+  color:#17120a;font-weight:900;cursor:pointer;
+}
+input[type="file"]::-webkit-file-upload-button{
+  border:0;border-radius:10px;padding:11px 14px;margin-right:10px;
+  background:linear-gradient(135deg,#f0ce6b,#bd8e28);
+  color:#17120a;font-weight:900;
+}
+.card[style*="background:white"],.card[style*="background: white"],
+tr[style*="background:white"],tr[style*="background: white"]{
+  color:var(--tbs-ink)!important;
+}
+.card[style*="background:white"] .muted,.card[style*="background: white"] .muted,
+tr[style*="background:white"] .muted,tr[style*="background: white"] .muted{
+  color:var(--tbs-muted-dark)!important;
+}
+table tbody tr{color:inherit}
+table tbody tr[style*="background"] td,
+table tbody tr[style*="background"] th{color:#202020!important}
+table tbody tr[style*="background"] .muted{color:#525252!important}
+.muted{opacity:1!important}
+.white-row,.light-row,.notification-row{
+  color:#1c1c1c!important;
+}
+.white-row .muted,.light-row .muted,.notification-row .muted{
+  color:#555!important;
+}
+button:disabled,.button:disabled,[disabled]{
+  opacity:.62!important;filter:none!important;cursor:not-allowed!important;
+}
+a,button,input,select,textarea{touch-action:manipulation}
+@media(max-width:760px){
+  input,select,textarea,button{font-size:16px!important}
+  .card{max-width:100%}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+'''
 
 BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{ title }}</title><style>{{ css }}.welcome-name{color:#c99b32;text-shadow:0 1px 0 rgba(255,255,255,.28)}.quick-actions a,.mobile-dock a,.mobile-dock button,.card button,button{transition:transform .12s ease,box-shadow .12s ease,filter .12s ease}.quick-actions a:active,.mobile-dock a:active,.mobile-dock button:active,.card button:active,button:active{transform:scale(.97);filter:brightness(.96)}@media(max-width:760px){.quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quick-actions a{min-height:118px}}
 /* v26 Premium Experience */
@@ -2409,6 +2502,7 @@ def more_page():
   <a class="more-card" href="{{url_for('cart')}}"><span class="ico">＋</span><span><b>Carrello</b><small>Apri la vendita corrente</small></span></a>
   <a class="more-card" href="{{url_for('suspended_carts')}}"><span class="ico">Ⅱ</span><span><b>Vendite sospese</b><small>Riprendi un carrello salvato</small></span></a>
   <a class="more-card" href="{{url_for('scan_product')}}"><span class="ico">⌗</span><span><b>Scanner QR</b><small>Leggi un'etichetta prodotto</small></span></a>
+  {% if role in ('admin','manager') %}<a class="more-card" href="{{url_for('product_qr_labels')}}"><span class="ico">▦</span><span><b>Etichette QR</b><small>Stampa e ristampa etichette 35×15</small></span></a>{% endif %}
   <a class="more-card" href="{{url_for('supplier_catalog')}}"><span class="ico">◇</span><span><b>Catalogo ordinabile</b><small>Articoli disponibili su richiesta</small></span></a>
 </div>
 
@@ -2491,6 +2585,193 @@ def scan_product_check():
         "price":float(product["price"] or 0)
     })
 
+
+# ============================================================
+# v36.4.0 · Centro Etichette QR
+# ============================================================
+@app.route("/products/qr-labels", methods=["GET", "POST"])
+@role_required("admin","manager")
+def product_qr_labels():
+    with connect() as db:
+        rows=db.execute("""
+            SELECT * FROM products
+            WHERE active=1
+            ORDER BY id DESC
+        """).fetchall()
+
+    body=r"""
+    <style>
+    .qr-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+    .qr-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .qr-list{display:grid;gap:8px;max-height:520px;overflow:auto;padding-right:4px}
+    .qr-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+      padding:12px;border:1px solid rgba(224,182,71,.38);border-radius:14px;background:#0b0b0a}
+    .qr-item b{color:#fff}.qr-item small{color:#c8c2b7}
+    .qr-stock{min-width:44px;text-align:center;padding:6px 8px;border-radius:999px;
+      background:#e0b647;color:#15110a;font-weight:950}
+    .qr-actions{position:sticky;bottom:78px;display:flex;gap:9px;flex-wrap:wrap;padding:12px;
+      border:1px solid rgba(224,182,71,.54);border-radius:16px;background:rgba(7,7,7,.96);
+      backdrop-filter:blur(12px);z-index:3}
+    @media(max-width:620px){.qr-head{display:block}.qr-filter-grid{grid-template-columns:1fr}.qr-item{grid-template-columns:auto 1fr}.qr-stock{grid-column:2}}
+    </style>
+    <div class="qr-head"><div><span class="eyebrow">MAGAZZINO PRO</span><h1>Etichette QR</h1>
+    <p class="muted">Formato A4 con etichette 35×15 mm. Il QR contiene il codice interno del prodotto.</p></div>
+    <a class="secondary" href="{{url_for('products')}}">← Catalogo</a></div>
+
+    <form method="post" action="{{url_for('product_qr_labels_pdf')}}" target="_blank" class="card" id="qrLabelsForm">
+      <div class="qr-filter-grid">
+        <label>Gruppo da stampare
+          <select name="scope" id="qrScope">
+            <option value="selected">Solo articoli selezionati</option>
+            <option value="all">Tutti gli articoli attivi</option>
+            <option value="available">Solo disponibili</option>
+            <option value="last">Ultimi inseriti</option>
+            <option value="low">Ultimo pezzo / scorta bassa</option>
+          </select>
+        </label>
+        <label>Numero ultimi inseriti
+          <input name="last_count" type="number" min="1" max="300" value="20">
+        </label>
+        <label>Copie per articolo
+          <input name="copies" type="number" min="1" max="20" value="1">
+        </label>
+        <label>Testo aggiuntivo
+          <select name="extra">
+            <option value="stock">Mostra “ULTIMO PEZZO” quando quantità ≤ 1</option>
+            <option value="none">Nessun testo aggiuntivo</option>
+          </select>
+        </label>
+      </div>
+
+      <p><input id="qrSearch" placeholder="Cerca codice, categoria, materiale o colore" type="search"></p>
+      <div class="actions">
+        <button type="button" class="secondary" id="selectVisible">Seleziona visibili</button>
+        <button type="button" class="secondary" id="clearSelection">Deseleziona tutto</button>
+      </div>
+
+      <div class="qr-list" id="qrProductList">
+      {% for p in rows %}
+        <label class="qr-item" data-search="{{(p.brand_code~' '~(p.category or '')~' '~(p.material or '')~' '~(p.color or ''))|lower}}">
+          <input type="checkbox" name="product_ids" value="{{p.id}}">
+          <span><b>{{p.brand_code}}</b><br><small>{{p.category or 'Altro'}}{% if p.material %} · {{p.material}}{% endif %}{% if p.color %} · {{p.color}}{% endif %}</small></span>
+          <span class="qr-stock">{{p.quantity}}</span>
+        </label>
+      {% else %}
+        <p>Nessun prodotto attivo.</p>
+      {% endfor %}
+      </div>
+
+      <div class="qr-actions">
+        <button type="submit">Genera PDF etichette</button>
+        <span class="muted">Si aprirà il PDF pronto per la stampa.</span>
+      </div>
+    </form>
+    <script>
+    (()=>{const search=document.getElementById('qrSearch'),items=[...document.querySelectorAll('.qr-item')];
+      const filter=()=>{const q=(search.value||'').trim().toLowerCase();items.forEach(x=>x.style.display=!q||x.dataset.search.includes(q)?'grid':'none')};
+      search.addEventListener('input',filter);
+      document.getElementById('selectVisible').onclick=()=>items.forEach(x=>{if(x.style.display!=='none')x.querySelector('input').checked=true});
+      document.getElementById('clearSelection').onclick=()=>items.forEach(x=>x.querySelector('input').checked=false);
+      document.getElementById('qrLabelsForm').addEventListener('submit',e=>{const scope=document.getElementById('qrScope').value;
+        if(scope==='selected'&&!items.some(x=>x.querySelector('input').checked)){e.preventDefault();alert('Seleziona almeno un articolo oppure scegli un altro gruppo.');}});
+    })();
+    </script>
+    """
+    return page("Etichette QR",body,rows=rows)
+
+
+@app.post("/products/qr-labels/pdf")
+@role_required("admin","manager")
+def product_qr_labels_pdf():
+    scope=(request.form.get("scope") or "selected").strip()
+    copies=max(1,min(20,int(request.form.get("copies") or 1)))
+    last_count=max(1,min(300,int(request.form.get("last_count") or 20)))
+    extra=(request.form.get("extra") or "stock").strip()
+    selected=[]
+    for value in request.form.getlist("product_ids"):
+        try:selected.append(int(value))
+        except (TypeError,ValueError):pass
+
+    where="active=1"
+    params=[]
+    order="brand_code"
+    if scope=="selected":
+        if not selected:
+            flash("Seleziona almeno un articolo.")
+            return redirect(url_for("product_qr_labels"))
+        marks=",".join("?" for _ in selected)
+        where+=f" AND id IN ({marks})"; params.extend(selected)
+    elif scope=="available":
+        where+=" AND quantity>0"
+    elif scope=="last":
+        order="id DESC"
+    elif scope=="low":
+        where+=" AND quantity<=1"
+    elif scope!="all":
+        scope="all"
+
+    sql=f"SELECT * FROM products WHERE {where} ORDER BY {order}"
+    if scope=="last":
+        sql+=" LIMIT ?"; params.append(last_count)
+    with connect() as db:
+        rows=db.execute(sql,params).fetchall()
+    if not rows:
+        flash("Nessun articolo corrisponde alla selezione.")
+        return redirect(url_for("product_qr_labels"))
+
+    labels=[]
+    for row in rows:
+        for _ in range(copies):
+            labels.append(row)
+
+    buffer=BytesIO()
+    pdf=canvas.Canvas(buffer,pagesize=A4)
+    page_w,page_h=A4
+    label_w,label_h=35*mm,15*mm
+    margin_x,margin_y=8*mm,8*mm
+    cols=max(1,int((page_w-2*margin_x)//label_w))
+    rows_per_page=max(1,int((page_h-2*margin_y)//label_h))
+    per_page=cols*rows_per_page
+
+    for index,p in enumerate(labels):
+        slot=index%per_page
+        if index and slot==0:
+            pdf.showPage()
+        col=slot%cols
+        row=slot//cols
+        x=margin_x+col*label_w
+        y=page_h-margin_y-(row+1)*label_h
+
+        pdf.setStrokeColor(colors.HexColor("#B88A2E"))
+        pdf.setLineWidth(.35)
+        pdf.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.3*mm,stroke=1,fill=0)
+
+        qr_size=12.2*mm
+        qr_widget=qr.QrCodeWidget(str(p["brand_code"]))
+        bounds=qr_widget.getBounds()
+        bw,bh=bounds[2]-bounds[0],bounds[3]-bounds[1]
+        drawing=Drawing(qr_size,qr_size,transform=[qr_size/bw,0,0,qr_size/bh,0,0])
+        drawing.add(qr_widget)
+        renderPDF.draw(drawing,pdf,x+1.2*mm,y+1.4*mm)
+
+        tx=x+14.4*mm
+        pdf.setFillColor(colors.black)
+        pdf.setFont("Helvetica-Bold",7.4)
+        pdf.drawString(tx,y+10.2*mm,str(p["brand_code"])[:18])
+        pdf.setFont("Helvetica-Bold",7.2)
+        pdf.drawString(tx,y+6.7*mm,f"EUR {float(p['price'] or 0):.2f}")
+        pdf.setFont("Helvetica",5.2)
+        pdf.drawString(tx,y+3.9*mm,"TBS ONE")
+        if extra=="stock" and int(p["quantity"] or 0)<=1:
+            pdf.setFillColor(colors.HexColor("#9A1F22"))
+            pdf.setFont("Helvetica-Bold",5.1)
+            pdf.drawString(tx,y+1.7*mm,"ULTIMO PEZZO")
+
+    pdf.save()
+    buffer.seek(0)
+    return send_file(buffer,as_attachment=False,download_name="TBS_ONE_Etichette_QR.pdf",mimetype="application/pdf")
+
+
 @app.route("/products/scan",methods=["GET","POST"])
 @login_required
 def scan_product():
@@ -2572,8 +2853,8 @@ def products():
 .products-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .scan-product-btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:11px;background:#111827;color:#fff;text-decoration:none;font-weight:900}
 .scan-product-btn:hover{opacity:.9}
-</style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
-{% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
+</style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><div class="actions"><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a>{% if can_manage %}<a class="scan-product-btn" href="{{url_for('product_qr_labels')}}">▦ Etichette QR</a>{% endif %}</div></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
+{% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label style="color:#f5f1e8;font-weight:850"><input name="is_new" type="checkbox"> Novità</label><label style="color:#f5f1e8;font-weight:850"><input name="is_bestseller" type="checkbox"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
 <div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product"><div class="no-photo">📘</div><div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
 
 @app.post("/products/<int:product_id>/order")
