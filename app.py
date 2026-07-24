@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v35.0.9 TBS ONE · Login Recovery"
+APP_VERSION = "v36.0.1 TBS ONE · Matrice Permessi RC2"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -382,7 +382,7 @@ BASE = '''<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name=
 /* v26 Premium Experience */
 :root{--v26-gold:#d5aa45;--v26-gold-soft:#f1d98b;--v26-ink:#111722}.main-header{border-bottom-color:rgba(213,170,69,.32)}.header-brand strong{letter-spacing:.08em}.header-brand span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.16em}.quick-actions a{position:relative;overflow:hidden;border:1px solid rgba(17,23,34,.08);box-shadow:0 12px 30px rgba(17,23,34,.07)}.quick-actions a:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.38),transparent 48%);pointer-events:none}.kpi{box-shadow:0 12px 32px rgba(17,23,34,.06)}
 @media(max-width:760px){body{padding-bottom:78px}.main-header{height:64px;min-height:64px;padding:7px 12px}.header-brand{max-width:185px}.header-brand strong{font-size:20px}.header-brand span{font-size:8px;letter-spacing:.13em}.user-menu a{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.055)}.mobile-dock{left:10px;right:10px;bottom:8px;border:1px solid rgba(213,170,69,.24);border-radius:25px;padding:5px 6px max(5px,env(safe-area-inset-bottom));box-shadow:0 14px 38px rgba(0,0,0,.34);overflow:hidden}.mobile-dock a,.mobile-dock button{min-height:52px;border-radius:18px;font-size:10px;color:#c9ced7}.mobile-dock span{font-size:20px}.mobile-dock a.active{background:linear-gradient(145deg,var(--v26-gold-soft),var(--v26-gold));color:#17130b;box-shadow:0 7px 18px rgba(213,170,69,.26)}.mobile-dock a.active span{color:#17130b}.mobile-dock button:active,.mobile-dock a:active{transform:scale(.96)}.dash-head{gap:18px}.quick-actions a{min-height:112px!important;border-radius:22px}.quick-actions a span{font-size:28px}.quick-actions a small{display:none}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi{min-height:128px;border-radius:20px}.metric{font-size:31px}.dash-two{grid-template-columns:1fr}.welcome-block h1,.dash-head h1{font-size:42px;line-height:.94}.welcome-block .muted,.dash-head .muted{font-size:17px;line-height:1.35}}
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<button type="button" aria-label="Apri menu" onclick="document.body.classList.toggle('mobile-menu-open')"><span>≡</span>Altro</button></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -1899,7 +1899,7 @@ def dashboard():
         pending_catalog_requests=db.execute("SELECT COUNT(*) FROM supplier_catalog_requests WHERE status IN ('Da ordinare','Nuovo')").fetchone()[0]
     return page("Dashboard",'''<style>
 .dash-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:18px}.dash-head h1{margin:0}.quick-actions{display:flex;gap:9px;flex-wrap:wrap}.quick-actions a{padding:11px 14px;border-radius:10px;color:white;text-decoration:none;font-weight:850}.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.kpi{padding:18px;border-radius:16px;background:white;border:1px solid #e5e7eb;box-shadow:0 8px 26px rgba(17,24,39,.06)}.kpi .metric{font-size:clamp(30px,6vw,48px);line-height:1.05;margin:7px 0}.kpi strong{font-size:14px;color:#4b5563}.dash-two{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}.stock-row,.sale-row,.top-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #edf0f3}.stock-row:last-child,.sale-row:last-child,.top-row:last-child{border-bottom:0}.stock-pill{font-weight:900;padding:6px 10px;border-radius:999px;background:#fff0bf;color:#805b00}.stock-zero{background:#f8d7da;color:#8a1c26}.rank{display:inline-flex;width:28px;height:28px;border-radius:50%;background:#111827;color:white;align-items:center;justify-content:center;font-weight:900;margin-right:8px}.empty-mini{padding:18px;text-align:center;color:#6b7280}@media(max-width:800px){.dash-head{display:block}.quick-actions{margin-top:14px}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-two{grid-template-columns:1fr}}@media(max-width:440px){.kpi-grid{grid-template-columns:1fr 1fr}.kpi{padding:14px}.quick-actions a{flex:1;text-align:center}}
-</style><div class="dash-head"><div class="welcome-block"><span class="eyebrow">PANORAMICA OPERATIVA</span><h1>Bentornato, {% if session.get('role') == 'admin' %}<span class="welcome-name">Elvis</span>{% else %}<span class="welcome-name">{{session.get('user')}}</span>{% endif %}.</h1><p class="muted">Tutto ciò che serve per gestire la giornata.</p>{% if pending_catalog_requests %}<p><a class="order-alert" href="{{url_for('catalog_requests')}}">{{pending_catalog_requests}} nuovi ordini cliente</a></p>{% endif %}</div><div class="quick-actions"><a href="{{url_for('price_check')}}"><span>€</span><b>Assistente</b><small>Prezzi e disponibilità</small></a><a href="{{url_for('cart')}}"><span>＋</span><b>Carrello</b><small>Vendita rapida</small></a><a href="{{url_for('products')}}"><span>◇</span><b>Catalogo</b><small>Magazzino prodotti</small></a><a href="{{url_for('scan_product')}}"><span>⌗</span><b>Scanner</b><small>Leggi QR prodotto</small></a></div></div><div class="kpi-grid"><div class="kpi"><div class="kpi-top"><span>€</span><strong>Oggi</strong></div><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite · {{today.pieces}} pezzi</span></div><div class="kpi"><div class="kpi-top"><span>↗</span><strong>7 giorni</strong></div><div class="metric">€ {{'%.2f'|format(week_revenue)}}</div><span class="muted">Valore vendite confermate</span></div><div class="kpi"><div class="kpi-top"><span>◇</span><strong>Disponibilità</strong></div><div class="metric">{{p}}</div><span class="muted">{{r}} referenze attive</span></div><div class="kpi"><div class="kpi-top"><span>!</span><strong>Scorte critiche</strong></div><div class="metric">{{l}}</div><span class="muted">Quantità ≤ 1</span></div></div><div class="dash-two"><div><div class="card"><h2>⚠️ Da controllare</h2>{% if low_stock %}{% for x in low_stock %}<div class="stock-row"><div><b>{{x.brand_code}}</b><br><small class="muted">{{x.category or 'Altro'}}{% if x.location %} · 📍 {{x.location}}{% endif %}</small></div><span class="stock-pill {% if x.quantity<=0 %}stock-zero{% endif %}">{{x.quantity}} pz</span></div>{% endfor %}<p><a href="{{url_for('products')}}">Apri il magazzino →</a></p>{% else %}<div class="empty-mini">Nessuna scorta critica.</div>{% endif %}</div><div class="card"><h2>🏆 Più venduti · 30 giorni</h2>{% if top_products %}{% for x in top_products %}<div class="top-row"><div><span class="rank">{{loop.index}}</span><b>{{x.product_code}}</b></div><div style="text-align:right"><b>{{x.pieces}} pz</b><br><small class="muted">€ {{'%.2f'|format(x.revenue)}}</small></div></div>{% endfor %}{% else %}<div class="empty-mini">Non ci sono ancora vendite nel periodo.</div>{% endif %}</div></div><div><div class="card"><h2>🧾 Ultime vendite</h2>{% if recent_sales %}{% for x in recent_sales %}<div class="sale-row"><div><b>{{x.sale_number or 'Vendita'}}</b><br><small class="muted">{{x.created_at|rome_time}} · {{x.username}}<br>{{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</small></div><div style="text-align:right"><b>€ {{'%.2f'|format(x.total)}}</b><br><small>{{x.pieces}} pz</small></div></div>{% endfor %}<p><a href="{{url_for('sales_log')}}">Registro completo →</a></p>{% else %}<div class="empty-mini">Nessuna vendita registrata.</div>{% endif %}</div><div class="card"><h2>📘 Ordinabili</h2><p>Consulta il catalogo fornitore e crea ordini cliente con consegna indicativa 15–20 giorni.</p><a class="view" href="{{url_for('supplier_catalog')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block;font-weight:bold">Apri catalogo</a></div></div></div>{% if role == 'seller' and my_sales %}<div class="card"><h3>Le tue ultime operazioni</h3>{% for x in my_sales %}<p><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}}<br><span class="muted">{{x.created_at|rome_time}}</span></p>{% endfor %}</div>{% endif %}{% if recent %}<div class="card"><h3>Storico amministrativo recente</h3>{% for x in recent %}<p><b>{{x.username}}</b> · {{x.action}}{% if x.product_code %} · {{x.product_code}}{% endif %}<br><span class="muted">{{x.created_at|rome_time}} {{x.details or ''}}</span></p>{% endfor %}</div>{% endif %}''',r=r,p=p,l=l,f=f,today=today,week_revenue=week_revenue,low_stock=low_stock,top_products=top_products,recent_sales=recent_sales,recent=recent,my_sales=my_sales,role=session.get("role"),role_label=ROLE_LABELS.get(session.get("role"),session.get("role")),pending_catalog_requests=pending_catalog_requests)
+</style><div class="dash-head"><div class="welcome-block"><span class="eyebrow">PANORAMICA OPERATIVA</span><h1>Bentornato, <span class="welcome-name">{{session.get('user')}}</span>.</h1><p class="muted">Tutto ciò che serve per gestire la giornata.</p>{% if pending_catalog_requests %}<p><a class="order-alert" href="{{url_for('catalog_requests')}}">{{pending_catalog_requests}} nuovi ordini cliente</a></p>{% endif %}</div><div class="quick-actions"><a href="{{url_for('price_check')}}"><span>€</span><b>Assistente</b><small>Prezzi e disponibilità</small></a><a href="{{url_for('cart')}}"><span>＋</span><b>Carrello</b><small>Vendita rapida</small></a><a href="{{url_for('products')}}"><span>◇</span><b>Catalogo</b><small>Magazzino prodotti</small></a><a href="{{url_for('scan_product')}}"><span>⌗</span><b>Scanner</b><small>Leggi QR prodotto</small></a></div></div><div class="kpi-grid"><div class="kpi"><div class="kpi-top"><span>€</span><strong>Oggi</strong></div><div class="metric">€ {{'%.2f'|format(today.revenue)}}</div><span class="muted">{{today.receipts}} vendite · {{today.pieces}} pezzi</span></div><div class="kpi"><div class="kpi-top"><span>↗</span><strong>7 giorni</strong></div><div class="metric">€ {{'%.2f'|format(week_revenue)}}</div><span class="muted">Valore vendite confermate</span></div><div class="kpi"><div class="kpi-top"><span>◇</span><strong>Disponibilità</strong></div><div class="metric">{{p}}</div><span class="muted">{{r}} referenze attive</span></div><div class="kpi"><div class="kpi-top"><span>!</span><strong>Scorte critiche</strong></div><div class="metric">{{l}}</div><span class="muted">Quantità ≤ 1</span></div></div><div class="dash-two"><div><div class="card"><h2>⚠️ Da controllare</h2>{% if low_stock %}{% for x in low_stock %}<div class="stock-row"><div><b>{{x.brand_code}}</b><br><small class="muted">{{x.category or 'Altro'}}{% if x.location %} · 📍 {{x.location}}{% endif %}</small></div><span class="stock-pill {% if x.quantity<=0 %}stock-zero{% endif %}">{{x.quantity}} pz</span></div>{% endfor %}<p><a href="{{url_for('products')}}">Apri il magazzino →</a></p>{% else %}<div class="empty-mini">Nessuna scorta critica.</div>{% endif %}</div><div class="card"><h2>🏆 Più venduti · 30 giorni</h2>{% if top_products %}{% for x in top_products %}<div class="top-row"><div><span class="rank">{{loop.index}}</span><b>{{x.product_code}}</b></div><div style="text-align:right"><b>{{x.pieces}} pz</b><br><small class="muted">€ {{'%.2f'|format(x.revenue)}}</small></div></div>{% endfor %}{% else %}<div class="empty-mini">Non ci sono ancora vendite nel periodo.</div>{% endif %}</div></div><div><div class="card"><h2>🧾 Ultime vendite</h2>{% if recent_sales %}{% for x in recent_sales %}<div class="sale-row"><div><b>{{x.sale_number or 'Vendita'}}</b><br><small class="muted">{{x.created_at|rome_time}} · {{x.username}}<br>{{x.payment_method or 'Altro'}} · {{x.channel or 'Negozio'}}</small></div><div style="text-align:right"><b>€ {{'%.2f'|format(x.total)}}</b><br><small>{{x.pieces}} pz</small></div></div>{% endfor %}<p><a href="{{url_for('sales_log')}}">Registro completo →</a></p>{% else %}<div class="empty-mini">Nessuna vendita registrata.</div>{% endif %}</div><div class="card"><h2>📘 Ordinabili</h2><p>Consulta il catalogo fornitore e crea ordini cliente con consegna indicativa 15–20 giorni.</p><a class="view" href="{{url_for('supplier_catalog')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block;font-weight:bold">Apri catalogo</a></div></div></div>{% if role == 'seller' and my_sales %}<div class="card"><h3>Le tue ultime operazioni</h3>{% for x in my_sales %}<p><b>{{x.product_code}}</b> · {{x.quantity}} pz · € {{'%.2f'|format(x.unit_price)}}<br><span class="muted">{{x.created_at|rome_time}}</span></p>{% endfor %}</div>{% endif %}{% if recent %}<div class="card"><h3>Storico amministrativo recente</h3>{% for x in recent %}<p><b>{{x.username}}</b> · {{x.action}}{% if x.product_code %} · {{x.product_code}}{% endif %}<br><span class="muted">{{x.created_at|rome_time}} {{x.details or ''}}</span></p>{% endfor %}</div>{% endif %}''',r=r,p=p,l=l,f=f,today=today,week_revenue=week_revenue,low_stock=low_stock,top_products=top_products,recent_sales=recent_sales,recent=recent,my_sales=my_sales,role=session.get("role"),role_label=ROLE_LABELS.get(session.get("role"),session.get("role")),pending_catalog_requests=pending_catalog_requests)
 
 @app.get("/price-check")
 @login_required
@@ -2385,21 +2385,24 @@ def pos_set_price():
     with connect() as db:p=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
     if not p or str(pid) not in session.get('cart',{}):flash("Articolo non presente nel carrello.");return redirect(url_for(return_to))
     if price<0 or price>float(p['price']):flash("Il prezzo deve essere tra zero e il listino.");return redirect(url_for(return_to))
-    if session.get('role') in ('admin','manager'):
+    if session.get('role') == 'admin':
         cp=dict(session.get('cart_prices',{}));cp[str(pid)]={'price':price,'reason':reason,'authorized_by_user_id':session.get('user_id'),'authorized_by_username':session.get('user')};session['cart_prices']=cp;session.modified=True;flash("Prezzo modificato.");return redirect(url_for(return_to))
-    # Il venditore può scegliere liberamente lo sconto entro il tetto assegnato.
+    # Tutti gli utenti operativi applicano sconti entro il limite personale deciso dall'Admin.
     with connect() as db:
-        seller=db.execute("SELECT COALESCE(seller_discount_limit,0) AS lim FROM users WHERE id=?",(session.get('user_id'),)).fetchone()
+        seller=db.execute("SELECT COALESCE(discount_limit_percent,seller_discount_limit,0) AS lim, COALESCE(discount_limit_eur,0) AS lim_eur FROM users WHERE id=?",(session.get('user_id'),)).fetchone()
     limit_pct=max(0.0,min(100.0,float(seller['lim'] if seller else 0)))
+    limit_eur=max(0.0,float(seller['lim_eur'] if seller else 0))
     discount_pct=((float(p['price'])-price)/float(p['price'])*100.0) if float(p['price'])>0 else 0.0
-    if discount_pct <= limit_pct + 1e-9:
+    discount_eur=max(0.0,float(p['price'])-price)
+    within_eur=(limit_eur<=0 or discount_eur<=limit_eur+1e-9)
+    if discount_pct <= limit_pct + 1e-9 and within_eur:
         cp=dict(session.get('cart_prices',{}))
         cp[str(pid)]={'price':price,'reason':f"{reason} · margine venditore {discount_pct:.1f}%/{limit_pct:.1f}%",'authorized_by_user_id':session.get('user_id'),'authorized_by_username':session.get('user')}
         session['cart_prices']=cp;session.modified=True
         with connect() as db:
             log_action(db,"Sconto applicato entro margine venditore",p,f"Venditore {session.get('user')}; sconto {discount_pct:.1f}%; limite {limit_pct:.1f}%; prezzo € {price:.2f}")
             db.commit()
-        flash(f"Sconto del {discount_pct:.1f}% applicato entro il tuo limite massimo del {limit_pct:.1f}%.")
+        flash(f"Sconto del {discount_pct:.1f}% applicato entro il tuo limite personale del {limit_pct:.1f}%.")
         return redirect(url_for(return_to))
     token=secrets.token_urlsafe(24)
     with connect() as db:
@@ -2417,7 +2420,7 @@ def pos_set_price():
         log_action(db,"Richiesta sconto remota",p,f"Listino € {p['price']:.2f}; richiesto € {price:.2f}; motivo {reason}")
         db.commit()
     session['pending_discount_token']=token;session.modified=True
-    flash("Richiesta inviata ad Admin e Gestore.")
+    flash("Sconto superiore al limite personale: operazione bloccata e richiesta registrata.")
     return redirect(url_for('discount_request_wait',token=token))
 
 @app.get("/discount-request/<token>")
@@ -3190,7 +3193,7 @@ def users():
 <input name="username" placeholder="Username di accesso" required>
 <input name="badge_name" placeholder="Nome sul badge" required>
 <input name="password" type="password" minlength="6" placeholder="Password (min. 6)" required>
-<select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option><option value="admin">Admin</option></select>
+<select name="role"><option value="manager">Gestore</option><option value="seller">Venditore</option></select>
 <button>Crea utente</button></form></div>
 {% for u in rows %}<div class="card"><h3>{{u.username}} <span class="badge">{{roles.get(u.role,u.role)}}</span></h3>
 <p class="muted">{% if u.active %}Attivo{% else %}Disattivato{% endif %} · Badge: {{u.badge_name or 'non impostato'}} · PIN: {% if u.approval_pin_hash %}configurato{% else %}non configurato{% endif %}</p>
@@ -3263,6 +3266,8 @@ def generate_user_badge(user_id):
         u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
         if not u:
             flash("Utente non trovato."); return redirect(url_for("users"))
+        if u['role']=='admin':
+            flash("L'Admin di sistema non utilizza badge."); return redirect(url_for("users"))
         db.execute("UPDATE users SET badge_token_hash=?,badge_created_at=CURRENT_TIMESTAMP WHERE id=?",(badge_hash(token),user_id))
         log_action(db,"Badge utente generato",details=u["username"]); db.commit()
         badge_name=(u["badge_name"] or u["username"]).strip()
@@ -3275,7 +3280,9 @@ def generate_user_badge(user_id):
 def revoke_user_badge(user_id):
     with connect() as db:
         u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
-        if u:
+        if u and u['role']=='admin':
+            flash("L'Admin di sistema non utilizza badge.")
+        elif u:
             db.execute("UPDATE users SET badge_token_hash=NULL,badge_created_at=NULL WHERE id=?",(user_id,))
             log_action(db,"Badge utente revocato",details=u["username"]); db.commit(); flash("Badge revocato.")
         else: flash("Utente non trovato.")
@@ -3288,7 +3295,9 @@ def toggle_user(user_id):
         flash("Non puoi disattivare il tuo account."); return redirect(url_for("users"))
     with connect() as db:
         u=db.execute("SELECT * FROM users WHERE id=?",(user_id,)).fetchone()
-        if u:
+        if u and u['role']=='admin':
+            flash("L'Admin di sistema non può essere disattivato.")
+        elif u:
             new_active=0 if u["active"] else 1; db.execute("UPDATE users SET active=? WHERE id=?",(new_active,user_id)); log_action(db,"Account riattivato" if new_active else "Account disattivato",details=u["username"]); db.commit(); flash("Account aggiornato.")
     return redirect(url_for("users"))
 
@@ -4158,5 +4167,302 @@ def v35_release_center():
     health=_v35_health()
     body="""<div class='dash-head'><div><span class='eyebrow'>V35 · ENTERPRISE</span><h1>Release Center</h1><p class='muted'>Controllo tecnico e accesso ai moduli finali.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Database</strong><div class='metric'>{{health.database}}</div></div><div class='kpi'><strong>Integrità</strong><div class='metric'>{{health.integrity}}</div></div><div class='kpi'><strong>Storage</strong><div class='metric'>{{health.storage}}</div></div><div class='kpi'><strong>Ultimo backup</strong><div style='font-size:18px;font-weight:900;margin-top:12px'>{{health.backup}}</div></div></div><div class='grid'><a class='card' href='{{url_for("v31_dashboard")}}' style='text-decoration:none;color:inherit'><h2>Enterprise UX</h2><p>Home operativa.</p></a><a class='card' href='{{url_for("v32_inventory")}}' style='text-decoration:none;color:inherit'><h2>Smart Inventory</h2><p>Scorte e riordini.</p></a><a class='card' href='{{url_for("v33_assistant")}}' style='text-decoration:none;color:inherit'><h2>Business Assistant</h2><p>Priorità guidate.</p></a><a class='card' href='{{url_for("v34_analytics")}}' style='text-decoration:none;color:inherit'><h2>Analytics</h2><p>Grafici e KPI.</p></a></div><div class='card'><h2>Backup manuale</h2><form method='post'><input type='hidden' name='action' value='backup'><button>Crea backup ora</button></form></div>"""
     return page('V35 Release Center',body,health=health)
+
+
+
+# ============================================================
+# v36.0 PERMESSI, ADMIN DI SISTEMA E PREFERENZE NOTIFICHE
+# ============================================================
+V36_PERMISSION_DEFS = {
+    'sell': 'Effettuare vendite',
+    'apply_discount': 'Applicare sconti entro il proprio limite',
+    'manage_returns': 'Gestire resi e annullamenti',
+    'manage_products': 'Inserire e modificare articoli',
+    'delete_products': 'Eliminare articoli',
+    'manage_badges': 'Creare, ristampare e revocare badge colleghi',
+    'print_product_qr': 'Generare e stampare QR gioielli',
+    'manage_inventory': 'Gestire magazzino e inventario',
+    'manage_orders': 'Gestire ordini e clienti',
+    'manage_users': 'Gestire utenti operativi',
+    'edit_prices': 'Modificare prezzi di listino',
+    'manage_cash': 'Aprire e chiudere la cassa',
+    'cash_withdrawals': 'Effettuare prelievi e gestire tesoreria',
+    'view_statistics': 'Visualizzare statistiche e report',
+    'manage_notifications': 'Inviare comunicazioni interne',
+    'view_audit_log': 'Consultare lo storico attività',
+    'create_backup': 'Creare backup manuali',
+    'restore_backup': 'Ripristinare backup',
+}
+V36_ROLE_PROFILES = {
+    'manager': 'Gestore',
+    'seller': 'Venditore',
+    'other': 'Altro / Personalizzato',
+}
+V36_PERMISSION_COLUMNS = {key: f'can_{key}' for key in V36_PERMISSION_DEFS}
+V36_NOTIFICATION_DEFS = {
+    'stock_low': ('Magazzino','Scorte sotto il minimo'),
+    'stock_out': ('Magazzino','Articolo esaurito'),
+    'inventory_due': ('Magazzino','Inventario da eseguire'),
+    'customer_order_new': ('Ordini','Nuovo ordine cliente'),
+    'supplier_goods_arrived': ('Ordini','Merce arrivata dal fornitore'),
+    'customer_to_contact': ('Ordini','Cliente da contattare'),
+    'sale_completed': ('Vendite','Vendita completata'),
+    'discount_result': ('Vendite','Esito di uno sconto'),
+    'cash_opened': ('Cassa','Apertura cassa'),
+    'cash_closed': ('Cassa','Chiusura cassa'),
+    'cash_withdrawal': ('Cassa','Prelievo tesoreria'),
+    'badge_created': ('Personale','Badge creato o rigenerato'),
+    'user_login': ('Personale','Accesso effettuato'),
+    'backup_completed': ('Sistema','Backup completato'),
+    'system_error': ('Sistema','Errore di sistema'),
+    'manual_message': ('Sistema','Comunicazioni interne'),
+}
+
+def _v36_init():
+    with connect() as db:
+        ensure_column(db,'users','is_system_admin','INTEGER NOT NULL DEFAULT 0')
+        ensure_column(db,'users','discount_limit_percent','REAL NOT NULL DEFAULT 0')
+        ensure_column(db,'users','discount_limit_eur','REAL NOT NULL DEFAULT 0')
+        ensure_column(db,'users','permission_profile','TEXT NOT NULL DEFAULT "custom"')
+        for column in V36_PERMISSION_COLUMNS.values():
+            ensure_column(db,'users',column,'INTEGER NOT NULL DEFAULT 0')
+        db.execute('''CREATE TABLE IF NOT EXISTS role_permission_profiles(
+            profile_key TEXT PRIMARY KEY,
+            profile_label TEXT NOT NULL,
+            discount_limit_percent REAL NOT NULL DEFAULT 0,
+            discount_limit_eur REAL NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS role_permission_values(
+            profile_key TEXT NOT NULL,
+            permission_key TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(profile_key,permission_key),
+            FOREIGN KEY(profile_key) REFERENCES role_permission_profiles(profile_key)
+        )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS notification_preferences(
+            user_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            popup_enabled INTEGER NOT NULL DEFAULT 1,
+            email_enabled INTEGER NOT NULL DEFAULT 0,
+            push_enabled INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(user_id,event_type),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS internal_messages(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_user_id INTEGER,
+            sender_username TEXT,
+            target_type TEXT NOT NULL,
+            target_value TEXT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT 'media',
+            expires_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )''')
+        default_profiles = {
+            'manager': {'sell','apply_discount','manage_products','manage_badges','print_product_qr','manage_inventory','manage_orders','manage_users','view_statistics'},
+            'seller': {'sell','apply_discount'},
+            'other': set(),
+        }
+        for profile_key,label in V36_ROLE_PROFILES.items():
+            db.execute('INSERT OR IGNORE INTO role_permission_profiles(profile_key,profile_label) VALUES(?,?)',(profile_key,label))
+            existing=db.execute('SELECT COUNT(*) c FROM role_permission_values WHERE profile_key=?',(profile_key,)).fetchone()['c']
+            if not existing:
+                for permission_key in V36_PERMISSION_DEFS:
+                    db.execute('INSERT OR IGNORE INTO role_permission_values(profile_key,permission_key,enabled) VALUES(?,?,?)',(profile_key,permission_key,1 if permission_key in default_profiles[profile_key] else 0))
+        admin=db.execute("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1").fetchone()
+        if admin:
+            db.execute("UPDATE users SET is_system_admin=1,active=1,badge_token_hash=NULL,badge_created_at=NULL WHERE id=?",(admin['id'],))
+            fixed=os.environ.get('TBS_ADMIN_PASSWORD','').strip()
+            if fixed:
+                db.execute("UPDATE users SET password_hash=? WHERE id=?",(generate_password_hash(fixed),admin['id']))
+        db.execute("UPDATE users SET discount_limit_percent=COALESCE(NULLIF(discount_limit_percent,0),seller_discount_limit,0) WHERE role!='admin'")
+        db.execute("UPDATE users SET permission_profile=CASE WHEN role='manager' THEN 'manager' WHEN role='seller' THEN 'seller' ELSE 'custom' END WHERE role!='admin' AND (permission_profile IS NULL OR permission_profile='' OR permission_profile='custom')")
+        db.commit()
+
+_v36_init()
+
+def _v36_profile_permissions(db,profile_key):
+    rows=db.execute('SELECT permission_key,enabled FROM role_permission_values WHERE profile_key=?',(profile_key,)).fetchall()
+    return {r['permission_key']: bool(r['enabled']) for r in rows}
+
+def _v36_user_permissions(db,user_id):
+    u=db.execute('SELECT * FROM users WHERE id=?',(user_id,)).fetchone()
+    if not u: return {}
+    if u['role']=='admin': return {key:True for key in V36_PERMISSION_DEFS}
+    return {key: bool(u[V36_PERMISSION_COLUMNS[key]]) for key in V36_PERMISSION_DEFS}
+
+def _v36_apply_profile_to_user(db,user_id,profile_key):
+    permissions=_v36_profile_permissions(db,profile_key)
+    profile=db.execute('SELECT * FROM role_permission_profiles WHERE profile_key=?',(profile_key,)).fetchone()
+    if not profile: return False
+    assignments=['permission_profile=?','discount_limit_percent=?','discount_limit_eur=?']
+    values=[profile_key,profile['discount_limit_percent'],profile['discount_limit_eur']]
+    for key,column in V36_PERMISSION_COLUMNS.items():
+        assignments.append(f'{column}=?')
+        values.append(1 if permissions.get(key) else 0)
+    values.append(user_id)
+    db.execute(f"UPDATE users SET {','.join(assignments)} WHERE id=? AND role!='admin'",values)
+    return True
+
+def v36_has_permission(key):
+    if session.get('role')=='admin': return True
+    if not session.get('user_id'): return False
+    with connect() as db: return bool(_v36_user_permissions(db,session['user_id']).get(key))
+
+def v36_permission_required(key):
+    def deco(fn):
+        @wraps(fn)
+        def wrapped(*args,**kwargs):
+            if not session.get('user_id'): return redirect(url_for('login'))
+            if not v36_has_permission(key):
+                flash('Non hai il permesso per questa funzione.')
+                return redirect(url_for('home'))
+            return fn(*args,**kwargs)
+        return wrapped
+    return deco
+
+@app.route('/v36/permissions',methods=['GET','POST'])
+@login_required
+@role_required('admin')
+def v36_permissions():
+    if request.method=='POST':
+        action=request.form.get('action','save_user')
+        with connect() as db:
+            if action=='save_profile':
+                profile_key=request.form.get('profile_key','')
+                if profile_key not in V36_ROLE_PROFILES:
+                    flash('Profilo non valido.')
+                else:
+                    pct=max(0,min(100,float(request.form.get('discount_limit_percent','0') or 0)))
+                    eur=max(0,float(request.form.get('discount_limit_eur','0') or 0))
+                    db.execute('UPDATE role_permission_profiles SET discount_limit_percent=?,discount_limit_eur=?,updated_at=CURRENT_TIMESTAMP WHERE profile_key=?',(pct,eur,profile_key))
+                    for key in V36_PERMISSION_DEFS:
+                        enabled=1 if request.form.get(key)=='1' else 0
+                        db.execute('INSERT INTO role_permission_values(profile_key,permission_key,enabled) VALUES(?,?,?) ON CONFLICT(profile_key,permission_key) DO UPDATE SET enabled=excluded.enabled',(profile_key,key,enabled))
+                    if request.form.get('apply_existing')=='1':
+                        users=db.execute("SELECT id FROM users WHERE role!='admin' AND permission_profile=?",(profile_key,)).fetchall()
+                        for row in users:
+                            _v36_apply_profile_to_user(db,row['id'],profile_key)
+                    log_action(db,'Profilo permessi aggiornato',details=V36_ROLE_PROFILES[profile_key])
+                    db.commit()
+                    flash('Profilo salvato correttamente.')
+            elif action=='apply_profile':
+                user_id=int(request.form.get('user_id','0') or 0)
+                profile_key=request.form.get('profile_key','')
+                if profile_key in V36_ROLE_PROFILES and _v36_apply_profile_to_user(db,user_id,profile_key):
+                    u=db.execute('SELECT username FROM users WHERE id=?',(user_id,)).fetchone()
+                    log_action(db,'Profilo permessi applicato',details=f"{u['username']} · {V36_ROLE_PROFILES[profile_key]}")
+                    db.commit()
+                    flash('Profilo applicato all’utente.')
+                else:
+                    flash('Utente o profilo non valido.')
+            else:
+                user_id=int(request.form.get('user_id','0') or 0)
+                u=db.execute("SELECT * FROM users WHERE id=? AND role!='admin'",(user_id,)).fetchone()
+                if not u:
+                    flash('Utente operativo non trovato.')
+                else:
+                    pct=max(0,min(100,float(request.form.get('discount_limit_percent','0') or 0)))
+                    eur=max(0,float(request.form.get('discount_limit_eur','0') or 0))
+                    assignments=['permission_profile=?','discount_limit_percent=?','discount_limit_eur=?']
+                    values=['custom',pct,eur]
+                    for key,column in V36_PERMISSION_COLUMNS.items():
+                        assignments.append(f'{column}=?')
+                        values.append(1 if request.form.get(key)=='1' else 0)
+                    values.append(user_id)
+                    db.execute(f"UPDATE users SET {','.join(assignments)} WHERE id=?",values)
+                    log_action(db,'Permessi utente personalizzati',details=f"{u['username']} · sconto {pct:.1f}% / € {eur:.2f}")
+                    db.commit()
+                    flash('Permessi personali aggiornati.')
+        return redirect(url_for('v36_permissions'))
+    with connect() as db:
+        rows=db.execute("SELECT * FROM users WHERE role!='admin' ORDER BY role,username").fetchall()
+        profiles={}
+        for key,label in V36_ROLE_PROFILES.items():
+            profile=db.execute('SELECT * FROM role_permission_profiles WHERE profile_key=?',(key,)).fetchone()
+            profiles[key]={'row':profile,'permissions':_v36_profile_permissions(db,key),'label':label}
+    body='''<div class="dash-head"><div><span class="eyebrow">V36.0.1 · MATRICE ACCESSI</span><h1>Gestione completa permessi</h1><p class="muted">L’Admin configura i modelli per Gestore, Venditore o Altro e può personalizzare ogni singolo utente.</p></div></div>
+    <div class="card"><h2>1 · Profili base</h2><p class="muted">Le spunte salvate qui diventano il modello del ruolo. Seleziona “applica agli utenti esistenti” per aggiornare anche chi usa già quel profilo.</p></div>
+    {% for profile_key,p in profiles.items() %}<form method="post" class="card"><input type="hidden" name="action" value="save_profile"><input type="hidden" name="profile_key" value="{{profile_key}}"><h2>{{p.label}}</h2><div class="grid"><label>Sconto massimo %<input type="number" name="discount_limit_percent" min="0" max="100" step="0.1" value="{{p.row.discount_limit_percent}}"></label><label>Sconto massimo € <small>(0 = nessun limite in euro)</small><input type="number" name="discount_limit_eur" min="0" step="0.01" value="{{p.row.discount_limit_eur}}"></label></div><hr><div class="grid">{% for key,label in permission_defs.items() %}<label class="card" style="margin:0"><input type="checkbox" name="{{key}}" value="1" {% if p.permissions.get(key) %}checked{% endif %}> <b>{{label}}</b></label>{% endfor %}</div><p><label><input type="checkbox" name="apply_existing" value="1"> Applica subito questo profilo a tutti gli utenti collegati</label></p><button>Salva profilo {{p.label}}</button></form>{% endfor %}
+    <div class="card"><h2>2 · Permessi per singolo utente</h2><p class="muted">Puoi applicare un profilo oppure impostare spunte personalizzate. L’Admin di sistema resta sempre completo e non compare qui.</p></div>
+    {% for u in rows %}<div class="card"><h2>{{u.badge_name or u.username}} <span class="badge">{{roles.get(u.role,u.role)}}</span></h2><p class="muted">{{u.username}} · Profilo attuale: {{profile_labels.get(u.permission_profile,'Personalizzato')}}</p><form method="post" class="actions" style="margin-bottom:16px"><input type="hidden" name="action" value="apply_profile"><input type="hidden" name="user_id" value="{{u.id}}"><select name="profile_key">{% for key,label in profile_labels.items() %}<option value="{{key}}">{{label}}</option>{% endfor %}</select><button class="secondary">Applica profilo</button></form><form method="post"><input type="hidden" name="action" value="save_user"><input type="hidden" name="user_id" value="{{u.id}}"><div class="grid"><label>Sconto massimo %<input type="number" name="discount_limit_percent" min="0" max="100" step="0.1" value="{{u.discount_limit_percent}}"></label><label>Sconto massimo € <small>(0 = nessun limite)</small><input type="number" name="discount_limit_eur" min="0" step="0.01" value="{{u.discount_limit_eur}}"></label></div><hr><div class="grid">{% for key,label in permission_defs.items() %}<label class="card" style="margin:0"><input type="checkbox" name="{{key}}" value="1" {% if u['can_'+key] %}checked{% endif %}> <b>{{label}}</b></label>{% endfor %}</div><p><button>Salva personalizzazione</button></p></form></div>{% else %}<div class="card">Nessun utente operativo.</div>{% endfor %}'''
+    return page('Matrice permessi',body,rows=rows,roles=ROLE_LABELS,permission_defs=V36_PERMISSION_DEFS,profiles=profiles,profile_labels=V36_ROLE_PROFILES)
+
+@app.get('/staff-badges')
+@login_required
+@v36_permission_required('manage_badges')
+def v36_staff_badges():
+    with connect() as db: rows=db.execute("SELECT * FROM users WHERE role!='admin' ORDER BY username").fetchall()
+    body='''<h1>🪪 Badge colleghi</h1><div class="card"><p>Il badge precedente smette di funzionare quando ne viene rigenerato uno nuovo.</p></div>{% for u in rows %}<div class="card"><h2>{{u.badge_name or u.username}}</h2><p class="muted">{{u.username}} · {{roles.get(u.role,u.role)}}</p><div class="actions"><form method="post" action="{{url_for('v36_generate_staff_badge',user_id=u.id)}}"><button class="success">{% if u.badge_token_hash %}Rigenera e stampa badge{% else %}Genera e stampa badge{% endif %}</button></form>{% if u.badge_token_hash %}<form method="post" action="{{url_for('v36_revoke_staff_badge',user_id=u.id)}}"><button class="danger">Revoca badge</button></form>{% endif %}</div></div>{% endfor %}'''
+    return page('Badge colleghi',body,rows=rows,roles=ROLE_LABELS)
+
+@app.post('/staff-badges/<int:user_id>/generate')
+@login_required
+@v36_permission_required('manage_badges')
+def v36_generate_staff_badge(user_id):
+    token=secrets.token_urlsafe(32)
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=? AND role!='admin'",(user_id,)).fetchone()
+        if not u: flash('Utente non trovato.'); return redirect(url_for('v36_staff_badges'))
+        db.execute("UPDATE users SET badge_token_hash=?,badge_created_at=CURRENT_TIMESTAMP WHERE id=?",(badge_hash(token),user_id))
+        log_action(db,'Badge collega generato',details=f"{u['username']} da {session.get('user')}")
+        db.commit(); badge_name=(u['badge_name'] or u['username']).strip(); pdf=create_badge_pdf(badge_name,token)
+    safe=''.join(ch for ch in badge_name if ch.isalnum() or ch in '-_ ').strip().replace(' ','_') or f'utente_{user_id}'
+    return send_file(pdf,as_attachment=True,download_name=f'badge_TBS_{safe}.pdf',mimetype='application/pdf')
+
+@app.post('/staff-badges/<int:user_id>/revoke')
+@login_required
+@v36_permission_required('manage_badges')
+def v36_revoke_staff_badge(user_id):
+    with connect() as db:
+        u=db.execute("SELECT * FROM users WHERE id=? AND role!='admin'",(user_id,)).fetchone()
+        if u:
+            db.execute("UPDATE users SET badge_token_hash=NULL,badge_created_at=NULL WHERE id=?",(user_id,)); log_action(db,'Badge collega revocato',details=f"{u['username']} da {session.get('user')}"); db.commit(); flash('Badge revocato.')
+    return redirect(url_for('v36_staff_badges'))
+
+@app.route('/notifications/preferences',methods=['GET','POST'])
+@login_required
+def v36_notification_preferences():
+    uid=session['user_id']
+    if request.method=='POST':
+        with connect() as db:
+            for key in V36_NOTIFICATION_DEFS:
+                enabled=1 if request.form.get(f'enabled_{key}')=='1' else 0
+                popup=1 if request.form.get(f'popup_{key}')=='1' else 0
+                db.execute('''INSERT INTO notification_preferences(user_id,event_type,enabled,popup_enabled)
+                    VALUES(?,?,?,?) ON CONFLICT(user_id,event_type) DO UPDATE SET enabled=excluded.enabled,popup_enabled=excluded.popup_enabled,updated_at=CURRENT_TIMESTAMP''',(uid,key,enabled,popup))
+            db.commit(); flash('Preferenze notifiche salvate.')
+        return redirect(url_for('v36_notification_preferences'))
+    with connect() as db:
+        rows={r['event_type']:r for r in db.execute('SELECT * FROM notification_preferences WHERE user_id=?',(uid,)).fetchall()}
+    grouped={}
+    for key,(cat,label) in V36_NOTIFICATION_DEFS.items(): grouped.setdefault(cat,[]).append((key,label))
+    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div><form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
+    return page('Preferenze notifiche',body,grouped=grouped,rows=rows)
+
+@app.route('/v36/notifications/send',methods=['GET','POST'])
+@login_required
+@role_required('admin')
+def v36_manual_notifications():
+    if request.method=='POST':
+        title=(request.form.get('title') or '').strip(); message=(request.form.get('message') or '').strip(); target=request.form.get('target','all'); priority=request.form.get('priority','media')
+        if not title or not message: flash('Inserisci titolo e messaggio.'); return redirect(url_for('v36_manual_notifications'))
+        with connect() as db:
+            if target=='all': recipients=db.execute("SELECT * FROM users WHERE active=1 AND role!='admin'").fetchall()
+            elif target in ('manager','seller'): recipients=db.execute("SELECT * FROM users WHERE active=1 AND role=?",(target,)).fetchall()
+            else: recipients=db.execute("SELECT * FROM users WHERE active=1 AND id=?",(int(target or 0),)).fetchall()
+            msgid=db.execute('''INSERT INTO internal_messages(sender_user_id,sender_username,target_type,target_value,title,message,priority) VALUES(?,?,?,?,?,?,?)''',(session['user_id'],session['user'],'selection',target,title,message,priority)).lastrowid
+            for u in recipients: _notify_user(db,u['id'],'manual_message',title,message,'internal_message',msgid,f'manual:{msgid}:user:{u["id"]}',u['username'])
+            log_action(db,'Notifica interna inviata',details=f"{title} · destinatari {len(recipients)}"); db.commit(); flash(f'Notifica inviata a {len(recipients)} utenti.')
+        return redirect(url_for('v36_manual_notifications'))
+    with connect() as db: users_rows=db.execute("SELECT id,username,badge_name,role FROM users WHERE active=1 AND role!='admin' ORDER BY username").fetchall()
+    body='''<h1>📣 Invia notifica</h1><div class="card"><form method="post"><p><label>Destinatari<select name="target"><option value="all">Tutti gli utenti operativi</option><option value="manager">Tutti i Gestori</option><option value="seller">Tutti i Venditori</option>{% for u in users_rows %}<option value="{{u.id}}">{{u.badge_name or u.username}} · {{roles.get(u.role,u.role)}}</option>{% endfor %}</select></label></p><p><label>Priorità<select name="priority"><option value="informativa">Informativa</option><option value="media" selected>Media</option><option value="alta">Alta</option><option value="critica">Critica</option></select></label></p><p><label>Titolo<input name="title" maxlength="120" required></label></p><p><label>Messaggio<textarea name="message" rows="6" required></textarea></label></p><button>Invia notifica</button></form></div>'''
+    return page('Invia notifica',body,users_rows=users_rows,roles=ROLE_LABELS)
+
 
 if __name__ == "__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","5000")))
