@@ -86,7 +86,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.2.2 TBS ONE · Dashboard & Lock Polish"
+APP_VERSION = "v36.2.3 TBS ONE · Lock Screen Hotfix"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -905,7 +905,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     <strong>Avvicina il badge</strong>
     <span>La fotocamera è attiva</span>
   </div>""" if privacy_blur else ""
-    return r'''<div class="card badge-login{privacy_class}" style="max-width:520px;margin:20px auto;text-align:center">
+    html = r'''<div class="card badge-login__PRIVACY_CLASS__" style="max-width:520px;margin:20px auto;text-align:center">
 <h2 style="margin-top:0">📷 Inquadra il badge</h2>
 <p class="muted">La fotocamera si avvia automaticamente. Inquadra il QR nel riquadro.</p>
 <style>
@@ -930,11 +930,11 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
   <video id="badgeVideo" playsinline webkit-playsinline muted autoplay style="width:100%;height:300px;object-fit:cover;display:block;background:#111"></video>
   <canvas id="badgeCanvas" style="display:none"></canvas>
   <div id="badgeGuide" style="position:absolute;z-index:3;inset:16%;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none"></div>
-  {privacy_overlay}
+  __PRIVACY_OVERLAY__
 </div>
-<form id="badgeForm" method="post" action="{target}" style="margin-top:12px">
+<form id="badgeForm" method="post" action="__TARGET__" style="margin-top:12px">
   <input id="badgePayload" name="badge_payload" placeholder="Codice badge o lettore USB" autocomplete="off">
-  <button type="button" id="badgeMainButton" style="margin-top:8px">{label}</button>
+  <button type="button" id="badgeMainButton" style="margin-top:8px">__LABEL__</button>
   <button type="submit" id="badgeManualSubmit" class="secondary" style="margin-top:8px;display:none">Invia codice</button>
 </form>
 <div class="actions" style="justify-content:center">
@@ -1085,7 +1085,7 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
   }});
   window.addEventListener('pagehide',halt);
   window.addEventListener('beforeunload',halt);
-  if({auto}){{
+  if(__AUTO__){{
     const autoBegin=()=>{{
       status.textContent='Avvio automatico della fotocamera…';
       begin();
@@ -1097,7 +1097,14 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     }}
   }}
 }})();
-</script>'''.format(target=target_url,label=button_label,auto=auto_value,privacy_class=privacy_class,privacy_overlay=privacy_overlay)
+</script>'''
+    return (html
+        .replace("__TARGET__", target_url)
+        .replace("__LABEL__", button_label)
+        .replace("__AUTO__", auto_value)
+        .replace("__PRIVACY_CLASS__", privacy_class)
+        .replace("__PRIVACY_OVERLAY__", privacy_overlay)
+    )
 
 def product_scanner_html(target_url):
     """Scanner QR prodotti con fotocamera automatica e inserimento manuale."""
