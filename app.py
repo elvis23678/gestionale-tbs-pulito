@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.4.0 DEV · Catalogo & Stabilità"
+APP_VERSION = "v36.5.0 DEV · Boutique Clienti Premium"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1626,6 +1626,55 @@ PUBLIC_CSS = """
 .instant-search{margin:12px 0 18px;position:relative}.instant-search input{width:100%;padding:15px 48px 15px 16px;border:1px solid var(--line);border-radius:10px;background:#080808;color:#fff;font-size:16px}.instant-search span{position:absolute;right:16px;top:50%;transform:translateY(-50%);color:var(--gold-light);font-size:22px}.favorite-btn{border:1px solid var(--line)!important;background:#080808!important;color:var(--gold-light)!important;font-size:20px!important;min-height:44px!important}.favorite-btn.is-favorite{background:linear-gradient(145deg,#fff0a2,#c89525)!important;color:#111!important}.shop-product.hidden-by-search,.shop-product.hidden-by-favorite{display:none}.favorites-empty{display:none;text-align:center;padding:28px;border:1px solid var(--line);border-radius:12px;color:#cfc6b8}.favorites-empty.visible{display:block}.result-count{color:#c5beb3;font-size:14px;margin-top:5px}.swatch-row{display:flex;gap:9px;flex-wrap:wrap;margin-top:8px}.swatch{min-width:44px;height:44px;border:1px solid var(--line);border-radius:999px;background:#0b0b0a;color:#f6f1e8;padding:0 12px;cursor:pointer}.swatch.active{border-color:var(--gold-light);box-shadow:0 0 0 2px rgba(210,170,62,.25)}.detail-image-wrap{position:relative;cursor:zoom-in}.detail-image-wrap .image-hint{z-index:2}.product-detail img{transition:transform .25s ease}.detail-image-wrap:hover img{transform:scale(1.04)}
 @media(max-width:760px){.bottom-nav{grid-template-columns:repeat(5,1fr)}.favorite-btn{font-size:18px!important}.instant-search input{font-size:16px}}
 
+
+/* v36.5.0 DEV — Boutique clienti premium */
+.customer-product-page{max-width:980px;margin:0 auto;padding:18px 0 40px}
+.customer-product-shell{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(340px,.94fr);gap:34px;align-items:start}
+.customer-gallery{position:sticky;top:104px}
+.customer-gallery .product-image{height:min(64vh,650px);min-height:460px;border:1px solid var(--line);border-radius:18px;background:#fbfaf6;box-shadow:0 22px 65px rgba(0,0,0,.45)}
+.customer-gallery .product-image img{width:100%;height:100%;object-fit:contain;transform:none!important;mix-blend-mode:multiply;padding:28px}
+.customer-product-info{padding:8px 0}
+.customer-product-kicker{color:var(--gold);font:700 12px Arial,sans-serif;letter-spacing:2.4px;text-transform:uppercase}
+.customer-product-name{margin:8px 0 6px;color:var(--ivory);font-size:clamp(38px,6vw,64px);font-weight:400;line-height:1}
+.customer-product-price{margin:15px 0 4px;color:var(--gold-light);font-size:38px}
+.customer-shipping-note{margin:0 0 22px;color:#bdb5aa;font:14px Arial,sans-serif}
+.customer-status{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;margin-bottom:20px;font:700 13px Arial,sans-serif}
+.customer-status.available{color:#8ee59a}.customer-status.last{color:#f2d36e}.customer-status.order{color:#8cc8ff}.customer-status.unavailable{color:#ef8b8b}
+.customer-selectors{display:grid;gap:13px;margin:18px 0}
+.customer-field label{display:block;margin-bottom:7px;color:#d9c890;font:700 13px Arial,sans-serif}
+.customer-field select{width:100%;min-height:56px;padding:0 16px;border:1px solid var(--line);border-radius:13px;background:#090909;color:var(--ivory);font-size:16px}
+.customer-buy-row{display:grid;grid-template-columns:132px 1fr;gap:12px;margin:18px 0}
+.qty-picker{display:grid;grid-template-columns:42px 1fr 42px;align-items:center;min-height:58px;border:1px solid var(--line);border-radius:999px;background:#090909;overflow:hidden}
+.qty-picker button{height:100%;border:0;background:transparent;color:var(--ivory);font-size:24px;cursor:pointer}
+.qty-picker input{width:100%;border:0!important;background:transparent!important;text-align:center;color:var(--ivory)!important;font-size:18px;padding:0!important}
+.customer-add{width:100%;min-height:58px;margin:0!important;border-radius:999px!important;font-size:16px}
+.customer-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 24px}
+.customer-actions button,.customer-actions a{min-height:48px;border:1px solid var(--line);border-radius:999px;background:#090909;color:var(--gold-light);display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:700}
+.customer-specs{margin-top:26px;border-top:1px solid var(--line)}
+.customer-spec{display:grid;grid-template-columns:145px 1fr;gap:15px;padding:15px 0;border-bottom:1px solid rgba(210,170,62,.18)}
+.customer-spec span:first-child{color:#b9a56b;font-style:italic}.customer-spec strong{color:var(--ivory)}
+.customer-trust{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:24px 0}
+.customer-trust div{padding:13px;border:1px solid rgba(210,170,62,.24);border-radius:12px;background:rgba(255,255,255,.025);color:#d8d0c4;font:13px Arial,sans-serif}
+.studio-cta{margin-top:24px;padding:22px;border:1px solid var(--gold);border-radius:16px;background:radial-gradient(circle at 80% 20%,rgba(210,170,62,.14),transparent 36%),#0a0907}
+.studio-cta h3{margin:0 0 7px;color:var(--gold-light);font-size:25px}.studio-cta p{margin:0 0 13px;color:#cec6ba}
+.related-products{margin-top:44px}.related-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.related-card{display:block;padding:10px;border:1px solid var(--line);border-radius:14px;background:#0a0a09;text-decoration:none}
+.related-card img{width:100%;height:190px;object-fit:contain;border-radius:10px;background:#f8f6f0;mix-blend-mode:multiply}
+.related-card strong{display:block;margin:9px 2px 2px;color:var(--ivory)}.related-card span{color:var(--gold-light)}
+@media(max-width:780px){
+ .customer-product-page{padding-top:4px}
+ .customer-product-shell{grid-template-columns:1fr;gap:18px}
+ .customer-gallery{position:static}
+ .customer-gallery .product-image{height:54vh;min-height:390px;border-radius:0;margin:0 -18px}
+ .customer-gallery .product-image img{padding:22px}
+ .customer-product-info{padding:0 4px}
+ .customer-product-name{font-size:44px}
+ .customer-buy-row{grid-template-columns:122px 1fr}
+ .customer-trust{grid-template-columns:1fr}
+ .related-grid{grid-template-columns:repeat(2,1fr)}
+ .related-card img{height:155px}
+}
+
 """
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
 const favKey='tbs_boutique_favorites';const getFav=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(e){return[]}};const setFav=x=>localStorage.setItem(favKey,JSON.stringify(x));function syncFav(){const fav=getFav();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=fav.includes(b.dataset.key);b.classList.toggle('is-favorite',on);b.textContent=on?'♥ Preferito':'♡ Preferito';b.setAttribute('aria-pressed',on?'true':'false')});const c=document.getElementById('favoriteCount');if(c)c.textContent=fav.length;applyFavoriteFilter()};let favoritesOnly=false;function applyFavoriteFilter(){const fav=getFav();document.querySelectorAll('.shop-product').forEach(card=>card.classList.toggle('hidden-by-favorite',favoritesOnly&&!fav.includes(card.dataset.productKey)));const empty=document.getElementById('favoritesEmpty');if(empty)empty.classList.toggle('visible',favoritesOnly&&!document.querySelector('.shop-product:not(.hidden-by-favorite):not(.hidden-by-search)'));updateVisibleCount()};document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(b){e.preventDefault();let fav=getFav();fav=fav.includes(b.dataset.key)?fav.filter(x=>x!==b.dataset.key):[...fav,b.dataset.key];setFav(fav);syncFav()}if(e.target.closest('#favoritesTop,#favoritesBottom')){e.preventDefault();favoritesOnly=!favoritesOnly;document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});applyFavoriteFilter()}});function updateVisibleCount(){const cards=[...document.querySelectorAll('.shop-product')];const n=cards.filter(c=>!c.classList.contains('hidden-by-search')&&!c.classList.contains('hidden-by-favorite')).length;const el=document.getElementById('liveResultCount');if(el)el.textContent=n+' proposte visualizzate'}const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.classList.toggle('hidden-by-search',q&&!c.dataset.search.includes(q)));applyFavoriteFilter()});syncFav();updateVisibleCount()</script></body></html>"""
@@ -1682,35 +1731,240 @@ def boutique():
         live_materials=["Titanio ASTM F136","Oro 14K","Oro 18K"]
         featured=next((r for r in rows if r.get("image")),None)
         rows=rows[:350]
-    body="""<section class='hero'>{% if featured %}<div class='hero-art'><img src='{{featured.image}}' alt='Gioiello in evidenza'></div>{% endif %}<div class='hero-copy'><div class='hero-kicker'>Premium piercing jewelry</div><h1>Qualità.<br><span>Design.</span><br>Eccellenza.</h1><p>Gioielli in titanio ASTM F136: disponibili subito oppure ordinabili con consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='#collezione'>Scopri la collezione ›</a></div></section><div class='collection-head' id='collezione'><div><span class='eyebrow'>Jewelry selection</span><h2 class='section-title'>Collezione</h2><p class='section-copy result-count' id='liveResultCount'>{{rows|length}} proposte visualizzate</p></div><button type='button' class='filter-toggle'>Filtri ☷</button></div><section class='filters'><form method='get'><input name='q' value='{{q}}' placeholder='Cerca codice, modello, misura o colore'><select name='category'><option value=''>Tutte le categorie</option>{% for x in live_categories %}<option {% if category==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name='material'><option value=''>Tutti i materiali</option>{% for x in live_materials %}<option {% if material==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Applica filtri</button></form></section><div class='instant-search' id='ricerca-live'><input id='liveSearch' type='search' autocomplete='off' placeholder='Ricerca istantanea: codice, modello, colore, misura…' aria-label='Ricerca istantanea'><span>⌕</span></div><div class='shop-grid'>{% for p in rows %}<article class='shop-product' data-product-key='{{p.variant_group or p.brand_code or p.supplier_code}}' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'><div class='product-image' data-image='{{p.image}}'>{% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'><span class='image-hint'>Tocca per ingrandire</span>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}</div><div class='shop-body'><div class='product-category'>{{p.display_category}}</div><div class='shop-title'>{{p.model_name or p.description or p.display_category}}</div>{% if p.variant_count>1 %}<div style='color:#d2aa3e;margin-top:6px'>{{p.variant_count}} varianti disponibili</div>{% endif %}<div class='product-code'>{{p.brand_code}} · {{p.supplier_code}}</div><div class='product-material'>{{p.material or 'Titanio ASTM F136'}}{% if p.display_size %} · {{p.display_size}}{% endif %}{% if p.display_color %} · {{p.display_color}}{% endif %}{% if p.display_stone %} · {{p.display_stone}}{% endif %}</div><div class='shop-price'>€ {{'%.2f'|format(p.display_price)}}</div>{% if p.status=='available' %}<div class='stock-ok'>🟢 Disponibile</div>{% elif p.status=='last' %}<div class='stock-low'>🟡 Ultimo pezzo disponibile</div>{% elif p.status=='order' %}<div style='color:#74b9ff'>🔵 Ordinabile · consegna 15-20 giorni</div>{% else %}<div style='color:#ef7777'>❌ Non disponibile</div>{% endif %}</div><div class='shop-actions'><button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-pressed='false'>♡ Preferito</button>{% if p.variant_count>1 %}<a class='add' href='{{url_for("boutique_product",product_id=p.id)}}'>Scegli variante</a>{% elif p.status in ('available','last') %}<form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'><button class='add'>Aggiungi</button></form>{% elif p.status=='order' %}<a class='add' href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Ordina per il cliente</a>{% else %}<button disabled>Non disponibile</button>{% endif %}</div></article>{% else %}<div class='client-card'>Nessun gioiello trovato.</div>{% endfor %}<div class='favorites-empty' id='favoritesEmpty'>Non hai ancora aggiunto gioielli ai preferiti.</div></div>"""
+    body="""<section class='hero'>{% if featured %}<div class='hero-art'><img src='{{featured.image}}' alt='Gioiello in evidenza'></div>{% endif %}<div class='hero-copy'><div class='hero-kicker'>Premium piercing jewelry</div><h1>Qualità.<br><span>Design.</span><br>Eccellenza.</h1><p>Gioielli in titanio ASTM F136: disponibili subito oppure ordinabili con consegna indicativa 15-20 giorni.</p><a class='gold-btn' href='#collezione'>Scopri la collezione ›</a></div></section><div class='collection-head' id='collezione'><div><span class='eyebrow'>Jewelry selection</span><h2 class='section-title'>Collezione</h2><p class='section-copy result-count' id='liveResultCount'>{{rows|length}} proposte visualizzate</p></div><button type='button' class='filter-toggle'>Filtri ☷</button></div><section class='filters'><form method='get'><input name='q' value='{{q}}' placeholder='Cerca codice, modello, misura o colore'><select name='category'><option value=''>Tutte le categorie</option>{% for x in live_categories %}<option {% if category==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name='material'><option value=''>Tutti i materiali</option>{% for x in live_materials %}<option {% if material==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Applica filtri</button></form></section><div class='instant-search' id='ricerca-live'><input id='liveSearch' type='search' autocomplete='off' placeholder='Ricerca istantanea: codice, modello, colore, misura…' aria-label='Ricerca istantanea'><span>⌕</span></div><div class='shop-grid'>{% for p in rows %}<article class='shop-product' data-product-key='{{p.variant_group or p.brand_code or p.supplier_code}}' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'><div class='product-image' data-image='{{p.image}}'>{% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'><span class='image-hint'>Tocca per ingrandire</span>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}</div><div class='shop-body'><div class='product-category'>{{p.display_category}}</div><div class='shop-title'>{{p.model_name or p.description or p.display_category}}</div>{% if p.variant_count>1 %}<div style='color:#d2aa3e;margin-top:6px'>{{p.variant_count}} varianti disponibili</div>{% endif %}<div class='product-code'>{{p.brand_code}} · {{p.supplier_code}}</div><div class='product-material'>{{p.material or 'Titanio ASTM F136'}}{% if p.display_size %} · {{p.display_size}}{% endif %}{% if p.display_color %} · {{p.display_color}}{% endif %}{% if p.display_stone %} · {{p.display_stone}}{% endif %}</div><div class='shop-price'>€ {{'%.2f'|format(p.display_price)}}</div>{% if p.status=='available' %}<div class='stock-ok'>🟢 Disponibile</div>{% elif p.status=='last' %}<div class='stock-low'>🟡 Ultimo pezzo disponibile</div>{% elif p.status=='order' %}<div style='color:#74b9ff'>🔵 Ordinabile · consegna 15-20 giorni</div>{% else %}<div style='color:#ef7777'>❌ Non disponibile</div>{% endif %}</div><div class='shop-actions'><button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-pressed='false'>♡ Preferito</button>{% if p.kind=='product' %}<a class='add' href='{{url_for("boutique_product",product_id=p.id)}}'>{{'Scegli variante' if p.variant_count>1 else 'Scopri il gioiello'}}</a>{% elif p.status=='order' %}<a class='add' href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Richiedi disponibilità</a>{% else %}<button disabled>Non disponibile</button>{% endif %}</div></article>{% else %}<div class='client-card'>Nessun gioiello trovato.</div>{% endfor %}<div class='favorites-empty' id='favoritesEmpty'>Non hai ancora aggiunto gioielli ai preferiti.</div></div>"""
     return public_page("Jewelry · Atelier d'eccellenza",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured)
 
 @app.get("/boutique/prodotto/<int:product_id>")
 def boutique_product(product_id):
     with connect() as db:
         p=db.execute("SELECT * FROM products WHERE id=? AND active=1",(product_id,)).fetchone()
-        if not p: return redirect(url_for("boutique"))
-        variants=db.execute("SELECT * FROM products WHERE active=1 AND UPPER(variant_group)=UPPER(?) ORDER BY color,size,stone,brand_code",(p["variant_group"],)).fetchall() if p["variant_group"] else [p]
+        if not p:
+            return redirect(url_for("boutique"))
+
+        variants=(
+            db.execute(
+                "SELECT * FROM products WHERE active=1 AND UPPER(variant_group)=UPPER(?) ORDER BY color,size,stone,brand_code",
+                (p["variant_group"],)
+            ).fetchall()
+            if p["variant_group"] else [p]
+        )
+
+        related=db.execute(
+            """SELECT * FROM products
+               WHERE active=1 AND id<>? AND category=?
+               ORDER BY is_bestseller DESC,is_new DESC,quantity DESC,id DESC
+               LIMIT 6""",
+            (product_id,p["category"])
+        ).fetchall()
+
     data=[]
     for v in variants:
         item=dict(v)
-        item["status_text"]="🟢 Disponibile" if v["quantity"]>1 else ("🟡 Ultimo pezzo" if v["quantity"]==1 else "❌ Non disponibile")
+        if v["quantity"]>1:
+            item["status"]="available"; item["status_text"]="Disponibile subito"
+        elif v["quantity"]==1:
+            item["status"]="last"; item["status_text"]="Ultimo pezzo disponibile"
+        else:
+            item["status"]="order"; item["status_text"]="Ordinabile · consegna indicativa 15–20 giorni"
         data.append(item)
+
     colors=sorted({(v.get("color") or "").strip() for v in data if (v.get("color") or "").strip()})
     sizes=sorted({(v.get("size") or "").strip() for v in data if (v.get("size") or "").strip()})
     stones=sorted({(v.get("stone") or "").strip() for v in data if (v.get("stone") or "").strip()})
-    body="""<style>.variant-pickers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}.variant-pickers label{display:block;color:#ffe18a;font-weight:800;margin-bottom:6px}.variant-pickers select{width:100%}.variant-summary{padding:12px;border:1px solid rgba(210,170,62,.35);border-radius:12px;margin:14px 0;background:rgba(255,255,255,.035)}.variant-unavailable{color:#ef7777;font-weight:800}.variant-help{font-size:13px;opacity:.8;margin-top:6px}@media(max-width:700px){.variant-pickers{grid-template-columns:1fr}}</style>
-<p><a class='detail-link' style='display:inline-block;text-decoration:none;padding:9px 13px' href='{{url_for("boutique")}}#collezione'>← Torna alla collezione</a></p><div class='client-card product-detail'><div class='detail-image-wrap product-image' id='detailImageBox' data-image='{{p.photo_data or ""}}'>{% if p.photo_data %}<img id='variant-image' src='{{p.photo_data}}'><span class='image-hint'>Tocca per ingrandire</span>{% else %}<div class='photo-placeholder' style='min-height:360px'>◇</div>{% endif %}</div><div><span class='eyebrow'>Jewelry selection</span><h1 class='luxury-title'>{{p.model_name or p.category}}</h1>{% if variants|length>1 %}<div class='variant-pickers'>{% if colors %}<div><label>Colore</label><select id='pick-color'><option value=''>Seleziona</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}{% if sizes %}<div><label>Misura</label><select id='pick-size'><option value=''>Seleziona</option>{% for x in sizes %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}{% if stones %}<div><label>Pietra</label><select id='pick-stone'><option value=''>Seleziona</option>{% for x in stones %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}</div><div class='variant-help'>Le combinazioni non esistenti vengono disattivate.</div>{% endif %}<div class='variant-summary'><div id='variant-code' class='product-code'></div><div id='variant-price' class='shop-price'></div><div class='detail-meta'><div><small>Materiale</small><span id='variant-material'></span></div><div><small>Colore</small><span id='variant-color'></span></div><div><small>Misura</small><span id='variant-size'></span></div><div><small>Pietra</small><span id='variant-stone'></span></div></div><p id='variant-stock'></p></div><button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' style='width:100%;margin-bottom:10px'>♡ Preferito</button><form id='variant-form' method='post'><button id='variant-button' class='gold-btn' style='width:100%;font-size:16px'>Aggiungi al carrello</button></form></div></div>
-<script>const variants={{variants|tojson}};const pc=document.getElementById('pick-color'),ps=document.getElementById('pick-size'),pt=document.getElementById('pick-stone');const val=e=>e?e.value:'';const norm=x=>(x||'').trim();function compatible(v,ignore){return(!pc||ignore==='color'||!val(pc)||norm(v.color)===val(pc))&&(!ps||ignore==='size'||!val(ps)||norm(v.size)===val(ps))&&(!pt||ignore==='stone'||!val(pt)||norm(v.stone)===val(pt));}function options(el,field){if(!el)return;[...el.options].forEach(o=>{if(o.value)o.disabled=!variants.some(v=>norm(v[field])===o.value&&compatible(v,field));});}function selected(){return variants.find(v=>(!pc||!val(pc)||norm(v.color)===val(pc))&&(!ps||!val(ps)||norm(v.size)===val(ps))&&(!pt||!val(pt)||norm(v.stone)===val(pt)))||variants[0];}function show(v){const img=document.getElementById('variant-image');if(img&&v.photo_data){img.src=v.photo_data;const box=document.getElementById('detailImageBox');if(box)box.dataset.image=v.photo_data;}document.getElementById('variant-code').textContent='Codice '+v.brand_code+' · '+v.supplier_code;document.getElementById('variant-price').textContent='€ '+Number(v.price).toFixed(2);document.getElementById('variant-material').textContent=v.material||'Non specificato';document.getElementById('variant-color').textContent=v.color||'Non specificato';document.getElementById('variant-size').textContent=v.size||'Non specificata';document.getElementById('variant-stone').textContent=v.stone||'Non specificata';const st=document.getElementById('variant-stock');st.textContent=v.status_text;st.className=v.quantity>1?'stock-ok':(v.quantity===1?'stock-low':'variant-unavailable');document.getElementById('variant-form').action='/boutique/carrello/aggiungi/'+v.id;const b=document.getElementById('variant-button');b.disabled=v.quantity<1;b.textContent=v.quantity<1?'Variante non disponibile':'Aggiungi al carrello';}function update(){options(pc,'color');options(ps,'size');options(pt,'stone');show(selected());}[pc,ps,pt].filter(Boolean).forEach(e=>e.addEventListener('change',update));const initial=variants.find(v=>v.id==={{p.id}})||variants[0];if(pc)pc.value=norm(initial.color);if(ps)ps.value=norm(initial.size);if(pt)pt.value=norm(initial.stone);update();</script>"""
-    return public_page(p["model_name"] or p["category"],body,p=dict(p),variants=data,colors=colors,sizes=sizes,stones=stones)
+    threads=sorted({(v.get("thread_type") or "").strip() for v in data if (v.get("thread_type") or "").strip()})
+
+    related_items=[dict(x) for x in related if x["photo_data"]][:6]
+
+    body=r"""
+<div class='customer-product-page'>
+  <p><a class='detail-link' style='display:inline-block;text-decoration:none;padding:9px 13px' href='{{url_for("boutique")}}#collezione'>← Torna alla collezione</a></p>
+
+  <div class='customer-product-shell'>
+    <section class='customer-gallery'>
+      <div class='detail-image-wrap product-image' id='detailImageBox' data-image='{{p.photo_data or ""}}'>
+        {% if p.photo_data %}
+          <img id='variant-image' src='{{p.photo_data}}' alt='{{p.model_name or p.category}}'>
+          <span class='image-hint'>Tocca per ingrandire</span>
+        {% else %}
+          <div class='photo-placeholder'>◇</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class='customer-product-info'>
+      <div class='customer-product-kicker'>Premium piercing jewelry</div>
+      <h1 class='customer-product-name'>{{p.model_name or p.category}}</h1>
+      <div id='variant-price' class='customer-product-price'>€ {{'%.2f'|format(p.price)}}</div>
+      <p class='customer-shipping-note'>Spese di spedizione o ritiro definite alla conferma dell’ordine.</p>
+      <div id='variant-stock' class='customer-status'></div>
+
+      {% if variants|length>1 %}
+      <div class='customer-selectors'>
+        {% if colors %}<div class='customer-field'><label>Colore / anodizzazione</label><select id='pick-color'><option value=''>Seleziona</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}
+        {% if sizes %}<div class='customer-field'><label>Misura / lunghezza</label><select id='pick-size'><option value=''>Seleziona</option>{% for x in sizes %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}
+        {% if stones %}<div class='customer-field'><label>Pietra</label><select id='pick-stone'><option value=''>Seleziona</option>{% for x in stones %}<option>{{x}}</option>{% endfor %}</select></div>{% endif %}
+      </div>
+      {% endif %}
+
+      <form id='variant-form' method='post'>
+        <div class='customer-buy-row'>
+          <div class='qty-picker'>
+            <button type='button' id='qtyMinus' aria-label='Diminuisci'>−</button>
+            <input id='qtyInput' name='quantity' value='1' inputmode='numeric' readonly>
+            <button type='button' id='qtyPlus' aria-label='Aumenta'>+</button>
+          </div>
+          <button id='variant-button' class='gold-btn customer-add'>Aggiungi al carrello</button>
+        </div>
+      </form>
+
+      <div class='customer-actions'>
+        <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}'>♡ Preferito</button>
+        <a href='{{url_for("boutique")}}#ricerca-live'>⌕ Cerca altro</a>
+      </div>
+
+      <div class='customer-specs'>
+        <div class='customer-spec'><span>Gioiello per</span><strong id='variant-category'>{{p.category or "Piercing"}}</strong></div>
+        <div class='customer-spec'><span>Materiale</span><strong id='variant-material'>{{p.material or "Titanio ASTM F136"}}</strong></div>
+        <div class='customer-spec'><span>Spessore / misura</span><strong id='variant-size'>{{p.size or "Da selezionare"}}</strong></div>
+        <div class='customer-spec'><span>Colore</span><strong id='variant-color'>{{p.color or "Da selezionare"}}</strong></div>
+        <div class='customer-spec'><span>Pietra</span><strong id='variant-stone'>{{p.stone or "Non specificata"}}</strong></div>
+        <div class='customer-spec'><span>Filettatura</span><strong id='variant-thread'>{{p.thread_type or "Non specificata"}}</strong></div>
+        <div class='customer-spec'><span>Codice articolo</span><strong id='variant-code'>{{p.brand_code}}</strong></div>
+      </div>
+
+      <div class='customer-trust'>
+        <div>💎 Titanio ASTM F136 selezionato</div>
+        <div>📍 Ritiro presso lo studio di Condove</div>
+        <div>🔒 Richiesta ordine senza pagamento anticipato</div>
+        <div>📦 Articoli ordinabili in 15–20 giorni</div>
+      </div>
+
+      <div class='studio-cta'>
+        <h3>Montaggio professionale in studio</h3>
+        <p>Puoi richiedere il gioiello e concordare il montaggio presso Tattoo Beauty Saloon.</p>
+        <a class='gold-btn' href='tel:+393477050250'>Contatta lo studio</a>
+      </div>
+    </section>
+  </div>
+
+  {% if related %}
+  <section class='related-products'>
+    <span class='eyebrow'>Potrebbero piacerti</span>
+    <h2 class='section-title'>Gioielli correlati</h2>
+    <div class='related-grid'>
+      {% for r in related %}
+      <a class='related-card' href='{{url_for("boutique_product",product_id=r.id)}}'>
+        <img src='{{r.photo_data}}' alt='{{r.model_name or r.category}}'>
+        <strong>{{r.model_name or r.category}}</strong>
+        <span>€ {{'%.2f'|format(r.price)}}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+
+<script>
+const variants={{variants|tojson}};
+const pc=document.getElementById('pick-color');
+const ps=document.getElementById('pick-size');
+const pt=document.getElementById('pick-stone');
+const qty=document.getElementById('qtyInput');
+let currentMax=1;
+
+const val=e=>e?e.value:'';
+const norm=x=>(x||'').trim();
+
+function compatible(v,ignore){
+  return(!pc||ignore==='color'||!val(pc)||norm(v.color)===val(pc))
+    &&(!ps||ignore==='size'||!val(ps)||norm(v.size)===val(ps))
+    &&(!pt||ignore==='stone'||!val(pt)||norm(v.stone)===val(pt));
+}
+function options(el,field){
+  if(!el)return;
+  [...el.options].forEach(o=>{
+    if(o.value)o.disabled=!variants.some(v=>norm(v[field])===o.value&&compatible(v,field));
+  });
+}
+function selected(){
+  return variants.find(v=>
+    (!pc||!val(pc)||norm(v.color)===val(pc))
+    &&(!ps||!val(ps)||norm(v.size)===val(ps))
+    &&(!pt||!val(pt)||norm(v.stone)===val(pt))
+  )||variants[0];
+}
+function show(v){
+  const img=document.getElementById('variant-image');
+  if(img&&v.photo_data){
+    img.src=v.photo_data;
+    document.getElementById('detailImageBox').dataset.image=v.photo_data;
+  }
+  document.getElementById('variant-code').textContent=v.brand_code||v.supplier_code||'—';
+  document.getElementById('variant-price').textContent='€ '+Number(v.price||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('variant-material').textContent=v.material||'Titanio ASTM F136';
+  document.getElementById('variant-color').textContent=v.color||'Non specificato';
+  document.getElementById('variant-size').textContent=v.size||'Non specificata';
+  document.getElementById('variant-stone').textContent=v.stone||'Non specificata';
+  document.getElementById('variant-thread').textContent=v.thread_type||'Non specificata';
+
+  const st=document.getElementById('variant-stock');
+  st.textContent=v.status_text;
+  st.className='customer-status '+v.status;
+
+  document.getElementById('variant-form').action='/boutique/carrello/aggiungi/'+v.id;
+  const b=document.getElementById('variant-button');
+  const canAdd=Number(v.quantity)>0;
+  b.disabled=!canAdd;
+  b.textContent=canAdd?'Aggiungi al carrello':'Richiedi disponibilità';
+  currentMax=Math.max(1,Number(v.quantity)||1);
+  qty.value='1';
+}
+function update(){
+  options(pc,'color');options(ps,'size');options(pt,'stone');show(selected());
+}
+[pc,ps,pt].filter(Boolean).forEach(e=>e.addEventListener('change',update));
+
+document.getElementById('qtyMinus').addEventListener('click',()=>qty.value=Math.max(1,Number(qty.value)-1));
+document.getElementById('qtyPlus').addEventListener('click',()=>qty.value=Math.min(currentMax,Number(qty.value)+1));
+
+const initial=variants.find(v=>v.id==={{p.id}})||variants[0];
+if(pc)pc.value=norm(initial.color);
+if(ps)ps.value=norm(initial.size);
+if(pt)pt.value=norm(initial.stone);
+update();
+</script>
+"""
+    return public_page(
+        p["model_name"] or p["category"],
+        body,
+        p=dict(p),
+        variants=data,
+        colors=colors,
+        sizes=sizes,
+        stones=stones,
+        threads=threads,
+        related=related_items
+    )
 
 
 @app.post("/boutique/carrello/aggiungi/<int:product_id>")
 def client_add_cart(product_id):
-    with connect() as db: p=db.execute("SELECT id,quantity FROM products WHERE id=?",(product_id,)).fetchone()
-    if not p or p["quantity"]<1: flash("Prodotto non disponibile."); return redirect(url_for("boutique"))
-    cart=dict(session.get("client_cart",{})); key=str(product_id); cart[key]=min(int(cart.get(key,0))+1,p["quantity"]); session["client_cart"]=cart; session.modified=True
-    flash("Prodotto aggiunto al carrello."); return redirect(request.referrer or url_for("boutique"))
+    with connect() as db:
+        p=db.execute("SELECT id,quantity FROM products WHERE id=?",(product_id,)).fetchone()
+    if not p or p["quantity"]<1:
+        flash("Prodotto non disponibile.")
+        return redirect(url_for("boutique"))
+    try:
+        requested=max(1,int(request.form.get("quantity",1)))
+    except (TypeError,ValueError):
+        requested=1
+    cart=dict(session.get("client_cart",{}))
+    key=str(product_id)
+    cart[key]=min(int(cart.get(key,0))+requested,p["quantity"])
+    session["client_cart"]=cart
+    session.modified=True
+    flash("Prodotto aggiunto al carrello.")
+    return redirect(request.referrer or url_for("boutique"))
 
 @app.get("/boutique/carrello")
 def client_cart():
