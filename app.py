@@ -13,6 +13,9 @@ from datetime import datetime, timezone, date, time, timedelta
 from zoneinfo import ZoneInfo
 import shutil
 import tempfile
+import json
+import urllib.request
+import urllib.error
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -71,6 +74,16 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 LOCK_TIMEOUT_SECONDS = max(60, int(os.environ.get("LOCK_TIMEOUT_SECONDS", "300")))
 
+# PayPal Checkout
+# Configurare su Render:
+# PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENV=sandbox oppure live
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID", "").strip()
+PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "").strip()
+PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "sandbox").strip().lower()
+PAYPAL_API_BASE = "https://api-m.paypal.com" if PAYPAL_ENV == "live" else "https://api-m.sandbox.paypal.com"
+PAYPAL_ENABLED = bool(PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET)
+
+
 ROME_TZ = ZoneInfo("Europe/Rome")
 
 def now_rome():
@@ -95,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.5.1 DEV · Boutique Premium Rifinita"
+APP_VERSION = "v36.6.0 DEV · Luxury Boutique & PayPal"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -755,6 +768,8 @@ def init_db():
         db.execute("CREATE INDEX IF NOT EXISTS idx_discount_requests_requester ON discount_requests(requester_user_id, status)")
         ensure_column(db,"sales","sale_number","TEXT")
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
+        ensure_column(db,"customer_orders","paypal_order_id","TEXT")
+        ensure_column(db,"customer_orders","payment_method","TEXT DEFAULT 'Da concordare'")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
         ensure_column(db,"sales","status","TEXT DEFAULT 'Confermata'")
         ensure_column(db,"sales","original_unit_price","REAL")
@@ -1744,6 +1759,34 @@ PUBLIC_CSS = """
   .shop-title{font-size:20px}
 }
 
+
+/* v36.6.0 — checkout PayPal */
+.checkout-luxury{max-width:980px;margin:0 auto;padding:24px 0 50px}
+.checkout-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:24px;align-items:start}
+.checkout-panel{padding:24px;border:1px solid rgba(210,170,62,.38);border-radius:18px;background:linear-gradient(145deg,#11100d,#050505);box-shadow:0 20px 55px rgba(0,0,0,.34)}
+.checkout-panel h2{margin-top:0;color:var(--ivory);font-weight:500}
+.checkout-total{font-size:38px;color:var(--gold-light);margin:12px 0 20px}
+.checkout-form{display:grid;gap:12px}
+.checkout-form input,.checkout-form textarea{width:100%;box-sizing:border-box;border:1px solid rgba(210,170,62,.35);border-radius:12px;background:#080808;color:var(--ivory);padding:14px 15px;font-size:16px}
+.checkout-form textarea{min-height:92px;resize:vertical}
+.paypal-box{margin-top:18px;padding:16px;border-radius:15px;background:#f6f7f9}
+.paypal-title{color:#111;font:700 14px Arial,sans-serif;margin-bottom:10px}
+.paypal-disabled{padding:14px;border:1px solid rgba(210,170,62,.35);border-radius:12px;color:#cfc5b5;background:#0a0a09;font:14px Arial,sans-serif}
+.paypal-success{max-width:680px;margin:50px auto;padding:35px;text-align:center;border:1px solid var(--gold);border-radius:20px;background:radial-gradient(circle at 50% 0,rgba(210,170,62,.16),transparent 42%),#080806}
+.paypal-success h1{font-size:42px;font-weight:400;color:var(--gold-light)}
+.payment-divider{display:flex;align-items:center;gap:12px;color:#9f988d;font:12px Arial,sans-serif;margin:20px 0}
+.payment-divider:before,.payment-divider:after{content:"";height:1px;flex:1;background:rgba(210,170,62,.25)}
+.cart-summary-row{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(210,170,62,.16)}
+.cart-summary-row img{width:70px;height:70px;object-fit:contain;background:#f8f6f0;border-radius:10px}
+.cart-summary-row b{color:var(--ivory)}
+.cart-summary-row small{color:#aaa}
+@media(max-width:760px){
+ .checkout-grid{grid-template-columns:1fr}
+ .checkout-panel{padding:18px}
+ .checkout-total{font-size:34px}
+ .paypal-success{margin:24px 0;padding:24px}
+}
+
 /* v36.5.0 DEV — Boutique clienti premium */
 .customer-product-page{max-width:980px;margin:0 auto;padding:18px 0 40px}
 .customer-product-shell{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(340px,.94fr);gap:34px;align-items:start}
@@ -1793,6 +1836,156 @@ PUBLIC_CSS = """
 }
 
 """
+
+def paypal_access_token():
+    if not PAYPAL_ENABLED:
+        raise RuntimeError("PayPal non configurato")
+    credentials = base64.b64encode(
+        f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode("utf-8")
+    ).decode("ascii")
+    req = urllib.request.Request(
+        PAYPAL_API_BASE + "/v1/oauth2/token",
+        data=b"grant_type=client_credentials",
+        headers={
+            "Authorization": "Basic " + credentials,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Autenticazione PayPal non riuscita: {detail}") from exc
+    return payload["access_token"]
+
+
+def paypal_api_request(path, method="GET", payload=None):
+    token = paypal_access_token()
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "PayPal-Request-Id": secrets.token_hex(16),
+    }
+    req = urllib.request.Request(
+        PAYPAL_API_BASE + path,
+        data=data,
+        headers=headers,
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Errore PayPal {exc.code}: {detail}") from exc
+
+
+def current_client_cart():
+    raw = dict(session.get("client_cart", {}))
+    rows, total = [], 0.0
+    with connect() as db:
+        for key, quantity in raw.items():
+            try:
+                product_id = int(key)
+                quantity = int(quantity)
+            except (TypeError, ValueError):
+                continue
+            product = db.execute(
+                "SELECT * FROM products WHERE id=? AND active=1", (product_id,)
+            ).fetchone()
+            if not product or product["quantity"] < 1:
+                continue
+            quantity = max(1, min(quantity, int(product["quantity"])))
+            subtotal = round(float(product["price"]) * quantity, 2)
+            rows.append((product, quantity, subtotal))
+            total += subtotal
+    return rows, round(total, 2)
+
+
+def save_paid_paypal_order(paypal_order_id, payer_data):
+    pending = session.get("paypal_pending") or {}
+    if pending.get("paypal_order_id") != paypal_order_id:
+        raise RuntimeError("Sessione PayPal non valida o scaduta")
+
+    rows, current_total = current_client_cart()
+    expected_total = round(float(pending.get("total", 0)), 2)
+    if not rows or abs(current_total - expected_total) > 0.01:
+        raise RuntimeError("Il carrello è cambiato durante il pagamento")
+
+    with connect() as db:
+        # Nuova verifica disponibilità dentro la transazione.
+        for product, quantity, _ in rows:
+            fresh = db.execute(
+                "SELECT quantity FROM products WHERE id=?", (product["id"],)
+            ).fetchone()
+            if not fresh or int(fresh["quantity"]) < quantity:
+                raise RuntimeError(f"Disponibilità insufficiente per {product['brand_code']}")
+
+        number = next_customer_order_number(db)
+        payer_name = pending.get("name") or payer_data.get("name") or "Cliente PayPal"
+        payer_email = pending.get("email") or payer_data.get("email_address") or ""
+        cursor = db.execute(
+            """INSERT INTO customer_orders(
+                order_number,customer_name,customer_phone,customer_email,notes,status,total
+            ) VALUES(?,?,?,?,?,'Pagato PayPal',?)""",
+            (
+                number,
+                payer_name,
+                pending.get("phone", ""),
+                payer_email,
+                pending.get("notes", ""),
+                current_total,
+            ),
+        )
+
+        sale_number = next_sale_number(db)
+        for product, quantity, _ in rows:
+            db.execute(
+                """INSERT INTO customer_order_items(
+                    order_id,product_id,product_code,quantity,unit_price
+                ) VALUES(?,?,?,?,?)""",
+                (cursor.lastrowid, product["id"], product["brand_code"], quantity, product["price"]),
+            )
+            db.execute(
+                "UPDATE products SET quantity=quantity-? WHERE id=?",
+                (quantity, product["id"]),
+            )
+            db.execute(
+                """INSERT INTO sales(
+                    user_id,username,product_id,product_code,quantity,unit_price,
+                    sale_number,payment_method,channel,status
+                ) VALUES(NULL,'Boutique online',?,?,?,?,?,'PayPal','Online','Confermata')""",
+                (
+                    product["id"],
+                    product["brand_code"],
+                    quantity,
+                    product["price"],
+                    sale_number,
+                ),
+            )
+            add_reorder_quantity(db, product["id"], quantity)
+
+        db.execute("UPDATE customer_orders SET paypal_order_id=?,payment_method='PayPal' WHERE id=?",(paypal_order_id,cursor.lastrowid))
+
+        log_action(
+            db,
+            "Ordine boutique pagato con PayPal",
+            details=f"{number}; PayPal {paypal_order_id}; € {current_total:.2f}",
+        )
+        db.commit()
+
+    session.pop("client_cart", None)
+    session.pop("paypal_pending", None)
+    session.modified = True
+    return number
+
+
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='theme-color' content='#050505'><meta name='description' content='Jewelry atelier d eccellenza · Premium piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='brand-link' href='{{url_for("boutique")}}' aria-label='Home boutique'><img src='{{logo}}' alt='Jewelry'></a><div class='brand-copy'><span class='name'>JEWELRY</span><span class='tagline'>atelier d'eccellenza</span></div><div class='nav-actions'><a class='icon-link search-icon' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Preferiti'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>♧<span class='cart-count'>{{cart_count}}</span></a></div></nav><div class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</div><div class='footer'><b>JEWELRY · Atelier d'eccellenza</b><br><span>Premium piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONE</a><a href='{{url_for("boutique")}}#categorie'><span>☷</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>PREFERITI</a><a href='{{url_for("client_cart")}}'><span>♧</span>CARRELLO</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});
 const favKey='tbs_boutique_favorites';const getFav=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(e){return[]}};const setFav=x=>localStorage.setItem(favKey,JSON.stringify(x));function syncFav(){const fav=getFav();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=fav.includes(b.dataset.key);b.classList.toggle('is-favorite',on);b.textContent=on?'♥ SALVATO':'♡ SALVA';b.setAttribute('aria-pressed',on?'true':'false')});const c=document.getElementById('favoriteCount');if(c)c.textContent=fav.length;applyFavoriteFilter()};let favoritesOnly=false;function applyFavoriteFilter(){const fav=getFav();document.querySelectorAll('.shop-product').forEach(card=>card.classList.toggle('hidden-by-favorite',favoritesOnly&&!fav.includes(card.dataset.productKey)));const empty=document.getElementById('favoritesEmpty');if(empty)empty.classList.toggle('visible',favoritesOnly&&!document.querySelector('.shop-product:not(.hidden-by-favorite):not(.hidden-by-search)'));updateVisibleCount()};document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(b){e.preventDefault();let fav=getFav();fav=fav.includes(b.dataset.key)?fav.filter(x=>x!==b.dataset.key):[...fav,b.dataset.key];setFav(fav);syncFav()}if(e.target.closest('#favoritesTop,#favoritesBottom')){e.preventDefault();favoritesOnly=!favoritesOnly;document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});applyFavoriteFilter()}});function updateVisibleCount(){const cards=[...document.querySelectorAll('.shop-product')];const n=cards.filter(c=>!c.classList.contains('hidden-by-search')&&!c.classList.contains('hidden-by-favorite')).length;const el=document.getElementById('liveResultCount');if(el)el.textContent=n+' proposte visualizzate'}const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.classList.toggle('hidden-by-search',q&&!c.dataset.search.includes(q)));applyFavoriteFilter()});syncFav();updateVisibleCount()</script></body></html>"""
 def public_page(title, body, **ctx):
@@ -2085,16 +2278,145 @@ def client_add_cart(product_id):
 
 @app.get("/boutique/carrello")
 def client_cart():
-    raw=session.get("client_cart",{}); rows=[]; total=0
-    with connect() as db:
-        for key,qty in raw.items():
-            try: pid=int(key); qty=int(qty)
-            except (TypeError,ValueError): continue
-            p=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
-            if p and p["quantity"]>0:
-                qty=max(1,min(qty,p["quantity"])); subtotal=qty*p["price"]; rows.append((p,qty,subtotal)); total+=subtotal
-    body="""<h1 class='luxury-title'>Il tuo carrello</h1>{% if rows %}<div class='client-card'>{% for p,qty,subtotal in rows %}<div class='client-cart-row'>{% if p.photo_data %}<img src='{{p.photo_data}}'>{% endif %}<div><b>{{p.category}}</b><br><span style='color:#aaa'>{{p.brand_code}}</span><form class='qty-form' method='post' action='{{url_for("client_update_cart",product_id=p.id)}}'><input name='quantity' type='number' min='1' max='{{p.quantity}}' value='{{qty}}'><button class='detail-link'>Aggiorna</button></form></div><div><b>€ {{'%.2f'|format(subtotal)}}</b><form method='post' action='{{url_for("client_remove_cart",product_id=p.id)}}'><button class='detail-link'>Rimuovi</button></form></div></div>{% endfor %}<h2>Totale: € {{'%.2f'|format(total)}}</h2></div><div class='client-card'><span class='eyebrow'>Richiesta senza pagamento online</span><h2 class='luxury-title'>Richiedi l'ordine</h2><p>Il negozio controllerà la disponibilità e ti contatterà per conferma, ritiro o spedizione.</p><form method='post' action='{{url_for("client_checkout")}}'><input required name='name' placeholder='Nome e cognome'><input required name='phone' placeholder='Telefono'><input type='email' name='email' placeholder='Email facoltativa'><textarea name='notes' placeholder='Note, ritiro o richiesta di spedizione'></textarea><button class='gold-btn' style='width:100%'>Invia richiesta ordine</button></form></div>{% else %}<div class='client-card'><p>Il carrello è vuoto.</p><a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla collezione</a></div>{% endif %}"""
-    return public_page("Carrello",body,rows=rows,total=total)
+    rows,total=current_client_cart()
+    body=r"""
+<div class='checkout-luxury'>
+  <span class='eyebrow'>Jewelry Atelier</span>
+  <h1 class='luxury-title'>Il tuo carrello</h1>
+
+  {% if rows %}
+  <div class='checkout-grid'>
+    <section class='checkout-panel'>
+      <h2>Riepilogo gioielli</h2>
+      {% for p,qty,subtotal in rows %}
+      <div class='cart-summary-row'>
+        {% if p.photo_data %}<img src='{{p.photo_data}}' alt='{{p.category}}'>{% else %}<div></div>{% endif %}
+        <div>
+          <b>{{p.model_name or p.category}}</b><br>
+          <small>{{p.brand_code}} · quantità {{qty}}</small>
+          <form class='qty-form' method='post' action='{{url_for("client_update_cart",product_id=p.id)}}'>
+            <input name='quantity' type='number' min='1' max='{{p.quantity}}' value='{{qty}}'>
+            <button class='detail-link'>Aggiorna</button>
+          </form>
+        </div>
+        <div>
+          <b>€ {{'%.2f'|format(subtotal)}}</b>
+          <form method='post' action='{{url_for("client_remove_cart",product_id=p.id)}}'>
+            <button class='detail-link'>Rimuovi</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+      <div class='checkout-total'>Totale € {{'%.2f'|format(total)}}</div>
+      <a class='detail-link' style='display:inline-flex;text-decoration:none;padding:11px 15px' href='{{url_for("boutique")}}#collezione'>← Continua gli acquisti</a>
+    </section>
+
+    <section class='checkout-panel'>
+      <span class='eyebrow'>Pagamento sicuro</span>
+      <h2>Completa l’ordine</h2>
+      <div class='checkout-form'>
+        <input id='checkout-name' autocomplete='name' required placeholder='Nome e cognome'>
+        <input id='checkout-phone' autocomplete='tel' required placeholder='Telefono'>
+        <input id='checkout-email' type='email' autocomplete='email' placeholder='Email'>
+        <textarea id='checkout-notes' placeholder='Note, ritiro in studio oppure spedizione'></textarea>
+      </div>
+
+      {% if paypal_enabled %}
+      <div class='paypal-box'>
+        <div class='paypal-title'>Paga subito con PayPal</div>
+        <div id='paypal-button-container'></div>
+        <div id='paypal-message' style='color:#9b1c1c;font:13px Arial,sans-serif;margin-top:8px'></div>
+      </div>
+      <script src='https://www.paypal.com/sdk/js?client-id={{paypal_client_id|urlencode}}&currency=EUR&intent=capture&components=buttons'></script>
+      <script>
+      function customerPayload(){
+        const name=document.getElementById('checkout-name').value.trim();
+        const phone=document.getElementById('checkout-phone').value.trim();
+        const email=document.getElementById('checkout-email').value.trim();
+        const notes=document.getElementById('checkout-notes').value.trim();
+        if(!name||!phone){
+          throw new Error('Inserisci nome e telefono prima di pagare.');
+        }
+        return {name,phone,email,notes};
+      }
+
+      paypal.Buttons({
+        style:{layout:'vertical',shape:'pill',label:'pay',height:48},
+        createOrder:async function(){
+          const data=customerPayload();
+          const response=await fetch('{{url_for("paypal_create_order")}}',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(data)
+          });
+          const result=await response.json();
+          if(!response.ok) throw new Error(result.error||'Impossibile avviare PayPal');
+          return result.id;
+        },
+        onApprove:async function(data){
+          const response=await fetch('{{url_for("paypal_capture_order",order_id="PAYPAL_ORDER_ID")}}'.replace('PAYPAL_ORDER_ID',data.orderID),{
+            method:'POST',
+            headers:{'Content-Type':'application/json'}
+          });
+          const result=await response.json();
+          if(!response.ok) throw new Error(result.error||'Pagamento non completato');
+          window.location.href=result.redirect_url;
+        },
+        onCancel:function(){
+          document.getElementById('paypal-message').textContent='Pagamento annullato. Il carrello è rimasto invariato.';
+        },
+        onError:function(err){
+          document.getElementById('paypal-message').textContent=err.message||'Errore PayPal. Riprova.';
+        }
+      }).render('#paypal-button-container');
+      </script>
+      {% else %}
+      <div class='paypal-disabled'>
+        <b>Pulsante PayPal pronto.</b><br>
+        Per attivarlo sulla DEV servono le variabili Render
+        <code>PAYPAL_CLIENT_ID</code> e <code>PAYPAL_CLIENT_SECRET</code>.
+      </div>
+      {% endif %}
+
+      <div class='payment-divider'>oppure</div>
+      <form method='post' action='{{url_for("client_checkout")}}' onsubmit='return copyCheckoutFields(this)'>
+        <input type='hidden' name='name'>
+        <input type='hidden' name='phone'>
+        <input type='hidden' name='email'>
+        <input type='hidden' name='notes'>
+        <button class='gold-btn' style='width:100%'>Invia richiesta senza pagamento</button>
+      </form>
+      <script>
+      function copyCheckoutFields(form){
+        try{
+          const data=customerPayload();
+          Object.keys(data).forEach(k=>form.elements[k].value=data[k]);
+          return true;
+        }catch(err){
+          alert(err.message);
+          return false;
+        }
+      }
+      </script>
+    </section>
+  </div>
+  {% else %}
+  <div class='client-card'>
+    <p>Il carrello è vuoto.</p>
+    <a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla collezione</a>
+  </div>
+  {% endif %}
+</div>
+"""
+    return public_page(
+        "Carrello e pagamento",
+        body,
+        rows=rows,
+        total=total,
+        paypal_enabled=PAYPAL_ENABLED,
+        paypal_client_id=PAYPAL_CLIENT_ID,
+    )
+
 
 @app.post("/boutique/carrello/aggiorna/<int:product_id>")
 def client_update_cart(product_id):
@@ -2111,6 +2433,121 @@ def client_update_cart(product_id):
 @app.post("/boutique/carrello/rimuovi/<int:product_id>")
 def client_remove_cart(product_id):
     cart=dict(session.get("client_cart",{})); cart.pop(str(product_id),None); session["client_cart"]=cart; session.modified=True; return redirect(url_for("client_cart"))
+
+
+@app.post("/api/paypal/orders")
+def paypal_create_order():
+    if not PAYPAL_ENABLED:
+        return jsonify(error="PayPal non è ancora configurato."), 503
+
+    data=request.get_json(silent=True) or {}
+    name=str(data.get("name","")).strip()
+    phone=str(data.get("phone","")).strip()
+    email=str(data.get("email","")).strip()
+    notes=str(data.get("notes","")).strip()
+    if not name or not phone:
+        return jsonify(error="Inserisci nome e telefono."), 400
+
+    rows,total=current_client_cart()
+    if not rows or total<=0:
+        return jsonify(error="Il carrello è vuoto o non più disponibile."), 400
+
+    items=[]
+    for product,quantity,subtotal in rows:
+        items.append({
+            "name": (product["model_name"] or product["category"] or product["brand_code"])[:127],
+            "sku": (product["brand_code"] or str(product["id"]))[:127],
+            "quantity": str(quantity),
+            "unit_amount": {
+                "currency_code": "EUR",
+                "value": f"{float(product['price']):.2f}",
+            },
+        })
+
+    payload={
+        "intent":"CAPTURE",
+        "purchase_units":[{
+            "reference_id":"TBS-JEWELRY",
+            "description":"Jewelry Atelier · Premium Piercing Jewelry",
+            "amount":{
+                "currency_code":"EUR",
+                "value":f"{total:.2f}",
+                "breakdown":{
+                    "item_total":{"currency_code":"EUR","value":f"{total:.2f}"}
+                },
+            },
+            "items":items,
+        }],
+        "application_context":{
+            "brand_name":"Jewelry Atelier",
+            "shipping_preference":"GET_FROM_FILE",
+            "user_action":"PAY_NOW",
+        },
+    }
+
+    try:
+        paypal_order=paypal_api_request("/v2/checkout/orders","POST",payload)
+    except RuntimeError as exc:
+        app.logger.exception("PayPal create order failed")
+        return jsonify(error=str(exc)), 502
+
+    paypal_order_id=paypal_order.get("id")
+    if not paypal_order_id:
+        return jsonify(error="PayPal non ha restituito un numero ordine."), 502
+
+    session["paypal_pending"]={
+        "paypal_order_id":paypal_order_id,
+        "name":name,
+        "phone":phone,
+        "email":email,
+        "notes":notes,
+        "total":total,
+    }
+    session.modified=True
+    return jsonify(id=paypal_order_id)
+
+
+@app.post("/api/paypal/orders/<order_id>/capture")
+def paypal_capture_order(order_id):
+    pending=session.get("paypal_pending") or {}
+    if pending.get("paypal_order_id") != order_id:
+        return jsonify(error="Sessione di pagamento non valida o scaduta."), 400
+
+    try:
+        capture=paypal_api_request(f"/v2/checkout/orders/{order_id}/capture","POST",{})
+        if capture.get("status") != "COMPLETED":
+            return jsonify(error="Il pagamento PayPal non risulta completato."), 409
+
+        payer=capture.get("payer") or {}
+        number=save_paid_paypal_order(order_id,payer)
+    except RuntimeError as exc:
+        app.logger.exception("PayPal capture failed")
+        return jsonify(error=str(exc)), 502
+
+    session["paypal_success"]={"order_number":number,"paypal_order_id":order_id}
+    session.modified=True
+    return jsonify(redirect_url=url_for("paypal_payment_success"))
+
+
+@app.get("/boutique/pagamento-paypal/completato")
+def paypal_payment_success():
+    success=session.pop("paypal_success",None)
+    session.modified=True
+    if not success:
+        return redirect(url_for("boutique"))
+    return public_page(
+        "Pagamento completato",
+        """<div class='paypal-success'>
+        <span class='eyebrow'>Pagamento completato</span>
+        <h1>Grazie.</h1>
+        <p>Il pagamento PayPal è stato ricevuto correttamente.</p>
+        <p>Ordine <b>{{number}}</b></p>
+        <p>Riceverai la conferma per spedizione o ritiro presso lo studio.</p>
+        <a class='gold-btn' href='{{url_for("boutique")}}'>Torna alla boutique</a>
+        </div>""",
+        number=success["order_number"],
+    )
+
 
 @app.post("/boutique/ordine")
 def client_checkout():
