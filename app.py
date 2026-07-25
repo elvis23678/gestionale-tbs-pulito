@@ -108,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.6.0 DEV · Luxury Boutique & PayPal"
+APP_VERSION = "v44.0.0 DEV · Jewelry Commerce"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
