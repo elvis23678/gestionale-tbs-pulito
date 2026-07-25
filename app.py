@@ -2023,37 +2023,7 @@ def save_paid_paypal_order(paypal_order_id, payer_data):
                 """INSERT INTO sales(
                     user_id,username,product_id,product_code,quantity,unit_price,
                     sale_number,payment_method,channel,status
-                ) VALUES(NULL,'Boutique online',?,?,?,?,?,'PayPal','Online','Confermata')
-
-/* TBS Jewelry Editorial — mobile first definitive */
-.flagship-hero{position:relative;height:620px;margin:0 -18px 0;overflow:hidden;background:#10100f;border-bottom:1px solid rgba(217,183,104,.22)}
-.flagship-hero-media{position:absolute;inset:0}.flagship-hero-media img{width:100%;height:100%;object-fit:cover;object-position:center 42%;filter:brightness(.72) contrast(1.08) saturate(.82)}
-.flagship-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(5,5,5,.96) 0%,rgba(5,5,5,.72) 47%,rgba(5,5,5,.12) 82%),linear-gradient(0deg,rgba(4,4,4,.55),transparent 45%)}
-.flagship-hero-copy{position:absolute;z-index:2;left:clamp(22px,6vw,72px);top:50%;transform:translateY(-47%);max-width:580px;padding-right:24px}
-.flagship-kicker{font:600 13px/1.4 Arial,sans-serif;letter-spacing:2.1px;text-transform:uppercase;color:#d8bc76}
-.flagship-hero h1{margin:16px 0 20px;font-size:clamp(50px,8vw,88px);font-weight:400;line-height:.93;letter-spacing:-2px;color:#f5f0e6;text-shadow:0 3px 16px #000}.flagship-hero h1 em{font-style:normal;color:#d7ad56}
-.flagship-hero p{max-width:505px;margin:0 0 28px;color:#ded8ce;font:400 18px/1.65 Arial,sans-serif}
-.luxury-cta{display:inline-flex;align-items:center;justify-content:center;min-height:54px;padding:0 28px;border:1px solid #d2aa55;color:#f0dfb8;text-decoration:none;text-transform:uppercase;font:700 12px Arial,sans-serif;letter-spacing:1.15px;background:rgba(6,6,6,.44)}
-.editorial-intro{display:grid;grid-template-columns:1fr 210px;gap:30px;align-items:center;padding:76px 0 64px;border-bottom:1px solid rgba(217,183,104,.13)}
-.editorial-intro h2{margin:0 0 27px;font-size:clamp(44px,6.3vw,72px);font-weight:400;line-height:.97;letter-spacing:-1.8px;color:#f2ede5}.editorial-intro p{max-width:630px;margin:0;color:#bbb5ac;font:16px/1.8 Arial,sans-serif}
-.editorial-mark{justify-self:center;position:relative;width:150px;height:180px;display:grid;place-items:center;color:#927438;font-size:148px;line-height:1;transform:rotate(-8deg)}.editorial-mark span{position:absolute;font-size:38px;color:#e0bd6a}
-.luxury-categories{display:flex;gap:14px;overflow-x:auto;padding:0 0 44px;scroll-snap-type:x mandatory;scrollbar-width:none}.luxury-categories::-webkit-scrollbar{display:none}
-.luxury-category{position:relative;flex:0 0 280px;height:230px;overflow:hidden;text-decoration:none;background:#171613;scroll-snap-align:start;border:1px solid rgba(217,183,104,.12)}.luxury-category img{width:100%;height:100%;object-fit:cover;filter:brightness(.72) contrast(1.1) saturate(.72);transition:.35s}.luxury-category:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(3,3,3,.88),transparent 62%)}.luxury-category div{position:absolute;z-index:2;left:18px;right:18px;bottom:16px}.luxury-category small{display:block;color:#c9a95e;font:700 10px Arial,sans-serif;letter-spacing:1.2px;text-transform:uppercase}.luxury-category span{display:block;margin-top:5px;color:#fff;font-size:27px;line-height:1.05}.luxury-category:hover img{transform:scale(1.05)}
-.collection-head{margin:12px 0 22px}.section-title{font-size:clamp(45px,6vw,68px);line-height:.92;text-transform:none;letter-spacing:-1.5px;color:#f1ece4}.filter-toggle{border-color:#b99445;color:#e6ca85;background:#0a0a09;text-transform:uppercase;font:700 12px Arial,sans-serif;letter-spacing:.7px}
-.instant-search{max-width:100%;margin-bottom:26px}.shop-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.shop-product{display:flex;flex-direction:column;min-height:0;padding:0;border-radius:0;border:1px solid rgba(220,183,94,.18);background:#0a0a09;overflow:hidden}.product-image{height:330px;border-radius:0;background:#171612;box-shadow:none}.shop-product img{width:100%;height:100%;object-fit:cover;transform:none!important;mix-blend-mode:normal;filter:brightness(.93) contrast(1.04) saturate(.86)}.shop-body{padding:14px 14px 8px}.product-category{font-size:9px;color:#ba9950}.shop-title{font:600 18px/1.13 Arial,sans-serif;color:#f2eee7;min-height:41px}.product-material{font:11px/1.35 Arial,sans-serif;color:#a9a298}.shop-price{font:400 24px Georgia,serif;color:#fff}.stock-ok,.stock-low,.stock-order,.stock-no{font:12px Arial,sans-serif}.stock-ok{color:#49d676}.stock-order{color:#70b7ff}.stock-no{color:#e37676}.shop-actions{display:grid;grid-template-columns:48px 1fr;gap:8px;padding:8px 12px 13px;margin-top:auto}.shop-actions button,.shop-actions a{min-height:43px;border-radius:0;font-size:11px}.favorite-btn{min-height:43px!important;font-size:21px!important}.add{background:transparent;color:#e7cc8c;border:1px solid #c19a49;box-shadow:none}.add:hover{background:#c19a49;color:#080808}
-.icon-link{color:#f0d98f;border-color:rgba(223,187,98,.55);font-size:23px}.bottom-nav a,.bottom-nav a span{color:#e7cf8b}.bottom-nav a{opacity:.9}.bottom-nav a:hover{opacity:1}
-@media(max-width:760px){
- body{padding-bottom:65px}.shop-wrap{padding:0 7px 18px}.shop-nav{min-height:60px;padding:5px 8px;border-bottom-color:rgba(217,183,104,.18)}.shop-nav img{width:42px;height:42px}.shop-nav .name{font-size:17px}.shop-nav .tagline{font-size:8px}.nav-actions{gap:5px}.icon-link{width:34px;height:34px;border:0;background:transparent;font-size:21px}.cart-count{right:-2px;top:-2px}
- .flagship-hero{height:540px;margin:0 -7px}.flagship-hero-media img{object-position:58% center}.flagship-shade{background:linear-gradient(90deg,rgba(5,5,5,.88) 0%,rgba(5,5,5,.58) 55%,rgba(5,5,5,.08) 100%),linear-gradient(0deg,rgba(4,4,4,.62),transparent 55%)}.flagship-hero-copy{left:14px;right:12px;top:auto;bottom:34px;transform:none;padding:0;max-width:355px}.flagship-kicker{font-size:9px;letter-spacing:1.5px}.flagship-hero h1{font-size:48px;line-height:.92;letter-spacing:-1.7px;margin:12px 0 17px}.flagship-hero p{font-size:13px;line-height:1.55;max-width:320px;margin-bottom:22px}.luxury-cta{min-height:46px;padding:0 20px;font-size:10px}
- .editorial-intro{grid-template-columns:1fr 92px;gap:8px;padding:53px 7px 44px}.editorial-intro h2{font-size:43px;line-height:.92;margin-bottom:25px}.editorial-intro p{font-size:13px;line-height:1.75}.editorial-mark{width:90px;height:130px;font-size:90px}.editorial-mark span{font-size:25px}
- .luxury-categories{gap:8px;padding-bottom:40px}.luxury-category{flex-basis:174px;height:185px}.luxury-category div{left:11px;right:11px;bottom:12px}.luxury-category small{font-size:8px}.luxury-category span{font-size:22px}
- .collection-head{margin:8px 4px 17px;align-items:center}.section-title{font-size:42px;line-height:.9}.section-copy{font-size:12px}.filter-toggle{min-height:42px;border-radius:0;padding:8px 12px;font-size:10px}
- #ricerca-live{position:relative;top:auto;padding:0;margin:0 4px 22px;background:none;backdrop-filter:none}.instant-search input{border-radius:0;padding:13px 43px 13px 12px;font-size:14px;background:#0b0b0a}
- .shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.shop-product{border-radius:0;padding:0;gap:0;min-width:0}.product-image{height:210px;border-radius:0}.shop-body{padding:9px 8px 5px}.product-category{font-size:7px;letter-spacing:.6px}.shop-title{font-size:14px;line-height:1.12;min-height:47px}.product-material{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.shop-price{font-size:20px;margin:7px 0 2px}.stock-ok,.stock-low,.stock-order,.stock-no{font-size:10px;min-height:15px}.shop-actions{grid-column:auto;grid-template-columns:39px 1fr;gap:5px;padding:7px 7px 9px}.shop-actions button,.shop-actions a{min-height:36px!important;font-size:9px!important;padding:3px}.favorite-btn{font-size:18px!important}
- .bottom-nav{height:62px}.bottom-nav a{font-size:7px}.bottom-nav span{font-size:20px!important}.footer{display:none}
-}
-@media(max-width:380px){.flagship-hero h1{font-size:43px}.product-image{height:190px}.shop-title{font-size:13px}.editorial-intro h2{font-size:39px}}
-""",
+                ) VALUES(NULL,'Boutique online',?,?,?,?,?,'PayPal','Online','Confermata')""",
                 (
                     product["id"],
                     product["brand_code"],
@@ -2089,9 +2059,9 @@ def public_page(title, body, **ctx):
 @app.get("/")
 def boutique():
     q=request.args.get("q","").strip(); category=request.args.get("category","").strip(); material=request.args.get("material","").strip()
-    rows=[]
+    like=f"%{q}%"; rows=[]
     with connect() as db:
-        products=db.execute("SELECT * FROM products WHERE active=1 ORDER BY is_bestseller DESC,is_new DESC,quantity DESC,category,brand_code").fetchall()
+        products=db.execute("SELECT * FROM products WHERE active=1 ORDER BY category,brand_code").fetchall()
         catalogs=db.execute("SELECT * FROM supplier_catalog WHERE active=1 AND excluded=0 ORDER BY category,brand_code").fetchall()
         by_supplier={str(c["supplier_code"]).upper():c for c in catalogs}; by_brand={str(c["brand_code"]).upper():c for c in catalogs}
         matched=set()
@@ -2114,52 +2084,52 @@ def boutique():
             uq=q.upper(); rows=[r for r in rows if uq in " ".join(str(r.get(k) or "") for k in ("brand_code","supplier_code","display_category","description","display_color","display_stone","display_size")).upper()]
         if category: rows=[r for r in rows if r.get("display_category")==category]
         if material: rows=[r for r in rows if material.lower() in str(r.get("material") or "").lower()]
+        # Raggruppa in boutique solo i prodotti a cui è stato assegnato un gruppo varianti.
         grouped=[]; group_index={}
         for item in rows:
             group_key=(item.get("variant_group") or "").strip().upper() if item.get("kind")=="product" else ""
             if not group_key:
                 item["variant_count"]=1; grouped.append(item); continue
             if group_key not in group_index:
-                item["variant_count"]=1; item["model_name"]=item.get("model_name") or item.get("description") or item.get("display_category")
+                item["variant_count"]=1
+                item["model_name"]=item.get("model_name") or item.get("description") or item.get("display_category")
                 group_index[group_key]=item; grouped.append(item)
             else:
                 rep=group_index[group_key]; rep["variant_count"]+=1
+                # Preferisci come anteprima una variante disponibile e con foto.
                 if (rep.get("quantity",0)<=0 and item.get("quantity",0)>0) or (not rep.get("image") and item.get("image")):
                     count=rep["variant_count"]; idx=grouped.index(rep); item["variant_count"]=count; item["model_name"]=item.get("model_name") or rep.get("model_name"); grouped[idx]=item; group_index[group_key]=item
         rows=grouped
         live_categories=sorted({r.get("display_category") for r in rows if r.get("display_category")})[:20]
         live_materials=["Titanio ASTM F136","Oro 14K","Oro 18K"]
-        image_rows=[r for r in rows if r.get("image")]
-        featured=image_rows[0] if image_rows else None
-        editorial=image_rows[1] if len(image_rows)>1 else featured
-        category_cards=[]
-        for cat in live_categories[:8]:
-            candidate=next((r for r in image_rows if r.get("display_category")==cat),None)
-            category_cards.append({"name":cat,"image":candidate.get("image") if candidate else ""})
+        featured=next((r for r in rows if r.get("image")),None)
         rows=rows[:350]
     body="""
 <section class='flagship-hero'>
-  <div class='flagship-hero-media'>{% if featured and featured.image %}<img src='{{featured.image}}' alt='Gioiello TBS Jewelry'>{% endif %}</div>
-  <div class='flagship-shade'></div>
+  <div class='flagship-hero-media'>
+    {% if featured and featured.image %}<img src='{{featured.image}}' alt='TBS Jewelry — collezione premium'>{% endif %}
+  </div>
   <div class='flagship-hero-copy'>
-    <div class='flagship-kicker'>TBS Jewelry · Luxury atelier d'eccellenza</div>
-    <h1>Il gioiello<br>diventa <em>arte.</em></h1>
+    <div class='flagship-kicker'>TBS Jewelry · Luxury Piercing Collection</div>
+    <h1>Il gioiello<br>diventa arte.</h1>
     <p>Titanio ASTM F136, dettagli luminosi e selezioni curate per trasformare ogni piercing in una firma personale.</p>
     <a class='luxury-cta' href='#collezione'>Esplora la collezione</a>
   </div>
 </section>
 
 <section class='editorial-intro'>
-  <div><h2>Una nuova idea<br>di piercing<br>jewelry.</h2><p>Non semplici accessori, ma piccoli oggetti di design. Ogni proposta è selezionata per qualità, comfort e presenza estetica, con disponibilità aggiornata direttamente da TBS One.</p></div>
-  <div class='editorial-mark'>◌<span>◇</span></div>
+  <h2>Una nuova idea<br>di piercing jewelry.</h2>
+  <p>Non semplici accessori, ma piccoli oggetti di design. Ogni proposta è selezionata per qualità, comfort e presenza estetica, con disponibilità aggiornata direttamente da TBS One.</p>
 </section>
 
 <section class='luxury-categories' id='categorie'>
-  {% for x in category_cards %}<a class='luxury-category' href='{{url_for("boutique",category=x.name)}}#collezione'>{% if x.image %}<img src='{{x.image}}' alt='{{x.name}}'>{% endif %}<div><small>Shop by placement</small><span>{{x.name}}</span></div></a>{% endfor %}
+  {% for x in live_categories[:6] %}
+  <a class='luxury-category' href='{{url_for("boutique",category=x)}}#collezione'><small>Shop by placement</small><span>{{x}}</span></a>
+  {% endfor %}
 </section>
 
 <div class='collection-head' id='collezione'>
-  <div><span class='eyebrow'>The Collection</span><h2 class='section-title'>Gioielli<br>selezionati</h2><p class='section-copy result-count' id='liveResultCount'>{{rows|length}} proposte visualizzate</p></div>
+  <div><span class='eyebrow'>The Collection</span><h2 class='section-title'>Gioielli selezionati</h2><p class='section-copy result-count' id='liveResultCount'>{{rows|length}} proposte</p></div>
   <button type='button' class='filter-toggle'>Filtri</button>
 </div>
 <section class='filters'><form method='get'><input name='q' value='{{q}}' placeholder='Cerca gioiello, misura o colore'><select name='category'><option value=''>Tutte le categorie</option>{% for x in live_categories %}<option {% if category==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name='material'><option value=''>Tutti i materiali</option>{% for x in live_materials %}<option {% if material==x %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Applica</button></form></section>
@@ -2167,13 +2137,32 @@ def boutique():
 <div class='shop-grid'>
 {% for p in rows %}
 <article class='shop-product' data-product-key='{{p.variant_group or p.brand_code or p.supplier_code}}' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'>
-  <a class='product-image' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>{% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}</a>
-  <div class='shop-body'><div class='product-category'>{{p.display_category}}</div><div class='shop-title'>{{p.model_name or p.description or p.display_category}}</div><div class='product-material'>{{p.material or 'Titanio ASTM F136'}}{% if p.display_size %} · {{p.display_size}}{% endif %}{% if p.display_color %} · {{p.display_color}}{% endif %}</div><div class='shop-price'>€ {{'%.2f'|format(p.display_price)}}</div>{% if p.status=='available' %}<div class='stock-ok'>Disponibile</div>{% elif p.status=='last' %}<div class='stock-low'>Ultimo pezzo</div>{% elif p.status=='order' %}<div class='stock-order'>Ordinabile · 15–20 giorni</div>{% else %}<div class='stock-no'>Non disponibile</div>{% endif %}</div>
-  <div class='shop-actions'><button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Salva nei preferiti'>♡</button>{% if p.kind=='product' and p.quantity>0 and p.variant_count==1 %}<form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'><input type='hidden' name='quantity' value='1'><button class='add'>Aggiungi</button></form>{% elif p.kind=='product' %}<a class='add' href='{{url_for("boutique_product",product_id=p.id)}}'>{{'Varianti' if p.variant_count>1 else 'Scopri'}}</a>{% elif p.status=='order' %}<a class='add' href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Richiedi</a>{% else %}<button disabled>Esaurito</button>{% endif %}</div>
+  <a class='product-image' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
+    {% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>◇</span>{% endif %}
+  </a>
+  <div class='shop-body'>
+    <div class='product-category'>{{p.display_category}}</div>
+    <div class='shop-title'>{{p.model_name or p.description or p.display_category}}</div>
+    <div class='product-material'>{{p.material or 'Titanio ASTM F136'}}{% if p.display_size %} · {{p.display_size}}{% endif %}{% if p.display_color %} · {{p.display_color}}{% endif %}</div>
+    <div class='shop-price'>€ {{'%.2f'|format(p.display_price)}}</div>
+    {% if p.status=='available' %}<div class='stock-ok'>Disponibile</div>{% elif p.status=='last' %}<div class='stock-low'>Ultimo pezzo</div>{% elif p.status=='order' %}<div style='color:#74b9ff'>Ordinabile · 15–20 giorni</div>{% else %}<div style='color:#ef7777'>Non disponibile</div>{% endif %}
+  </div>
+  <div class='shop-actions'>
+    <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Salva nei preferiti'>♡</button>
+    {% if p.kind=='product' and p.quantity>0 and p.variant_count==1 %}
+      <form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'><input type='hidden' name='quantity' value='1'><button class='add'>Aggiungi al carrello</button></form>
+    {% elif p.kind=='product' %}
+      <a class='add' href='{{url_for("boutique_product",product_id=p.id)}}'>{{'Scegli variante' if p.variant_count>1 else 'Scopri'}}</a>
+    {% elif p.status=='order' %}
+      <a class='add' href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Richiedi</a>
+    {% else %}<button disabled>Non disponibile</button>{% endif %}
+  </div>
 </article>
-{% else %}<div class='client-card'>Nessun gioiello trovato.</div>{% endfor %}<div class='favorites-empty' id='favoritesEmpty'>Non hai ancora salvato gioielli.</div></div>
+{% else %}<div class='client-card'>Nessun gioiello trovato.</div>{% endfor %}
+<div class='favorites-empty' id='favoritesEmpty'>Non hai ancora salvato gioielli.</div>
+</div>
 """
-    return public_page("TBS Jewelry · Atelier d'eccellenza",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured,editorial=editorial,category_cards=category_cards)
+    return public_page("Jewelry · Atelier d'eccellenza",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured)
 
 @app.get("/boutique/prodotto/<int:product_id>")
 def boutique_product(product_id):
