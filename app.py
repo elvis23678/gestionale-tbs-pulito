@@ -95,7 +95,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v36.3.3 TBS ONE · QR Scanner Fix"
+APP_VERSION = "v36.4.0 DEV · Catalogo & Stabilità"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1135,19 +1135,6 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
 def product_scanner_html(target_url):
     """Scanner QR prodotti: lettore nativo Android + fallback jsQR."""
     html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
-    replacements={
-        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
-        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
-        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
-        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
-        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
-        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
-        "Badge camera error":"Product QR camera error",
-        "Fotocamera non avviata.":"Fotocamera pronta.",
-    }
-    for old,new in replacements.items():
-        html=html.replace(old,new)
-
     old_vars = "  let stream=null,running=false,submitted=false,scanTimer=null,jsQRPromise=null;"
     new_vars = """  let stream=null,running=false,submitted=false,scanTimer=null,jsQRPromise=null;
   let productDetector=null,lastProductScanAt=0,detectorBusy=false;"""
@@ -1356,6 +1343,19 @@ def product_scanner_html(target_url):
         "Fotocamera attiva. Inquadra il QR dentro il riquadro.",
         "Fotocamera attiva. Avvicina il QR finché è nitido."
     )
+    replacements={
+        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
+        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
+        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
+        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
+        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
+        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
+        "Badge camera error":"Product QR camera error",
+        "Fotocamera non avviata.":"Fotocamera pronta.",
+    }
+    for old,new in replacements.items():
+        html=html.replace(old,new)
+
     return html
 
 def create_badge_pdf(badge_name, token):
@@ -2703,7 +2703,8 @@ def product_qr_labels_pdf():
             pdf.setLineWidth(.3)
             pdf.roundRect(x+.5*mm,y+.5*mm,label_w-1*mm,label_h-1*mm,1.2*mm,stroke=1,fill=0)
 
-            payload=(product["brand_code"] or "").strip()
+            payload=f"P{product['id']}"
+            visible_code=(product["brand_code"] or "").strip()
             qr_size=12.5*mm
             qr_x=x+1.1*mm
             qr_y=y+1.25*mm
@@ -2726,7 +2727,7 @@ def product_qr_labels_pdf():
             tx=x+14.3*mm
             pdf.setFillColor(colors.black)
             pdf.setFont("Helvetica-Bold",7)
-            pdf.drawString(tx,y+10.1*mm,payload[:18])
+            pdf.drawString(tx,y+10.1*mm,visible_code[:18])
             pdf.setFont("Helvetica-Bold",6.8)
             pdf.drawString(tx,y+6.8*mm,f"EUR {float(product['price'] or 0):.2f}")
             pdf.setFont("Helvetica",5)
@@ -2830,7 +2831,7 @@ def products():
 .scan-product-btn:hover{opacity:.9}
 </style><div class="products-heading"><div><h1>Catalogo prodotti</h1><p class="muted">Un solo catalogo: articoli disponibili in studio e referenze ordinabili.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="scan-product-btn" href="{{url_for('scan_product')}}">📷 Scansiona QR</a>{% if can_manage %}<a class="scan-product-btn" href="{{url_for('product_qr_labels')}}">▦ Etichette QR</a>{% endif %}</div></div><div class="card"><h3>Filtri</h3><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice, brand o note"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==cat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Tutti i materiali</option>{% for x in materials %}<option {% if x==mat %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Tutti i colori</option>{% for x in colors %}<option {% if x==col %}selected{% endif %}>{{x}}</option>{% endfor %}</select><select name="status"><option value="active" {% if status=='active' %}selected{% endif %}>Attivi</option><option value="archived" {% if status=='archived' %}selected{% endif %}>Archiviati</option><option value="all" {% if status=='all' %}selected{% endif %}>Tutti</option></select><select name="availability"><option value="">Qualsiasi disponibilità</option><option value="available" {% if av=='available' %}selected{% endif %}>Disponibili</option><option value="low" {% if av=='low' %}selected{% endif %}>Scorte basse</option></select><button>Filtra</button></form></div>
 {% if can_manage %}<div class="card"><h3>Aggiungi prodotto</h3><form class="inline" method="post" enctype="multipart/form-data"><input name="supplier_code" placeholder="Codice fornitore" required><input name="brand_code" placeholder="Codice interno" required><select name="category"><option value="">Categoria automatica</option>{% for x in categories %}<option>{{x}}</option>{% endfor %}</select><select name="material"><option value="">Materiale</option>{% for x in materials %}<option>{{x}}</option>{% endfor %}</select><select name="color"><option value="">Colore</option>{% for x in colors %}<option>{{x}}</option>{% endfor %}</select><input name="size" placeholder="Misura, es. 1.6×10"><input name="stone" placeholder="Pietra"><select name="thread_type"><option value="">Filettatura</option>{% for x in threads %}<option>{{x}}</option>{% endfor %}</select><input name="quantity" type="number" min="0" value="1" required><input name="price" placeholder="Prezzo vendita" required><input name="cost_price" placeholder="Costo acquisto"><input name="min_stock" type="number" min="0" value="1" placeholder="Soglia scorta"><input name="location" placeholder="Posizione: vetrina/cassetto"><label><input name="is_new" type="checkbox" style="width:auto"> Novità</label><label><input name="is_bestseller" type="checkbox" style="width:auto"> Best seller</label><input name="photo" type="file" accept="image/*" capture="environment"><textarea name="notes" placeholder="Note"></textarea><button>Aggiungi</button></form></div>{% endif %}
-<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge">NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge">BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product"><div class="no-photo">📘</div><div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
+<div class="gallery">{% for p in rows %}<article class="product {% if p.quantity<=1 %}low{% endif %}">{% if p.photo_data %}<img class="product-photo" src="{{p.photo_data}}">{% else %}<div class="no-photo">Nessuna foto</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span>{% if p.material %}<span class="badge">{{p.material}}</span>{% endif %}{% if p.color %}<span class="badge">{{p.color}}</span>{% endif %}<div>Quantità: <b>{{p.quantity}}</b>{% if p.location %}<br>📍 {{p.location}}{% endif %}{% if not p.active %}<br><span class="badge">ARCHIVIATO</span>{% endif %}{% if p.is_new %}<span class="badge" style="background:#fff1a8!important;color:#241700!important;border:2px solid #d59b00!important;font-weight:950!important">✨ NOVITÀ</span>{% endif %}{% if p.is_bestseller %}<span class="badge" style="background:#111!important;color:#ffd86b!important;border:2px solid #ffd86b!important;font-weight:950!important">★ BEST SELLER</span>{% endif %}</div><div class="price">€ {{'%.2f'|format(p.price)}}</div><div class="actions"><a class="view" href="{{url_for('product_detail',product_id=p.id)}}">Apri</a>{% if can_manage %}<form method="post" action="{{url_for('order_product',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button class="success">📦 Ordina{% if pending.get(p.id) %} · {{pending.get(p.id)}} già{% endif %}</button></form>{% endif %}<form method="post" action="{{url_for('add_to_cart',product_id=p.id)}}"><input type="hidden" name="quantity" value="1"><button {% if p.quantity<=0 %}disabled{% endif %}>Aggiungi al carrello</button></form>{% if can_manage %}<form method="post" action="{{url_for('change_stock',product_id=p.id)}}"><input type="hidden" name="delta" value="1"><button class="success">Carica +1</button></form><a class="secondary" href="{{url_for('edit_product',product_id=p.id)}}">Modifica</a><a class="view" target="_blank" href="{{url_for('product_qr_pdf',product_id=p.id)}}">Etichette QR</a><form method="post" action="{{url_for('toggle_product_active',product_id=p.id)}}"><button class="secondary">{% if p.active %}Archivia{% else %}Riattiva{% endif %}</button></form><form method="post" action="{{url_for('duplicate_product',product_id=p.id)}}"><button class="view">Duplica</button></form>{% endif %}{% if is_admin %}<form method="post" action="{{url_for('delete_product',product_id=p.id)}}" onsubmit="return confirm('Eliminare il prodotto?')"><button class="danger">Elimina</button></form>{% endif %}</div></div></article>{% endfor %}{% for p in catalog_rows %}<article class="product">{% if p.image_file %}<img class="product-photo" src="{{url_for('static',filename='catalog/'+p.image_file)}}" alt="{{p.brand_code}}" loading="lazy">{% else %}<div class="no-photo">📘</div>{% endif %}<div class="product-body"><div class="product-title">{{p.brand_code}}</div><div class="muted"><b>{% if can_manage %}Codice interno{% else %}Codice articolo{% endif %}:</b> {{p.brand_code}}</div>{% if can_manage %}<div class="muted"><b>Codice fornitore:</b> {{p.supplier_code}}</div>{% endif %}<span class="badge">{{p.category}}</span><span class="badge">🔵 SOLO ORDINABILE</span><div>Disponibilità in studio: <b>0</b><br><span class="muted">Consegna {{p.delivery_days}}</span></div><div class="price">€ {{'%.2f'|format(p.sale_price_eur)}}</div><div class="actions"><a class="view" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">Apri</a><a class="success" href="{{url_for('supplier_catalog',q=p.supplier_code)}}">📦 Ordina</a></div></div></article>{% endfor %}</div>''',rows=rows,q=q,cat=cat,mat=mat,col=col,av=av,categories=CATEGORIES,materials=MATERIALS,colors=COLORS,threads=THREADS,can_manage=can_manage,is_admin=is_admin,status=status,pending=pending,catalog_rows=catalog_rows)
 
 @app.post("/products/<int:product_id>/order")
 @role_required("admin","manager")
@@ -3036,9 +3037,10 @@ def _find_product_by_scan(db, value):
         for row in rows:
             if _normalize_scan_code(row["brand_code"]) == candidate:
                 return row
-        if candidate.isdigit():
+        internal_id = candidate[1:] if candidate.startswith("P") and candidate[1:].isdigit() else candidate
+        if internal_id.isdigit():
             for row in rows:
-                if str(row["id"]) == candidate:
+                if str(row["id"]) == internal_id:
                     return row
         if can_use_supplier_code:
             for row in rows:
@@ -3894,7 +3896,7 @@ def supplier_catalog():
         categories=[r[0] for r in db.execute("SELECT DISTINCT category FROM supplier_catalog WHERE active=1 AND excluded=0 ORDER BY category").fetchall()]
         total=db.execute("""SELECT COUNT(*) FROM supplier_catalog c WHERE c.active=1 AND c.excluded=0
             AND NOT EXISTS(SELECT 1 FROM products p WHERE UPPER(p.supplier_code)=UPPER(c.supplier_code) OR UPPER(p.brand_code)=UPPER(c.brand_code))""").fetchone()[0]
-    return page("Catalogo ordinabili",'''<h1>📘 Catalogo ordinabili</h1><p class="muted">{{total}} referenze non presenti in magazzino · consegna indicativa 15–20 giorni.</p><div class="card"><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice produttore, codice brand o categoria"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==category %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Cerca</button></form></div><div class="grid">{% for p in rows %}<div class="card"><span class="badge">🔵 Ordinabile</span><h3>{{p.category}} · {{p.brand_code}}</h3><p><b>Codice produttore:</b> {{p.supplier_code}}</p><p class="metric" style="font-size:28px">€ {{'%.2f'|format(p.sale_price_eur)}}</p><p class="muted">Consegna indicativa: <b>15–20 giorni</b></p>{% if role in ('admin','manager') %}<p class="muted">Costo fornitore: US$ {{'%.2f'|format(p.supplier_price_usd)}}</p>{% endif %}<form method="post" action="{{url_for('request_catalog_item',catalog_id=p.id)}}"><input required name="customer_name" placeholder="Nome cliente"><input required name="customer_phone" placeholder="Telefono"><input name="quantity" type="number" min="1" value="1"><textarea name="notes" placeholder="Note, misura o variante richiesta"></textarea><button class="success">Crea ordine cliente</button></form></div>{% else %}<div class="card"><p>Nessun articolo trovato.</p></div>{% endfor %}</div>''',rows=rows,q=q,category=category,categories=categories,total=total,role=session.get("role"))
+    return page("Catalogo ordinabili",'''<h1>📘 Catalogo ordinabili</h1><p class="muted">{{total}} referenze non presenti in magazzino · consegna indicativa 15–20 giorni.</p><div class="card"><form class="inline" method="get"><input name="q" value="{{q}}" placeholder="Codice produttore, codice brand o categoria"><select name="category"><option value="">Tutte le categorie</option>{% for x in categories %}<option {% if x==category %}selected{% endif %}>{{x}}</option>{% endfor %}</select><button>Cerca</button></form></div><style>.supplier-photo{width:100%;height:220px;object-fit:contain;border-radius:14px;background:#fff;border:1px solid rgba(214,169,70,.35);margin-bottom:12px}</style><div class="grid">{% for p in rows %}<div class="card">{% if p.image_file %}<img class="supplier-photo" src="{{url_for('static',filename='catalog/'+p.image_file)}}" alt="{{p.brand_code}}" loading="lazy">{% endif %}<span class="badge">🔵 Ordinabile</span><h3>{{p.category}} · {{p.brand_code}}</h3><p><b>Codice produttore:</b> {{p.supplier_code}}</p><p class="metric" style="font-size:28px">€ {{'%.2f'|format(p.sale_price_eur)}}</p><p class="muted">Consegna indicativa: <b>15–20 giorni</b></p>{% if role in ('admin','manager') %}<p class="muted">Costo fornitore: US$ {{'%.2f'|format(p.supplier_price_usd)}}</p>{% endif %}<form method="post" action="{{url_for('request_catalog_item',catalog_id=p.id)}}"><input required name="customer_name" placeholder="Nome cliente"><input required name="customer_phone" placeholder="Telefono"><input name="quantity" type="number" min="1" value="1"><textarea name="notes" placeholder="Note, misura o variante richiesta"></textarea><button class="success">Crea ordine cliente</button></form></div>{% else %}<div class="card"><p>Nessun articolo trovato.</p></div>{% endfor %}</div>''',rows=rows,q=q,category=category,categories=categories,total=total,role=session.get("role"))
 
 @app.post("/catalogo-ordinabili/<int:catalog_id>/richiedi")
 @login_required
@@ -4228,7 +4230,7 @@ def system_status():
     storage = "Temporaneo (/tmp)" if DB_IS_EPHEMERAL else "Persistente (/var/data)"
     body = '''<h1>Stato del sistema</h1>
     <div class="grid">
-      <div class="card"><div class="muted">Database</div><div class="metric">{{ "OK" if valid else "ERRORE" }}</div><p>{{ integrity }}</p></div>
+      <div class="card" style="background:{{'#e8fff0' if valid else '#fff0f0'}}!important;border:2px solid {{'#15803d' if valid else '#b91c1c'}}!important;color:#111!important"><div style="color:#333;font-weight:800">Database</div><div class="metric" style="color:{{'#116329' if valid else '#991b1b'}}!important;font-weight:950!important">{{ "OK" if valid else "ERRORE" }}</div><p style="color:#111!important;font-weight:700">{{ integrity }}</p></div>
       <div class="card"><div class="muted">Archiviazione</div><div class="metric" style="font-size:22px">{{ storage }}</div><p class="muted">{{ db_path }}</p></div>
       <div class="card"><div class="muted">Versione</div><div class="metric" style="font-size:22px">{{ version }}</div><p>{{ "%.2f"|format(size_mb) }} MB</p></div>
       <div class="card"><div class="muted">Ultimo backup locale</div><div class="metric" style="font-size:22px">{{ last_backup or "Non presente" }}</div></div>
