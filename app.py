@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.5.5 DEV · RING HOLE CUTOUT"
+APP_VERSION = "v45.5.6 DEV · CONSERVATIVE CUTOUT"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4034,7 +4034,7 @@ body{background:#020202}
 }
 
 
-/* v45.5.5 · Solo resa immagini: foro anelli trasparente */
+/* v45.5.6 · Scontorno conservativo: preserva metallo e pietre */
 .product-image img,
 .featured-photo img,
 .product-detail>img,
@@ -4042,10 +4042,9 @@ body{background:#020202}
 .cart-item-photo img,
 .image-modal img{
   filter:
-    contrast(1.08)
-    saturate(1.04)
-    drop-shadow(0 12px 18px rgba(0,0,0,.56))
-    drop-shadow(0 0 8px rgba(206,154,54,.10))!important;
+    contrast(1.04)
+    saturate(1.02)
+    drop-shadow(0 12px 18px rgba(0,0,0,.52))!important;
 }
 
 """
@@ -4235,29 +4234,33 @@ if(live)live.addEventListener('input',()=>{
   }
 
 
-  function removeLargeEnclosedWhiteAreas(imageData,w,h){
+  function removeConservativeInnerWhite(imageData,w,h){
     /*
-      Rimuove solo grandi aree quasi bianche NON collegate ai bordi.
-      Serve per rendere trasparente l'interno di anelli/clicker.
-      Le pietre e i riflessi piccoli restano intatti.
+      Rimuove solo grandi zone interne quasi perfettamente bianche.
+      Soglia volutamente severa per preservare metallo, pietre e riflessi.
     */
     const data=imageData.data;
     const seen=new Uint8Array(w*h);
     const qx=new Int32Array(w*h);
     const qy=new Int32Array(w*h);
 
-    function isCandidate(index){
+    function isPureWhite(index){
       const p=index*4;
-      return isNearWhite(data[p],data[p+1],data[p+2],data[p+3]);
+      const r=data[p],g=data[p+1],b=data[p+2],a=data[p+3];
+      if(a<20) return false;
+      const max=Math.max(r,g,b);
+      const min=Math.min(r,g,b);
+      const brightness=(r+g+b)/3;
+      return brightness>=247 && (max-min)<=16;
     }
 
-    const minimumArea=Math.max(120,Math.round(w*h*0.010));
-    const maximumArea=Math.round(w*h*0.72);
+    const minimumArea=Math.max(180,Math.round(w*h*0.012));
+    const maximumArea=Math.round(w*h*0.68);
 
     for(let sy=1;sy<h-1;sy++){
       for(let sx=1;sx<w-1;sx++){
         const start=sy*w+sx;
-        if(seen[start]||!isCandidate(start)) continue;
+        if(seen[start] || !isPureWhite(start)) continue;
 
         let head=0,tail=0;
         let touchesBorder=false;
@@ -4278,30 +4281,35 @@ if(live)live.addEventListener('input',()=>{
           if(y<minY) minY=y;
           if(y>maxY) maxY=y;
 
-          const neighbors=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-          for(const [nx,ny] of neighbors){
-            if(nx<0||ny<0||nx>=w||ny>=h) continue;
-            const ni=ny*w+nx;
-            if(seen[ni]||!isCandidate(ni)) continue;
-            seen[ni]=1;
-            qx[tail]=nx;
-            qy[tail]=ny;
-            tail++;
+          if(x>0){
+            const i=y*w+x-1;
+            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x-1;qy[tail]=y;tail++}
+          }
+          if(x+1<w){
+            const i=y*w+x+1;
+            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x+1;qy[tail]=y;tail++}
+          }
+          if(y>0){
+            const i=(y-1)*w+x;
+            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x;qy[tail]=y-1;tail++}
+          }
+          if(y+1<h){
+            const i=(y+1)*w+x;
+            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x;qy[tail]=y+1;tail++}
           }
         }
 
-        if(touchesBorder||tail<minimumArea||tail>maximumArea) continue;
+        if(touchesBorder || tail<minimumArea || tail>maximumArea) continue;
 
         const boxW=maxX-minX+1;
         const boxH=maxY-minY+1;
         const aspect=Math.max(boxW,boxH)/Math.max(1,Math.min(boxW,boxH));
         const fillRatio=tail/Math.max(1,boxW*boxH);
 
-        // Foro anello: area grande, abbastanza compatta e non eccessivamente sottile.
-        if(aspect<=3.2 && fillRatio>=0.28){
+        // Accetta solo regioni ampie, compatte e simili al foro di un anello.
+        if(aspect<=2.8 && fillRatio>=0.55){
           for(let i=0;i<tail;i++){
-            const idx=(qy[i]*w+qx[i])*4;
-            data[idx+3]=0;
+            data[(qy[i]*w+qx[i])*4+3]=0;
           }
         }
       }
@@ -4353,7 +4361,7 @@ if(live)live.addEventListener('input',()=>{
 
       let pixels=sourceCtx.getImageData(0,0,sw,sh);
       pixels=removeEdgeWhite(pixels,sw,sh);
-      pixels=removeLargeEnclosedWhiteAreas(pixels,sw,sh);
+      pixels=removeConservativeInnerWhite(pixels,sw,sh);
       const bounds=alphaBounds(pixels,sw,sh);
       if(!bounds) return;
 
@@ -4372,12 +4380,12 @@ if(live)live.addEventListener('input',()=>{
       const ctx=out.getContext('2d');
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const targetW=out.width*.82,targetH=out.height*.80;
+      const targetW=out.width*.80,targetH=out.height*.78;
       const fit=Math.min(targetW/crop.width,targetH/crop.height);
       const dw=Math.max(1,Math.round(crop.width*fit));
       const dh=Math.max(1,Math.round(crop.height*fit));
       const dx=Math.round((out.width-dw)/2);
-      const dy=Math.round((out.height-dh)/2-6);
+      const dy=Math.round((out.height-dh)/2-10);
 
       const contact=ctx.createRadialGradient(
         out.width*.5,Math.min(out.height*.84,dy+dh*.86),0,
