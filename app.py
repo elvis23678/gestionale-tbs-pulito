@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.2.1 DEV · NOTIFICHE SEMPLICI STABILI"
+APP_VERSION = "v47.2.2 DEV · FLUSSO SCONTI DB FIX"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -605,7 +605,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4721',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4722',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6468,7 +6468,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.2.1';
+const SW_VERSION='v47.2.2';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6640,7 +6640,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.2.1"
+            "X-TBS-Service-Worker-Version":"v47.2.2"
         }
     )
 
@@ -7331,19 +7331,17 @@ def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=
         recipient['id'],recipient['username'],kind,title,message,
         reference_type,reference_id,event_key
     ))
-    notification_id=cursor.lastrowid
-    if not notification_id and event_key:
-        row=db.execute(
-            "SELECT id FROM notifications WHERE recipient_user_id=? AND event_key=?",
-            (recipient['id'],event_key)
-        ).fetchone()
-        notification_id=row['id'] if row else None
-    if notification_id:
+    created = cursor.rowcount == 1
+    notification_id = cursor.lastrowid if created else None
+
+    # Non reinviare eventi già presenti: era la causa delle notifiche
+    # che continuavano ad arrivare dopo Approva/Rifiuta.
+    if created and notification_id:
         try:
             _send_push(db,recipient['id'],notification_id,title,message,kind)
         except Exception as exc:
             print(f"Push ignorata senza bloccare TBS One: {exc}")
-    return True
+    return created
 
 
 def _notify_roles(db,roles,kind,title,message,reference_type=None,reference_id=None,event_key=None):
@@ -8725,9 +8723,27 @@ def discount_request_wait(token):
     if req["status"]=="Controproposta":
         return page("Controproposta sconto",'''<div class="card" style="max-width:620px;margin:28px auto;text-align:center"><h1>Nuova proposta di sconto</h1><p><b>{{req.product_code}}</b></p><p>Listino € {{'%.2f'|format(req.original_price)}}<br>Tu avevi richiesto € {{'%.2f'|format(req.requested_price)}}<br><strong style="font-size:32px">Proposta autorizzata: € {{'%.2f'|format(req.counter_price)}}</strong></p><p>Proposta di {{req.approver_username or 'Admin/Gestore'}}{% if req.decision_note %}<br>{{req.decision_note}}{% endif %}</p><div class="inline" style="justify-content:center"><form method="post" action="{{url_for('accept_counter_offer',token=req.request_token)}}"><button class="success">Accetta e torna al carrello</button></form><form method="post" action="{{url_for('decline_counter_offer',token=req.request_token)}}"><button class="danger">Rifiuta proposta</button></form></div></div>''',req=req)
     if req["status"] in ("Rifiutata","Superata","Annullata"):
-        session.pop("pending_discount_token",None);session.modified=True
-        flash("Richiesta sconto non approvata." if req["status"]=="Rifiutata" else "Richiesta non più valida.")
-        return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
+        if req["status"]=="Rifiutata":
+            with connect() as db:
+                product=db.execute(
+                    "SELECT id,quantity FROM products WHERE id=?",
+                    (req["product_id"],)
+                ).fetchone()
+            if product and int(product["quantity"] or 0)>0:
+                raw=dict(session.get("cart",{}))
+                raw[str(req["product_id"])]=max(1,int(raw.get(str(req["product_id"]),1)))
+                session["cart"]=raw
+                cp=dict(session.get("cart_prices",{}))
+                cp.pop(str(req["product_id"]),None)
+                session["cart_prices"]=cp
+        session.pop("pending_discount_token",None)
+        session.modified=True
+        flash(
+            f"Sconto rifiutato. {req['product_code']} ripristinato a € {float(req['original_price']):.2f}."
+            if req["status"]=="Rifiutata"
+            else "Richiesta non più valida."
+        )
+        return redirect(url_for("cart"))
     return page("Attesa autorizzazione",'''<style>.wait-box{max-width:620px;margin:28px auto;text-align:center}.pulse{width:74px;height:74px;border-radius:50%;margin:20px auto;background:#d7b36a;animation:pulse 1.5s infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 #d7b36a99}70%{box-shadow:0 0 0 28px #d7b36a00}100%{box-shadow:0 0 0 0 #d7b36a00}}</style><div class="wait-box card"><div class="pulse"></div><h1>Richiesta inviata</h1><p>Attendo la risposta di Admin o Gestore.</p><p><b>{{req.product_code}}</b><br>Listino € {{'%.2f'|format(req.original_price)}} → richiesto <b>€ {{'%.2f'|format(req.requested_price)}}</b><br>{{req.reason}}</p><p class="muted">La pagina si aggiorna automaticamente.</p><form method="post" action="{{url_for('cancel_discount_request',token=req.request_token)}}"><button class="secondary">Annulla richiesta</button></form></div><script>
 setTimeout(()=>{
   const separator=location.search?'&':'?';
@@ -8790,58 +8806,130 @@ def discount_approvals():
 @role_required("admin","manager")
 def decide_discount_request(request_id):
     pin=(request.form.get("pin") or "").strip()
-    decision=request.form.get("decision")
+    decision=(request.form.get("decision") or "").strip().lower()
+    note=(request.form.get("decision_note") or "").strip()
+
     with connect() as db:
-        me=db.execute("SELECT * FROM users WHERE id=? AND active=1",(session.get("user_id"),)).fetchone()
-        req=db.execute("SELECT * FROM discount_requests WHERE id=?",(request_id,)).fetchone()
+        db.execute("BEGIN IMMEDIATE")
+        me=db.execute(
+            "SELECT * FROM users WHERE id=? AND active=1",
+            (session.get("user_id"),)
+        ).fetchone()
+        req=db.execute(
+            "SELECT * FROM discount_requests WHERE id=?",
+            (request_id,)
+        ).fetchone()
+
         if not me or not me["approval_pin_hash"] or not check_password_hash(me["approval_pin_hash"],pin):
+            db.rollback()
             flash("PIN rapido errato.")
             return redirect(url_for("discount_approvals"))
-        if not req or req["status"]!="In attesa":
-            flash("La richiesta è già stata gestita.")
+
+        if not req:
+            db.rollback()
+            flash("Richiesta non trovata.")
             return redirect(url_for("discount_approvals"))
+
+        if req["status"]!="In attesa":
+            db.rollback()
+            flash(f"Richiesta già gestita: {req['status']}.")
+            return redirect(url_for("discount_approvals"))
+
+        counter_price=None
         if decision=="approve":
-            status="Approvata"; counter_price=None
+            status="Approvata"
         elif decision=="reject":
-            status="Rifiutata"; counter_price=None
+            status="Rifiutata"
         elif decision=="counter":
-            try: counter_price=round(float(request.form.get("counter_price")),2)
+            try:
+                counter_price=round(float(request.form.get("counter_price")),2)
             except (TypeError,ValueError):
+                db.rollback()
                 flash("Inserisci un prezzo valido per la controproposta.")
                 return redirect(url_for("discount_approvals"))
             if counter_price < float(req["requested_price"]) or counter_price > float(req["original_price"]):
-                flash("La controproposta deve essere compresa tra il prezzo richiesto e il prezzo di listino.")
+                db.rollback()
+                flash("La controproposta deve essere compresa tra prezzo richiesto e listino.")
                 return redirect(url_for("discount_approvals"))
             status="Controproposta"
         else:
+            db.rollback()
             flash("Decisione non valida.")
             return redirect(url_for("discount_approvals"))
-        note=(request.form.get("decision_note") or "").strip()
-        db.execute("UPDATE discount_requests SET status=?,counter_price=?,decision_note=?,approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP WHERE id=? AND status='In attesa'",(status,counter_price,note,me["id"],me["username"],request_id))
-        staff=db.execute("SELECT id,username FROM users WHERE active=1 AND role IN ('admin','manager')").fetchall()
-        for staff_user in staff:
-            event_key=f"discount:{request_id}:request:user:{staff_user['id']}"
-            _notify_user(db,staff_user['id'],'discount_request','Nuova richiesta sconto',
-                         f"{req['requester_username']} · {req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f}",
-                         'discount',request_id,event_key,staff_user['username'])
-            db.execute("""UPDATE notifications SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP),
-                          archived_at=COALESCE(archived_at,CURRENT_TIMESTAMP),
-                          archived_by_user_id=?,archived_by_username=?
-                          WHERE recipient_user_id=? AND event_key=?""",
-                       (me['id'],me['username'],staff_user['id'],event_key))
-        recipient=_current_user_for_identity(db,req['requester_user_id'],req['requester_username'])
+
+        cur=db.execute(
+            """UPDATE discount_requests
+               SET status=?,counter_price=?,decision_note=?,
+                   approver_user_id=?,approver_username=?,
+                   decided_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status='In attesa'""",
+            (status,counter_price,note,me["id"],me["username"],request_id)
+        )
+
+        if cur.rowcount != 1:
+            db.rollback()
+            flash("La richiesta è stata gestita contemporaneamente.")
+            return redirect(url_for("discount_approvals"))
+
+        # Chiude definitivamente tutte le notifiche operative della richiesta.
+        db.execute(
+            """UPDATE notifications
+               SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP),
+                   archived_at=COALESCE(archived_at,CURRENT_TIMESTAMP),
+                   archived_by_user_id=?,
+                   archived_by_username=?
+               WHERE reference_type='discount'
+                 AND reference_id=?
+                 AND notification_type='discount_request'""",
+            (me["id"],me["username"],request_id)
+        )
+
+        recipient=_current_user_for_identity(
+            db,req["requester_user_id"],req["requester_username"]
+        )
         if recipient:
-            if status=='Approvata':
-                _notify_user(db,recipient['id'],'discount_approved','Sconto autorizzato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:approved",recipient['username'])
-            elif status=='Rifiutata':
-                _notify_user(db,recipient['id'],'discount_rejected','Sconto rifiutato',f"{req['product_code']} · richiesta € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:rejected",recipient['username'])
+            if status=="Approvata":
+                _notify_user(
+                    db,recipient["id"],"discount_approved","Sconto autorizzato",
+                    f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",
+                    "discount",request_id,f"discount:{request_id}:approved",
+                    recipient["username"]
+                )
+            elif status=="Rifiutata":
+                _notify_user(
+                    db,recipient["id"],"discount_rejected","Sconto rifiutato",
+                    f"{req['product_code']} · resta € {float(req['original_price']):.2f} · {me['username']}",
+                    "discount",request_id,f"discount:{request_id}:rejected",
+                    recipient["username"]
+                )
             else:
-                _notify_user(db,recipient['id'],'discount_counter','Nuova proposta sconto',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(counter_price):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:counter",recipient['username'])
-        action_label="Sconto remoto approvato" if status=="Approvata" else ("Sconto remoto rifiutato" if status=="Rifiutata" else "Controproposta sconto inviata")
-        log_action(db,action_label,details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; richiesto € {req['requested_price']:.2f}" + (f"; proposto € {counter_price:.2f}" if counter_price is not None else ""))
+                _notify_user(
+                    db,recipient["id"],"discount_counter","Nuova proposta sconto",
+                    f"{req['product_code']} · proposta € {float(counter_price):.2f} · {me['username']}",
+                    "discount",request_id,f"discount:{request_id}:counter",
+                    recipient["username"]
+                )
+
+        action_label={
+            "Approvata":"Sconto remoto approvato",
+            "Rifiutata":"Sconto remoto rifiutato",
+            "Controproposta":"Controproposta sconto inviata"
+        }[status]
+        log_action(
+            db,action_label,
+            details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; stato {status}"
+        )
         db.commit()
-    flash("Sconto approvato." if status=="Approvata" else ("Sconto rifiutato." if status=="Rifiutata" else "Controproposta inviata al Venditore."))
+
+    flash(
+        "Sconto approvato."
+        if status=="Approvata"
+        else "Sconto rifiutato."
+        if status=="Rifiutata"
+        else "Controproposta inviata."
+    )
     return redirect(url_for("discount_approvals"))
+
 
 @app.route("/pos/authorize-price",methods=['GET','POST'])
 @login_required
@@ -8940,6 +9028,22 @@ def cart():
                 status=req["status"]
                 if status == "In attesa":
                     has_pending_discount=True
+
+                if status == "Rifiutata":
+                    key=str(req["product_id"])
+                    product=db.execute(
+                        "SELECT id,quantity FROM products WHERE id=?",
+                        (req["product_id"],)
+                    ).fetchone()
+                    if product and int(product["quantity"] or 0)>0:
+                        if key not in raw:
+                            raw[key]=1
+                            session["cart"]=raw
+                        cp=dict(session.get("cart_prices",{}))
+                        cp.pop(key,None)
+                        session["cart_prices"]=cp
+                        session.pop("pending_discount_token",None)
+                        session.modified=True
 
                 if status == "Approvata":
                     key=str(req["product_id"])
