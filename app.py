@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.5.4 DEV · SMART CROP LUXURY IMAGES"
+APP_VERSION = "v45.5.5 DEV · RING HOLE CUTOUT"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4033,6 +4033,21 @@ body{background:#020202}
   object-fit:cover!important;
 }
 
+
+/* v45.5.5 · Solo resa immagini: foro anelli trasparente */
+.product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img,
+.image-modal img{
+  filter:
+    contrast(1.08)
+    saturate(1.04)
+    drop-shadow(0 12px 18px rgba(0,0,0,.56))
+    drop-shadow(0 0 8px rgba(206,154,54,.10))!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4219,6 +4234,81 @@ if(live)live.addEventListener('input',()=>{
     return imageData;
   }
 
+
+  function removeLargeEnclosedWhiteAreas(imageData,w,h){
+    /*
+      Rimuove solo grandi aree quasi bianche NON collegate ai bordi.
+      Serve per rendere trasparente l'interno di anelli/clicker.
+      Le pietre e i riflessi piccoli restano intatti.
+    */
+    const data=imageData.data;
+    const seen=new Uint8Array(w*h);
+    const qx=new Int32Array(w*h);
+    const qy=new Int32Array(w*h);
+
+    function isCandidate(index){
+      const p=index*4;
+      return isNearWhite(data[p],data[p+1],data[p+2],data[p+3]);
+    }
+
+    const minimumArea=Math.max(120,Math.round(w*h*0.010));
+    const maximumArea=Math.round(w*h*0.72);
+
+    for(let sy=1;sy<h-1;sy++){
+      for(let sx=1;sx<w-1;sx++){
+        const start=sy*w+sx;
+        if(seen[start]||!isCandidate(start)) continue;
+
+        let head=0,tail=0;
+        let touchesBorder=false;
+        let minX=sx,maxX=sx,minY=sy,maxY=sy;
+
+        seen[start]=1;
+        qx[tail]=sx;
+        qy[tail]=sy;
+        tail++;
+
+        while(head<tail){
+          const x=qx[head],y=qy[head];
+          head++;
+
+          if(x===0||y===0||x===w-1||y===h-1) touchesBorder=true;
+          if(x<minX) minX=x;
+          if(x>maxX) maxX=x;
+          if(y<minY) minY=y;
+          if(y>maxY) maxY=y;
+
+          const neighbors=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+          for(const [nx,ny] of neighbors){
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const ni=ny*w+nx;
+            if(seen[ni]||!isCandidate(ni)) continue;
+            seen[ni]=1;
+            qx[tail]=nx;
+            qy[tail]=ny;
+            tail++;
+          }
+        }
+
+        if(touchesBorder||tail<minimumArea||tail>maximumArea) continue;
+
+        const boxW=maxX-minX+1;
+        const boxH=maxY-minY+1;
+        const aspect=Math.max(boxW,boxH)/Math.max(1,Math.min(boxW,boxH));
+        const fillRatio=tail/Math.max(1,boxW*boxH);
+
+        // Foro anello: area grande, abbastanza compatta e non eccessivamente sottile.
+        if(aspect<=3.2 && fillRatio>=0.28){
+          for(let i=0;i<tail;i++){
+            const idx=(qy[i]*w+qx[i])*4;
+            data[idx+3]=0;
+          }
+        }
+      }
+    }
+    return imageData;
+  }
+
   function alphaBounds(imageData,w,h){
     const data=imageData.data;
     let minX=w,minY=h,maxX=-1,maxY=-1;
@@ -4263,6 +4353,7 @@ if(live)live.addEventListener('input',()=>{
 
       let pixels=sourceCtx.getImageData(0,0,sw,sh);
       pixels=removeEdgeWhite(pixels,sw,sh);
+      pixels=removeLargeEnclosedWhiteAreas(pixels,sw,sh);
       const bounds=alphaBounds(pixels,sw,sh);
       if(!bounds) return;
 
@@ -4281,12 +4372,12 @@ if(live)live.addEventListener('input',()=>{
       const ctx=out.getContext('2d');
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const targetW=out.width*.78,targetH=out.height*.76;
+      const targetW=out.width*.82,targetH=out.height*.80;
       const fit=Math.min(targetW/crop.width,targetH/crop.height);
       const dw=Math.max(1,Math.round(crop.width*fit));
       const dh=Math.max(1,Math.round(crop.height*fit));
       const dx=Math.round((out.width-dw)/2);
-      const dy=Math.round((out.height-dh)/2-10);
+      const dy=Math.round((out.height-dh)/2-6);
 
       const contact=ctx.createRadialGradient(
         out.width*.5,Math.min(out.height*.84,dy+dh*.86),0,
