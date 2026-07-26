@@ -108,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.0.1 DEV · ATELIER STABLE"
+APP_VERSION = "v45.1.0 DEV · VISUAL LUXURY"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2674,6 +2674,210 @@ body{
   .atelier-hero-copy h1{font-size:44px}
   .atelier-products{gap:8px;padding-inline:8px}
   .atelier-banner h2{font-size:34px}
+}
+
+
+/* =========================================================
+   v45.1.0 · VISUAL LUXURY
+   Rifinitura esclusivamente fotografica:
+   - immagini Shop by Area
+   - fondali delle foto prodotto
+   Nessuna modifica a backend, database, ordini o PayPal.
+   ========================================================= */
+
+/* --- SHOP BY AREA: cerchi più ricchi, uniformi e fotografici --- */
+.atelier-areas{
+  gap:16px;
+}
+.atelier-areas .area{
+  position:relative;
+}
+.atelier-areas .area-photo{
+  position:relative;
+  overflow:hidden;
+  isolation:isolate;
+  background:
+    radial-gradient(circle at 50% 38%,rgba(255,247,224,.98) 0%,rgba(224,211,181,.94) 45%,rgba(52,42,28,.96) 100%);
+  border:1px solid rgba(224,181,84,.72);
+  box-shadow:
+    0 0 0 5px rgba(9,7,4,.92),
+    0 0 0 6px rgba(217,174,75,.22),
+    0 18px 34px rgba(0,0,0,.55),
+    inset 0 0 30px rgba(181,129,37,.18);
+}
+.atelier-areas .area-photo:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:2;
+  pointer-events:none;
+  border-radius:inherit;
+  background:
+    radial-gradient(circle at 32% 22%,rgba(255,255,255,.32),transparent 24%),
+    linear-gradient(145deg,transparent 54%,rgba(0,0,0,.25) 100%);
+}
+.atelier-areas .area-photo:after{
+  content:"";
+  position:absolute;
+  inset:7%;
+  z-index:3;
+  pointer-events:none;
+  border-radius:50%;
+  border:1px solid rgba(255,227,155,.20);
+}
+.atelier-areas .area-photo img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center;
+  transform:scale(1.08);
+  filter:saturate(.96) contrast(1.09) brightness(.97);
+  transition:transform .45s ease,filter .45s ease;
+}
+.atelier-areas .area:nth-child(1) .area-photo img,
+.atelier-areas .area:nth-child(3) .area-photo img,
+.atelier-areas .area:nth-child(5) .area-photo img{
+  object-fit:contain;
+  padding:8%;
+  transform:scale(1.16);
+  mix-blend-mode:multiply;
+  filter:saturate(1.08) contrast(1.16) brightness(.98);
+}
+.atelier-areas .area:active .area-photo img{
+  transform:scale(1.15);
+  filter:saturate(1.04) contrast(1.12) brightness(1);
+}
+.atelier-areas .area:nth-child(1):active .area-photo img,
+.atelier-areas .area:nth-child(3):active .area-photo img,
+.atelier-areas .area:nth-child(5):active .area-photo img{
+  transform:scale(1.22);
+}
+.atelier-areas .area b{
+  margin-top:14px;
+  color:#e2b85b;
+  text-shadow:0 2px 12px rgba(0,0,0,.9);
+}
+
+/* --- FOTO PRODOTTO: fondale gioielleria, bianco smorzato e profondità --- */
+.atelier-products .product-image{
+  position:relative;
+  overflow:hidden;
+  isolation:isolate;
+  background:
+    radial-gradient(circle at 50% 38%,#fffdf7 0%,#f3ecde 46%,#c9b991 78%,#6b5730 100%);
+  box-shadow:
+    inset 0 -30px 50px rgba(60,43,16,.16),
+    inset 0 1px 0 rgba(255,255,255,.75);
+}
+.atelier-products .product-image:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:2;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 42%,transparent 46%,rgba(67,47,13,.22) 100%),
+    linear-gradient(135deg,rgba(255,255,255,.24),transparent 35%,rgba(176,124,28,.07));
+}
+.atelier-products .product-image img{
+  position:relative;
+  z-index:1;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  padding:9%;
+  transform:scale(1.03);
+  mix-blend-mode:multiply;
+  filter:
+    saturate(1.04)
+    contrast(1.17)
+    brightness(1.03)
+    drop-shadow(0 16px 16px rgba(53,38,12,.28));
+  transition:transform .35s ease,filter .35s ease;
+}
+.atelier-products .shop-product:active .product-image img{
+  transform:scale(1.085);
+  filter:
+    saturate(1.08)
+    contrast(1.19)
+    brightness(1.04)
+    drop-shadow(0 20px 20px rgba(53,38,12,.34));
+}
+.atelier-products .product-image:before{
+  content:"";
+  position:absolute;
+  inset:8px;
+  z-index:3;
+  border:1px solid rgba(176,128,36,.28);
+  pointer-events:none;
+}
+.atelier-products .new-label{
+  z-index:5;
+  background:linear-gradient(180deg,#11100e,#050504);
+  color:#ecc76e;
+  border:1px solid rgba(217,174,75,.40);
+}
+.atelier-products .favorite-btn{
+  z-index:5;
+  background:
+    radial-gradient(circle at 35% 25%,rgba(255,255,255,.09),transparent 30%),
+    linear-gradient(180deg,#2b2924,#11110f)!important;
+  border:1px solid rgba(217,174,75,.55)!important;
+  box-shadow:0 10px 24px rgba(0,0,0,.34);
+}
+
+/* Card leggermente più importanti senza toccare la struttura */
+.atelier-products .shop-product{
+  border-color:rgba(217,174,75,.38);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,.38),
+    inset 0 0 0 1px rgba(255,255,255,.012);
+}
+.atelier-products .shop-body{
+  background:
+    linear-gradient(180deg,rgba(214,168,66,.035),transparent 50%),
+    #070706;
+}
+.atelier-products .shop-price{
+  color:#f0cf78;
+  text-shadow:0 2px 14px rgba(197,143,31,.14);
+}
+.atelier-products .shop-actions button,
+.atelier-products .shop-actions a{
+  background:
+    linear-gradient(180deg,#e2b44f 0%,#c28a25 55%,#a36d15 100%)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,244,200,.42),
+    0 10px 22px rgba(164,105,18,.20);
+}
+
+/* Smartphone: immagini più grandi e meno spazio sprecato */
+@media(max-width:700px){
+  .atelier-areas{
+    gap:15px;
+  }
+  .atelier-areas .area{
+    flex-basis:98px;
+  }
+  .atelier-areas .area-photo{
+    box-shadow:
+      0 0 0 4px rgba(9,7,4,.92),
+      0 0 0 5px rgba(217,174,75,.25),
+      0 13px 26px rgba(0,0,0,.48),
+      inset 0 0 22px rgba(181,129,37,.15);
+  }
+  .atelier-products{
+    gap:10px;
+  }
+  .atelier-products .product-image{
+    aspect-ratio:1/1.04;
+  }
+  .atelier-products .product-image img{
+    padding:7%;
+  }
+  .atelier-products .product-image:before{
+    inset:6px;
+  }
 }
 
 """
