@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.3.0 DEV · AUDIT GENERALE CONSOLIDATO"
+APP_VERSION = "v47.3.1 DEV · CONTRASTI E NOTIFICHE SEPARATE"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -490,6 +490,83 @@ table{max-width:100%}
  .header-brand{max-width:92px!important}
 }
 
+
+/* === v47.3.1 CONTRASTI DEFINITIVI ====================================== */
+.card, .kpi, .tbs-panel, .tbs-kpi, .tbs-action,
+.card h1, .card h2, .card h3, .card h4,
+.card b, .card strong, .card label, .card dt, .card dd {
+  color:#f7f1e5!important;
+}
+.card p, .card small, .card .muted {
+  color:#cfc7b8!important;
+}
+.card form.inline,
+.card form.inline label,
+.card .checks,
+.card .checks label {
+  background:transparent!important;
+  color:#f7f1e5!important;
+}
+.card input[type="checkbox"]{
+  accent-color:#d9ad43;
+  background:#fff!important;
+  border:2px solid #5f594d!important;
+}
+.table-wrap{
+  border:1px solid rgba(215,173,75,.34)!important;
+  border-radius:16px!important;
+  overflow:auto!important;
+  background:#0d0d0b!important;
+}
+.table-wrap table,
+.table-wrap thead,
+.table-wrap tbody,
+.table-wrap tr,
+.table-wrap th,
+.table-wrap td{
+  background:#0d0d0b!important;
+  color:#f7f1e5!important;
+}
+.table-wrap th{
+  color:#f3cf71!important;
+  border-bottom:1px solid rgba(215,173,75,.42)!important;
+}
+.table-wrap td{
+  border-bottom:1px solid rgba(215,173,75,.18)!important;
+}
+.table-wrap a{
+  color:#f3cf71!important;
+  text-decoration:underline;
+}
+.table-wrap small,
+.table-wrap .muted{
+  color:#cfc7b8!important;
+}
+.notification-scope-note{
+  border-left:5px solid #d9ad43!important;
+}
+.notification-scope-note p{
+  margin-bottom:0;
+}
+input[type=file]{
+  color:#f7f1e5!important;
+  background:#0d0d0b!important;
+}
+input[type=file]::file-selector-button{
+  background:#f7f7f7!important;
+  color:#111!important;
+}
+@media(max-width:760px){
+  .table-wrap th,.table-wrap td{
+    font-size:15px!important;
+    padding:14px 12px!important;
+  }
+  .card form.inline label{
+    font-size:18px!important;
+    font-weight:800!important;
+  }
+}
+
 '''
 
 
@@ -605,7 +682,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4730',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4731',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6468,7 +6545,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.3.0';
+const SW_VERSION='v47.3.1';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6640,7 +6717,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.3.0"
+            "X-TBS-Service-Worker-Version":"v47.3.1"
         }
     )
 
@@ -7802,9 +7879,9 @@ def more_page():
 <div class="settings-title">Notifiche</div>
 <div class="settings-grid">
   <a class="settings-card" href="{{url_for('notification_center')}}"><span class="ico">🔔</span><span><b>Centro notifiche</b><small>Avvisi, richieste ed esiti ricevuti</small></span></a>
-  <a class="settings-card" href="{{url_for('v36_notification_preferences')}}"><span class="ico">☑</span><span><b>Gestione notifiche</b><small>Scegli quali avvisi ricevere</small></span></a>
+  <a class="settings-card" href="{{url_for('v36_notification_preferences')}}"><span class="ico">☑</span><span><b>Gestione notifiche</b><small>Tipi di avviso e pop-up</small></span></a>
   {% if role in ('admin','manager') %}
-  <a class="settings-card" href="{{url_for('push_diagnostics')}}"><span class="ico">📲</span><span><b>Dispositivo e Push</b><small>Attivazione, test e stato notifiche</small></span></a>
+  <a class="settings-card" href="{{url_for('push_diagnostics')}}"><span class="ico">📲</span><span><b>Dispositivo e Push</b><small>Collegamento del telefono, test e diagnostica</small></span></a>
   {% endif %}
 </div>
 
@@ -10878,7 +10955,7 @@ def v36_notification_preferences():
         rows={r['event_type']:r for r in db.execute('SELECT * FROM notification_preferences WHERE user_id=?',(uid,)).fetchall()}
     grouped={}
     for key,(cat,label) in V36_NOTIFICATION_DEFS.items(): grouped.setdefault(cat,[]).append((key,label))
-    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div>{% if session.get('role') in ('admin','manager') %}<div class="card"><h2>🔔 Notifiche su questo dispositivo</h2><div id="pushManagerState"><b>Controllo in corso…</b></div><div class="actions" style="margin-top:14px"><button type="button" onclick="tbsEnablePush()">Attiva notifiche</button><button type="button" class="secondary" onclick="tbsTestPush()">Invia prova</button><button type="button" class="danger" onclick="tbsDisablePush()">Disattiva</button><a class="secondary" href="{{url_for('push_diagnostics')}}">Apri Push Manager</a></div><p id="pushStatus" class="muted"></p></div>{% endif %}<form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
+    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Gestione notifiche</h1><p class="muted">Scegli quali tipi di avviso ricevere nel Centro notifiche e quali mostrare come pop-up.</p></div></div><div class="card notification-scope-note"><b>Questa pagina gestisce i tipi di avviso.</b><p>Per attivare, disattivare o provare le notifiche sul telefono usa “Dispositivo e Push”.</p></div><form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
     return page('Preferenze notifiche',body,grouped=grouped,rows=rows)
 
 @app.route('/v36/notifications/send',methods=['GET','POST'])
