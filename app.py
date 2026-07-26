@@ -108,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.0.0 DEV · ATELIER D’ECCELLENZA"
+APP_VERSION = "v45.0.1 DEV · ATELIER STABLE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2828,7 +2828,6 @@ def boutique():
   <div class='benefit'><i>▱</i><b>Spedizione veloce</b><small>Consegna rapida e sicura in 24/48 ore</small></div>
 </section>
 """
-"""
     return public_page("TBS Jewelry · Luxury Piercing Jewelry",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured,hero_uri=TBS_HERO_EAR,category_cards=category_cards,banner_gold=banner_gold,banner_black=banner_black)
 
 @app.get("/boutique/prodotto/<int:product_id>")
@@ -2874,7 +2873,7 @@ def boutique_product(product_id):
 
     body=r"""
 <div class='customer-product-page'>
-  <p><a class='detail-link' style='display:inline-block;text-decoration:none;padding:9px 13px' href='{{url_for("boutique")}}#collezione'>← Torna alla collezione</a></p>
+  <p><a class='detail-link' style='display:inline-block;text-decoration:none;padding:9px 13px' href='{{url_for("boutique")}}#collezione'>&larr; Torna alla collezione</a></p>
 
   <div class='customer-product-shell'>
     <section class='customer-gallery'>
@@ -6211,7 +6210,7 @@ html,body{max-width:100%;overflow-x:hidden}main{width:100%;max-width:100%;paddin
 <section class="tbs-panel tbs-welcome"><div class="tbs-welcome-copy"><span class="tbs-eyebrow">TBS ONE · Centro operativo</span><h1>Bentornato, <em>{{ 'Elvis' if session.get('role')=='admin' else session.get('user') }}</em></h1><p>Vendite, ordini, clienti e scorte in un’unica schermata.</p></div><div class="tbs-meta"><span class="tbs-chip">{{now_label}}</span><span class="tbs-chip">{{role_label}}</span></div></section>
 <section class="tbs-actions"><a class="tbs-action" href="{{url_for('pos')}}"><span class="tbs-action-icon">€</span><span><b>Cassa</b><br><small>Nuova vendita</small></span></a><a class="tbs-action" href="{{url_for('scan_product')}}"><span class="tbs-action-icon">⌗</span><span><b>Scanner</b><br><small>Leggi QR prodotto</small></span></a><a class="tbs-action" href="{{url_for('inventory_pro')}}"><span class="tbs-action-icon">◇</span><span><b>Magazzino</b><br><small>Scorte e riordini</small></span></a><a class="tbs-action" href="{{url_for('customers_crm')}}"><span class="tbs-action-icon">◎</span><span><b>Clienti</b><br><small>Ordini e contatti</small></span></a></section>
 <section class="tbs-kpis"><article class="tbs-kpi"><div class="tbs-kpi-label">Incasso oggi</div><div class="tbs-kpi-value">€ {{'%.2f'|format(today.revenue)}}</div><div class="tbs-kpi-meta">{{today.receipts}} vendite · {{today.pieces}} pezzi</div></article><article class="tbs-kpi"><div class="tbs-kpi-label">Disponibili</div><div class="tbs-kpi-value">{{stock}}</div><div class="tbs-kpi-meta">{{refs}} referenze attive</div></article><article class="tbs-kpi"><div class="tbs-kpi-label">Scorte basse</div><div class="tbs-kpi-value">{{low}}</div><div class="tbs-kpi-meta">Da controllare</div></article><article class="tbs-kpi"><div class="tbs-kpi-label">Clienti in attesa</div><div class="tbs-kpi-value">{{waiting}}</div><div class="tbs-kpi-meta">Ordini aperti</div></article></section>
-<section class="tbs-content"><article class="tbs-panel"><h2>Vendite recenti</h2>{% for s in recent %}<div class="tbs-row"><div><b>{{s.sale_number or 'Vendita'}}</b><br><small>{{s.created_at|rome_time}} · {{s.payment_method or 'Pagamento'}}</small></div><div class="tbs-amount">€ {{'%.2f'|format(s.total)}}<br><small>{{s.pieces}} pz</small></div></div>{% else %}<div class="tbs-empty">Nessuna vendita registrata.</div>{% endfor %}<div class="tbs-footer-actions"><a href="{{url_for('sales_log')}}">Registro vendite</a><a href="{{url_for('cart')}}">Apri carrello</a><a href="{{url_for('price_check')}}">Controlla prezzo</a></div></article><aside class="tbs-panel"><h2>Priorità operative</h2><div class="tbs-priority">{% if low %}<a href="{{url_for('inventory_pro')}}"><span><b>Scorte minime</b><br><small>{{low}} articoli richiedono attenzione</small></span><span>→</span></a>{% endif %}{% if waiting %}<a href="{{url_for('catalog_requests')}}"><span><b>Clienti in attesa</b><br><small>{{waiting}} ordini ancora aperti</small></span><span>→</span></a>{% endif %}{% if pending_reorders %}<a href="{{url_for('reorders')}}"><span><b>Riordini fornitori</b><br><small>{{pending_reorders}} pratiche aperte</small></span><span>→</span></a>{% endif %}{% for p in low_rows[:3] %}<a href="{{url_for('products')}}"><span><b>{{p.brand_code}}</b><br><small>{{p.category or 'Articolo'}} · giacenza {{p.quantity}}</small></span><span class="tbs-stock">{{p.quantity}}</span></a>{% endfor %}{% if not low and not waiting and not pending_reorders %}<div class="tbs-empty">Tutto sotto controllo.</div>{% endif %}</div></aside></section>
+<section class="tbs-content"><article class="tbs-panel"><h2>Vendite recenti</h2>{% for s in recent %}<div class="tbs-row"><div><b>{{s.sale_number or 'Vendita'}}</b><br><small>{{s.created_at|rome_time}} · {{s.payment_method or 'Pagamento'}}</small></div><div class="tbs-amount">€ {{'%.2f'|format(s.total)}}<br><small>{{s.pieces}} pz</small></div></div>{% else %}<div class="tbs-empty">Nessuna vendita registrata.</div>{% endfor %}<div class="tbs-footer-actions"><a href="{{url_for('sales_log')}}">Registro vendite</a><a href="{{url_for('cart')}}">Apri carrello</a><a href="{{url_for('price_check')}}">Controlla prezzo</a></div></article><aside class="tbs-panel"><h2>Priorità operative</h2><div class="tbs-priority">{% if low %}<a href="{{url_for('inventory_pro')}}"><span><b>Scorte minime</b><br><small>{{low}} articoli richiedono attenzione</small></span><span>&rarr;</span></a>{% endif %}{% if waiting %}<a href="{{url_for('catalog_requests')}}"><span><b>Clienti in attesa</b><br><small>{{waiting}} ordini ancora aperti</small></span><span>&rarr;</span></a>{% endif %}{% if pending_reorders %}<a href="{{url_for('reorders')}}"><span><b>Riordini fornitori</b><br><small>{{pending_reorders}} pratiche aperte</small></span><span>&rarr;</span></a>{% endif %}{% for p in low_rows[:3] %}<a href="{{url_for('products')}}"><span><b>{{p.brand_code}}</b><br><small>{{p.category or 'Articolo'}} · giacenza {{p.quantity}}</small></span><span class="tbs-stock">{{p.quantity}}</span></a>{% endfor %}{% if not low and not waiting and not pending_reorders %}<div class="tbs-empty">Tutto sotto controllo.</div>{% endif %}</div></aside></section>
 </div>'''
     return page('TBS ONE · Dashboard',body,today=today,refs=refs,stock=stock,low=low,waiting=waiting,pending_reorders=pending_reorders,recent=recent,low_rows=low_rows,now_label=now_rome().strftime('%d/%m/%Y · %H:%M'),role_label=ROLE_LABELS.get(session.get('role'),session.get('role')),app_version=APP_VERSION)
 
