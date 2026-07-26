@@ -19,6 +19,13 @@ import urllib.error
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
+
+try:
+    from pywebpush import webpush
+    WEBPUSH_AVAILABLE = True
+except Exception:
+    webpush = None
+    WEBPUSH_AVAILABLE = False
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -74,6 +81,16 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 LOCK_TIMEOUT_SECONDS = max(60, int(os.environ.get("LOCK_TIMEOUT_SECONDS", "300")))
 
+PUSH_VAPID_PUBLIC_KEY = os.environ.get("PUSH_VAPID_PUBLIC_KEY", "").strip()
+PUSH_VAPID_PRIVATE_KEY = os.environ.get("PUSH_VAPID_PRIVATE_KEY", "").strip()
+PUSH_VAPID_SUBJECT = os.environ.get(
+    "PUSH_VAPID_SUBJECT",
+    "mailto:info@tattoobeautysaloon.it"
+).strip()
+PUSH_SERVER_READY = bool(
+    WEBPUSH_AVAILABLE and PUSH_VAPID_PUBLIC_KEY and PUSH_VAPID_PRIVATE_KEY
+)
+
 # PayPal Checkout
 # Configurare su Render:
 # PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENV=sandbox oppure live
@@ -109,7 +126,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.9.0 DEV · LUXURY PHOTO CACHE"
+APP_VERSION = "v46.0.0 DEV · PUSH FOUNDATION"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -534,7 +551,60 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
  .mobile-dock{left:8px!important;right:8px!important}
 }
 
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/more' %}active{% endif %}" href="{{url_for('more_page')}}" aria-label="Apri altre funzioni"><span>≡</span>Altro</a></nav>{% endif %}</body></html>'''
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user_id') and session.get('role') in ('admin','manager') %}
+<script>
+function tbsVapidKey(s){
+  const p='='.repeat((4-s.length%4)%4);
+  const b=(s+p).replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from([...atob(b)].map(c=>c.charCodeAt(0)));
+}
+async function tbsEnablePush(){
+  const status=document.getElementById('pushStatus');
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window))
+      throw new Error('Browser non compatibile.');
+    const cfg=await fetch('/api/push/config',{cache:'no-store'}).then(r=>r.json());
+    if(!cfg.configured) throw new Error('Server push non configurato.');
+    if(await Notification.requestPermission()!=='granted')
+      throw new Error('Permesso notifiche non concesso.');
+    const reg=await navigator.serviceWorker.register(cfg.serviceWorker,{scope:'/'});
+    await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      sub=await reg.pushManager.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:tbsVapidKey(cfg.publicKey)
+      });
+    }
+    const result=await fetch('/api/push/subscribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        subscription:sub.toJSON(),
+        platform:navigator.userAgentData?.platform||navigator.platform||''
+      })
+    }).then(r=>r.json());
+    if(!result.ok) throw new Error(result.error||'Registrazione fallita');
+    if(status) status.textContent='✅ Notifiche attive su questo dispositivo.';
+    return true;
+  }catch(e){
+    if(status) status.textContent='❌ '+e.message;
+    return false;
+  }
+}
+async function tbsTestPush(){
+  const status=document.getElementById('pushStatus');
+  if(!await tbsEnablePush()) return;
+  const r=await fetch('/api/push/test',{method:'POST'}).then(x=>x.json());
+  if(status) status.textContent=r.ok
+    ?'✅ Notifica di prova inviata.'
+    :'❌ '+(r.result?.reason||r.error||'Invio fallito');
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  navigator.serviceWorker?.register('/push-sw.js',{scope:'/'}).catch(()=>{});
+});
+</script>
+{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/more' %}active{% endif %}" href="{{url_for('more_page')}}" aria-label="Apri altre funzioni"><span>≡</span>Altro</a></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -6200,6 +6270,164 @@ def treasury_count():
                 diff=counted-theoretical; db.execute("INSERT INTO treasury_cash_counts(counted_amount,theoretical_amount,difference,username,notes) VALUES(?,?,?,?,?)",(counted,theoretical,diff,session.get("user"),request.form.get("notes","").strip())); log_action(db,"Conteggio cassetto",details=f"Teorico € {theoretical:.2f}; contato € {counted:.2f}; differenza € {diff:.2f}"); db.commit(); flash("Conteggio registrato."); return redirect(url_for("treasury"))
     return page("Conta cassetto",'''<h1>Conta il cassetto</h1><div class="card"><p>Saldo teorico: <b class="metric">€ {{'%.2f'|format(theoretical)}}</b></p><form method="post"><p><label>Contanti realmente presenti<input name="counted_amount" inputmode="decimal" required></label></p><p><label>Note<textarea name="notes"></textarea></label></p><button>Registra conteggio</button></form><p class="muted">Il conteggio non modifica il saldo teorico.</p></div>''',theoretical=theoretical)
 
+
+@app.get("/push-sw.js")
+def push_service_worker():
+    js=r"""
+self.addEventListener('push',event=>{
+  let d={};
+  try{d=event.data?event.data.json():{}}catch(_){}
+  event.waitUntil(self.registration.showNotification(d.title||'TBS One',{
+    body:d.body||'',
+    icon:d.icon||'/push/icon',
+    badge:d.badge||'/push/icon',
+    tag:d.tag||'tbs-one',
+    renotify:true,
+    vibrate:[180,80,180],
+    data:{url:d.url||'/notifications'}
+  }));
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  const target=new URL(
+    event.notification.data?.url||'/notifications',
+    self.location.origin
+  ).href;
+  event.waitUntil((async()=>{
+    const windows=await clients.matchAll({
+      type:'window',includeUncontrolled:true
+    });
+    for(const client of windows){
+      if('focus' in client){
+        await client.focus();
+        if('navigate' in client) await client.navigate(target);
+        return;
+      }
+    }
+    if(clients.openWindow) return clients.openWindow(target);
+  })());
+});
+"""
+    return app.response_class(
+        js,mimetype="application/javascript",
+        headers={"Service-Worker-Allowed":"/","Cache-Control":"no-store"}
+    )
+
+
+@app.get("/push/icon")
+def push_icon():
+    return app.response_class(
+        base64.b64decode(JEWELRY_BADGE_LOGO_B64),
+        mimetype="image/jpeg"
+    )
+
+
+@app.get("/api/push/config")
+@login_required
+def push_config():
+    allowed=session.get("role") in ("admin","manager")
+    return jsonify({
+        "allowed":allowed,
+        "configured":PUSH_SERVER_READY,
+        "publicKey":PUSH_VAPID_PUBLIC_KEY if allowed else "",
+        "serviceWorker":"/push-sw.js"
+    })
+
+
+@app.post("/api/push/subscribe")
+@login_required
+def push_subscribe():
+    if session.get("role") not in ("admin","manager"):
+        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+    data=request.get_json(silent=True) or {}
+    sub=data.get("subscription") or {}
+    endpoint=(sub.get("endpoint") or "").strip()
+    if not endpoint:
+        return jsonify({"ok":False,"error":"Sottoscrizione non valida"}),400
+    with connect() as db:
+        db.execute(
+            """INSERT INTO push_devices(
+               user_id,username,role,endpoint,subscription_json,
+               platform,user_agent,enabled,updated_at
+               ) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+               ON CONFLICT(endpoint) DO UPDATE SET
+               user_id=excluded.user_id,username=excluded.username,
+               role=excluded.role,subscription_json=excluded.subscription_json,
+               platform=excluded.platform,user_agent=excluded.user_agent,
+               enabled=1,updated_at=CURRENT_TIMESTAMP,last_error=NULL""",
+            (
+                session["user_id"],session.get("user"),session.get("role"),
+                endpoint,json.dumps(sub,separators=(",",":")),
+                (data.get("platform") or "")[:120],
+                request.headers.get("User-Agent","")[:500],1
+            )
+        )
+        db.commit()
+    return jsonify({"ok":True})
+
+
+@app.post("/api/push/test")
+@login_required
+def push_test():
+    if session.get("role") not in ("admin","manager"):
+        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+    with connect() as db:
+        cursor=db.execute(
+            """INSERT INTO notifications(
+               recipient_user_id,recipient_username,notification_type,
+               title,message,event_key
+               ) VALUES(?,?,?,?,?,?)""",
+            (
+                session["user_id"],session.get("user"),"manual_message",
+                "Test notifiche TBS One",
+                "Il dispositivo è collegato correttamente.",
+                f"push-test:{session['user_id']}:{datetime.utcnow().isoformat()}"
+            )
+        )
+        result=_send_push(
+            db,session["user_id"],cursor.lastrowid,
+            "Test notifiche TBS One",
+            "Il dispositivo è collegato correttamente.",
+            "manual_message"
+        )
+        db.commit()
+    return jsonify({"ok":result["sent"]>0,"result":result})
+
+
+@app.get("/push/open/<int:notification_id>")
+def push_open(notification_id):
+    if not session.get("user_id"):
+        session["after_login_url"]=request.path
+        return redirect(url_for("login"))
+    return redirect(url_for(
+        "notification_detail",notification_id=notification_id
+    ))
+
+
+@app.get("/push-diagnostics")
+@login_required
+@role_required("admin","manager")
+def push_diagnostics():
+    with connect() as db:
+        devices=[dict(x) for x in db.execute(
+            """SELECT id,username,role,platform,enabled,created_at,
+                      updated_at,last_success_at,last_error_at,last_error
+               FROM push_devices ORDER BY updated_at DESC"""
+        ).fetchall()]
+        logs=[dict(x) for x in db.execute(
+            "SELECT * FROM push_delivery_log ORDER BY id DESC LIMIT 30"
+        ).fetchall()]
+    return jsonify({
+        "version":APP_VERSION,
+        "server_ready":PUSH_SERVER_READY,
+        "module_available":WEBPUSH_AVAILABLE,
+        "public_key":bool(PUSH_VAPID_PUBLIC_KEY),
+        "private_key":bool(PUSH_VAPID_PRIVATE_KEY),
+        "devices":devices,
+        "recent_deliveries":logs
+    })
+
+
 @app.get("/health")
 def health():
     """Diagnostica essenziale del servizio e del database, senza dati sensibili."""
@@ -6229,6 +6457,10 @@ def health():
         "users":user_count,
         "active_admins_or_managers":active_admins,
         "database_error":db_error,
+        "push_server_ready":PUSH_SERVER_READY,
+        "push_module_available":WEBPUSH_AVAILABLE,
+        "push_public_key_configured":bool(PUSH_VAPID_PUBLIC_KEY),
+        "push_private_key_configured":bool(PUSH_VAPID_PRIVATE_KEY),
     }, (200 if db_ok else 500)
 
 
@@ -6266,18 +6498,92 @@ def _current_user_for_identity(db, user_id=None, username=None):
     return row
 
 
+
+def _send_push(db, user_id, notification_id, title, message, kind):
+    if not PUSH_SERVER_READY:
+        return {"sent":0, "failed":0, "reason":"server_not_configured"}
+
+    devices=db.execute(
+        "SELECT * FROM push_devices WHERE user_id=? AND enabled=1",
+        (user_id,)
+    ).fetchall()
+
+    payload=json.dumps({
+        "title":title or "TBS One",
+        "body":message or "",
+        "tag":f"tbs-{kind}-{notification_id}",
+        "url":f"/push/open/{notification_id}",
+        "icon":"/push/icon",
+        "badge":"/push/icon"
+    },ensure_ascii=False)
+
+    sent=failed=0
+    for device in devices:
+        try:
+            webpush(
+                subscription_info=json.loads(device["subscription_json"]),
+                data=payload,
+                vapid_private_key=PUSH_VAPID_PRIVATE_KEY,
+                vapid_claims={"sub":PUSH_VAPID_SUBJECT},
+                ttl=120
+            )
+            sent+=1
+            db.execute(
+                """UPDATE push_devices
+                   SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,
+                       updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (device["id"],)
+            )
+            db.execute(
+                """INSERT INTO push_delivery_log
+                   (user_id,device_id,notification_id,status,detail)
+                   VALUES(?,?,?,?,?)""",
+                (user_id,device["id"],notification_id,"sent","ok")
+            )
+        except Exception as exc:
+            failed+=1
+            status=getattr(getattr(exc,"response",None),"status_code",None)
+            detail=f"{type(exc).__name__}: {exc}"[:500]
+            db.execute(
+                """UPDATE push_devices SET
+                   enabled=CASE WHEN ? IN (404,410) THEN 0 ELSE enabled END,
+                   last_error_at=CURRENT_TIMESTAMP,last_error=?,
+                   updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (status,detail,device["id"])
+            )
+            db.execute(
+                """INSERT INTO push_delivery_log
+                   (user_id,device_id,notification_id,status,detail)
+                   VALUES(?,?,?,?,?)""",
+                (user_id,device["id"],notification_id,"failed",detail)
+            )
+    return {"sent":sent,"failed":failed,"reason":None}
+
+
 def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None,event_key=None,recipient_username=None):
     _ensure_notifications(db)
     recipient=_current_user_for_identity(db,user_id,recipient_username)
     if not recipient:
         return False
-    db.execute("""INSERT OR IGNORE INTO notifications(
+    cursor=db.execute("""INSERT OR IGNORE INTO notifications(
         recipient_user_id,recipient_username,notification_type,title,message,
         reference_type,reference_id,event_key
     ) VALUES(?,?,?,?,?,?,?,?)""",(
         recipient['id'],recipient['username'],kind,title,message,
         reference_type,reference_id,event_key
     ))
+    notification_id=cursor.lastrowid
+    if not notification_id and event_key:
+        row=db.execute(
+            "SELECT id FROM notifications WHERE recipient_user_id=? AND event_key=?",
+            (recipient['id'],event_key)
+        ).fetchone()
+        notification_id=row['id'] if row else None
+    if notification_id:
+        try:
+            _send_push(db,recipient['id'],notification_id,title,message,kind)
+        except Exception as exc:
+            print(f"Push ignorata senza bloccare TBS One: {exc}")
     return True
 
 
@@ -6567,7 +6873,7 @@ def login():
                 user=find_badge_user(db,badge_payload)
                 if user:
                     start_user_session(db,user,"Login badge")
-                    return redirect(url_for("home"))
+                    return redirect(session.pop("after_login_url",None) or url_for("home"))
                 flash("Badge non valido, revocato o account disattivato.")
             else:
                 username=request.form.get("username","").strip()
@@ -6583,12 +6889,12 @@ def login():
                         flash("Accesso Admin non configurato: manca TBS_ADMIN_PASSWORD su Render.","error")
                     elif admin_user and secrets.compare_digest(password,admin_password):
                         start_user_session(db,admin_user,"Login Admin tecnico")
-                        return redirect(url_for("home"))
+                        return redirect(session.pop("after_login_url",None) or url_for("home"))
                     else:
                         flash("Password Admin non corretta.","error")
                 elif user and user["password_hash"] and check_password_hash(user["password_hash"],password):
                     start_user_session(db,user,"Login")
-                    return redirect(url_for("home"))
+                    return redirect(session.pop("after_login_url",None) or url_for("home"))
                 else:
                     flash("Credenziali non corrette o account disattivato.","error")
     scanner=badge_scanner_html(url_for("login"),"Accedi con badge",auto_start=True)
@@ -9446,6 +9752,33 @@ def _v36_init():
             PRIMARY KEY(user_id,event_type),
             FOREIGN KEY(user_id) REFERENCES users(id)
         )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS push_devices(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            username TEXT,
+            role TEXT,
+            endpoint TEXT NOT NULL UNIQUE,
+            subscription_json TEXT NOT NULL,
+            platform TEXT,
+            user_agent TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_success_at TEXT,
+            last_error_at TEXT,
+            last_error TEXT
+        )''')
+        db.execute('''CREATE INDEX IF NOT EXISTS idx_push_devices_user
+                      ON push_devices(user_id,enabled)''')
+        db.execute('''CREATE TABLE IF NOT EXISTS push_delivery_log(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            device_id INTEGER,
+            notification_id INTEGER,
+            status TEXT NOT NULL,
+            detail TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )''')
         db.execute('''CREATE TABLE IF NOT EXISTS internal_messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sender_user_id INTEGER,
@@ -9637,7 +9970,7 @@ def v36_notification_preferences():
         rows={r['event_type']:r for r in db.execute('SELECT * FROM notification_preferences WHERE user_id=?',(uid,)).fetchall()}
     grouped={}
     for key,(cat,label) in V36_NOTIFICATION_DEFS.items(): grouped.setdefault(cat,[]).append((key,label))
-    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div><form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
+    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div>{% if session.get('role') in ('admin','manager') %}<div class="card"><h2>Notifiche su questo dispositivo</h2><p>Ricevi gli avvisi anche con TBS One chiuso.</p><div class="actions"><button type="button" onclick="tbsEnablePush()">Attiva notifiche</button><button type="button" class="secondary" onclick="tbsTestPush()">Invia prova</button><a class="secondary" href="{{url_for('push_diagnostics')}}">Diagnostica tecnica</a></div><p id="pushStatus" class="muted"></p></div>{% endif %}<form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
     return page('Preferenze notifiche',body,grouped=grouped,rows=rows)
 
 @app.route('/v36/notifications/send',methods=['GET','POST'])
