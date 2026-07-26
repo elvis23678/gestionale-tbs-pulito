@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.5.2 DEV · SAFE BROWSER LUXURY IMAGES"
+APP_VERSION = "v45.5.4 DEV · SMART CROP LUXURY IMAGES"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4018,6 +4018,21 @@ body{background:#020202}
   mix-blend-mode:normal!important;
 }
 
+
+/* v45.5.4 · Smart crop: solo immagini prodotto */
+.product-detail>img{
+  width:100%!important;
+  height:auto!important;
+  object-fit:contain!important;
+  transform:none!important;
+}
+.product-image img,
+.featured-photo img,
+.cart-item-photo img{
+  transform:none!important;
+  object-fit:cover!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4128,9 +4143,9 @@ if(live)live.addEventListener('input',()=>{
 });
 
 
-/* --- Conversione sicura delle sole foto prodotto --- */
+/* --- Conversione smart-crop delle sole foto prodotto --- */
 (function(){
-  const PRODUCT_SELECTORS = [
+  const PRODUCT_SELECTORS=[
     '.product-image img',
     '.featured-photo img',
     '.product-detail > img',
@@ -4139,53 +4154,46 @@ if(live)live.addEventListener('input',()=>{
   ].join(',');
 
   function isNearWhite(r,g,b,a){
-    if(a < 15) return true;
-    const max = Math.max(r,g,b);
-    const min = Math.min(r,g,b);
-    const brightness = (r+g+b)/3;
-    return brightness >= 215 && (max-min) <= 48;
+    if(a<15) return true;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    return ((r+g+b)/3)>=214 && (max-min)<=52;
   }
 
   function createLuxuryBackground(ctx,w,h){
-    const gradient = ctx.createRadialGradient(
-      w*0.50,h*0.40,0,
-      w*0.50,h*0.48,Math.max(w,h)*0.78
-    );
-    gradient.addColorStop(0,'#3a260d');
-    gradient.addColorStop(0.25,'#1d150a');
-    gradient.addColorStop(0.62,'#0b0a08');
-    gradient.addColorStop(1,'#030303');
-    ctx.fillStyle=gradient;
+    const base=ctx.createRadialGradient(w*.5,h*.4,0,w*.5,h*.47,Math.max(w,h)*.84);
+    base.addColorStop(0,'#4b2e0d');
+    base.addColorStop(.18,'#2a1b0a');
+    base.addColorStop(.46,'#11100d');
+    base.addColorStop(.76,'#080807');
+    base.addColorStop(1,'#020202');
+    ctx.fillStyle=base;
     ctx.fillRect(0,0,w,h);
 
     ctx.save();
-    ctx.globalAlpha=.15;
-    for(let i=0;i<90;i++){
-      const x=(i*73)%w;
-      const y=(i*127)%h;
-      const radius=1+(i%3);
-      ctx.fillStyle=i%4===0?'#c18c2e':'#777064';
-      ctx.beginPath();
-      ctx.arc(x,y,radius,0,Math.PI*2);
-      ctx.fill();
+    ctx.globalAlpha=.085;
+    for(let i=0;i<190;i++){
+      const x=(i*83)%w,y=(i*149)%h,radius=.6+(i%4)*.45;
+      ctx.fillStyle=i%7===0?'#c79a3f':(i%3===0?'#7f786d':'#4d4942');
+      ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
     }
     ctx.restore();
 
-    const shadow=ctx.createRadialGradient(
-      w*.50,h*.74,0,
-      w*.50,h*.74,w*.34
-    );
-    shadow.addColorStop(0,'rgba(0,0,0,.60)');
-    shadow.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=shadow;
-    ctx.fillRect(0,0,w,h);
+    const halo=ctx.createRadialGradient(w*.5,h*.43,0,w*.5,h*.43,w*.34);
+    halo.addColorStop(0,'rgba(226,172,71,.24)');
+    halo.addColorStop(.42,'rgba(151,94,19,.10)');
+    halo.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=halo;ctx.fillRect(0,0,w,h);
+
+    const floor=ctx.createRadialGradient(w*.5,h*.78,0,w*.5,h*.78,w*.4);
+    floor.addColorStop(0,'rgba(0,0,0,.76)');
+    floor.addColorStop(.58,'rgba(0,0,0,.38)');
+    floor.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=floor;ctx.fillRect(0,0,w,h);
   }
 
   function removeEdgeWhite(imageData,w,h){
-    const data=imageData.data;
-    const seen=new Uint8Array(w*h);
-    const queueX=new Int32Array(w*h);
-    const queueY=new Int32Array(w*h);
+    const data=imageData.data,seen=new Uint8Array(w*h);
+    const queueX=new Int32Array(w*h),queueY=new Int32Array(w*h);
     let head=0,tail=0;
 
     function tryPush(x,y){
@@ -4193,43 +4201,44 @@ if(live)live.addEventListener('input',()=>{
       if(seen[index]) return;
       const p=index*4;
       if(!isNearWhite(data[p],data[p+1],data[p+2],data[p+3])) return;
-      seen[index]=1;
-      queueX[tail]=x;
-      queueY[tail]=y;
-      tail++;
+      seen[index]=1;queueX[tail]=x;queueY[tail]=y;tail++;
     }
 
-    for(let x=0;x<w;x++){
-      tryPush(x,0);
-      tryPush(x,h-1);
-    }
-    for(let y=0;y<h;y++){
-      tryPush(0,y);
-      tryPush(w-1,y);
-    }
+    for(let x=0;x<w;x++){tryPush(x,0);tryPush(x,h-1)}
+    for(let y=0;y<h;y++){tryPush(0,y);tryPush(w-1,y)}
 
     while(head<tail){
-      const x=queueX[head];
-      const y=queueY[head];
-      head++;
+      const x=queueX[head],y=queueY[head];head++;
       if(x>0) tryPush(x-1,y);
       if(x+1<w) tryPush(x+1,y);
       if(y>0) tryPush(x,y-1);
       if(y+1<h) tryPush(x,y+1);
     }
 
-    for(let i=0;i<seen.length;i++){
-      if(seen[i]){
-        data[i*4+3]=0;
-      }
-    }
+    for(let i=0;i<seen.length;i++) if(seen[i]) data[i*4+3]=0;
     return imageData;
   }
 
-  async function luxuryImage(img){
-    if(!img || img.dataset.luxuryDone==='1') return;
-    img.dataset.luxuryDone='1';
+  function alphaBounds(imageData,w,h){
+    const data=imageData.data;
+    let minX=w,minY=h,maxX=-1,maxY=-1;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(data[(y*w+x)*4+3]>22){
+          if(x<minX) minX=x;if(x>maxX) maxX=x;
+          if(y<minY) minY=y;if(y>maxY) maxY=y;
+        }
+      }
+    }
+    if(maxX<minX||maxY<minY) return null;
+    const pad=Math.max(3,Math.round(Math.max(maxX-minX,maxY-minY)*.035));
+    const x=Math.max(0,minX-pad),y=Math.max(0,minY-pad);
+    return {x,y,w:Math.min(w,maxX+pad+1)-x,h:Math.min(h,maxY+pad+1)-y};
+  }
 
+  async function luxuryImage(img){
+    if(!img||img.dataset.luxuryDone==='1') return;
+    img.dataset.luxuryDone='1';
     try{
       if(!img.complete){
         await new Promise((resolve,reject)=>{
@@ -4237,62 +4246,79 @@ if(live)live.addEventListener('input',()=>{
           img.addEventListener('error',reject,{once:true});
         });
       }
-      if(!img.naturalWidth || !img.naturalHeight) return;
+      if(!img.naturalWidth||!img.naturalHeight) return;
 
-      const original=img.currentSrc || img.src;
-      if(!original || original.startsWith('blob:')) return;
+      const original=img.currentSrc||img.src;
+      if(!original||original.startsWith('blob:')) return;
 
-      const maxSide=620;
+      const maxSide=760;
       const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
       const sw=Math.max(1,Math.round(img.naturalWidth*scale));
       const sh=Math.max(1,Math.round(img.naturalHeight*scale));
 
       const sourceCanvas=document.createElement('canvas');
-      sourceCanvas.width=sw;
-      sourceCanvas.height=sh;
+      sourceCanvas.width=sw;sourceCanvas.height=sh;
       const sourceCtx=sourceCanvas.getContext('2d',{willReadFrequently:true});
       sourceCtx.drawImage(img,0,0,sw,sh);
 
       let pixels=sourceCtx.getImageData(0,0,sw,sh);
       pixels=removeEdgeWhite(pixels,sw,sh);
+      const bounds=alphaBounds(pixels,sw,sh);
+      if(!bounds) return;
+
       sourceCtx.clearRect(0,0,sw,sh);
       sourceCtx.putImageData(pixels,0,0);
 
+      const crop=document.createElement('canvas');
+      crop.width=bounds.w;crop.height=bounds.h;
+      crop.getContext('2d').drawImage(
+        sourceCanvas,bounds.x,bounds.y,bounds.w,bounds.h,
+        0,0,bounds.w,bounds.h
+      );
+
       const out=document.createElement('canvas');
-      out.width=700;
-      out.height=700;
+      out.width=700;out.height=700;
       const ctx=out.getContext('2d');
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const margin=95;
-      const fit=Math.min(
-        (out.width-margin*2)/sw,
-        (out.height-margin*2)/sh
-      );
-      const dw=Math.max(1,Math.round(sw*fit));
-      const dh=Math.max(1,Math.round(sh*fit));
+      const targetW=out.width*.78,targetH=out.height*.76;
+      const fit=Math.min(targetW/crop.width,targetH/crop.height);
+      const dw=Math.max(1,Math.round(crop.width*fit));
+      const dh=Math.max(1,Math.round(crop.height*fit));
       const dx=Math.round((out.width-dw)/2);
-      const dy=Math.round((out.height-dh)/2-12);
+      const dy=Math.round((out.height-dh)/2-10);
+
+      const contact=ctx.createRadialGradient(
+        out.width*.5,Math.min(out.height*.84,dy+dh*.86),0,
+        out.width*.5,Math.min(out.height*.84,dy+dh*.86),Math.max(dw,dh)*.34
+      );
+      contact.addColorStop(0,'rgba(0,0,0,.70)');
+      contact.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=contact;ctx.fillRect(0,0,out.width,out.height);
 
       ctx.save();
-      ctx.shadowColor='rgba(0,0,0,.75)';
-      ctx.shadowBlur=28;
-      ctx.shadowOffsetY=22;
-      ctx.drawImage(sourceCanvas,dx,dy,dw,dh);
+      ctx.shadowColor='rgba(0,0,0,.86)';
+      ctx.shadowBlur=34;ctx.shadowOffsetY=24;
+      ctx.filter='contrast(1.16) saturate(1.06) brightness(1.06)';
+      ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
       ctx.save();
       ctx.globalCompositeOperation='screen';
-      ctx.globalAlpha=.09;
-      ctx.shadowColor='#d3a142';
-      ctx.shadowBlur=22;
-      ctx.drawImage(sourceCanvas,dx,dy,dw,dh);
+      ctx.globalAlpha=.07;
+      ctx.shadowColor='#e2ad49';ctx.shadowBlur=22;
+      ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
-      const result=out.toDataURL('image/webp',.88);
+      ctx.save();
+      ctx.globalAlpha=.96;
+      ctx.filter='contrast(1.20) saturate(1.05) brightness(1.03)';
+      ctx.drawImage(crop,dx,dy,dw,dh);
+      ctx.restore();
+
+      const result=out.toDataURL('image/webp',.93);
       img.dataset.originalSrc=original;
       img.src=result;
-
       const productLink=img.closest('.product-image[data-image]');
       if(productLink) productLink.dataset.image=result;
     }catch(error){
@@ -4304,9 +4330,9 @@ if(live)live.addEventListener('input',()=>{
   function processProductImages(root=document){
     root.querySelectorAll(PRODUCT_SELECTORS).forEach((img,index)=>{
       if('requestIdleCallback' in window){
-        requestIdleCallback(()=>luxuryImage(img),{timeout:1200+index*90});
+        requestIdleCallback(()=>luxuryImage(img),{timeout:900+index*70});
       }else{
-        setTimeout(()=>luxuryImage(img),80+index*90);
+        setTimeout(()=>luxuryImage(img),70+index*70);
       }
     });
   }
@@ -4320,9 +4346,9 @@ if(live)live.addEventListener('input',()=>{
         if(node.matches?.(PRODUCT_SELECTORS)) luxuryImage(node);
         processProductImages(node);
       }
-      if(mutation.type==='attributes' && mutation.target.matches?.(PRODUCT_SELECTORS)){
+      if(mutation.type==='attributes'&&mutation.target.matches?.(PRODUCT_SELECTORS)){
         const img=mutation.target;
-        if(img.src!==img.dataset.originalSrc && !img.src.startsWith('data:image/webp')){
+        if(img.src!==img.dataset.originalSrc&&!img.src.startsWith('data:image/webp')){
           img.dataset.luxuryDone='0';
           luxuryImage(img);
         }
@@ -4331,10 +4357,7 @@ if(live)live.addEventListener('input',()=>{
   });
 
   observer.observe(document.documentElement,{
-    childList:true,
-    subtree:true,
-    attributes:true,
-    attributeFilter:['src']
+    childList:true,subtree:true,attributes:true,attributeFilter:['src']
   });
 })();
 
