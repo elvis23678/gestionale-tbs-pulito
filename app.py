@@ -6,7 +6,14 @@ import os
 import sqlite3
 import csv
 import zipfile
-from functools import wraps
+from functools import wraps, lru_cache
+from collections import deque
+try:
+    from PIL import Image, ImageFilter, ImageEnhance, ImageDraw
+    PILLOW_AVAILABLE = True
+except Exception:
+    Image = ImageFilter = ImageEnhance = ImageDraw = None
+    PILLOW_AVAILABLE = False
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timezone, date, time, timedelta
@@ -69,6 +76,8 @@ def ensure_catalog_images():
 ensure_catalog_images()
 
 app = Flask(__name__)
+if not PILLOW_AVAILABLE:
+    print("ATTENZIONE: Pillow non disponibile; le foto prodotto resteranno originali. Aggiungere Pillow a requirements.txt.")
 app.secret_key = os.environ.get("SECRET_KEY", "cambiare-questa-chiave")
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
@@ -109,7 +118,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.5.0 DEV · PRODUCT IMAGE LUXURY BACKDROP"
+APP_VERSION = "v45.5.1 DEV · AUTO LUXURY IMAGES"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1544,6 +1553,211 @@ def restore_suspended_cart(db, cart_id):
 def photo_data(upload):
     if not upload or not upload.filename: return None
     raw=upload.read(); return f"data:{upload.mimetype or 'image/jpeg'};base64,{base64.b64encode(raw).decode()}" if raw else None
+
+def _decode_data_image(source):
+    """Decodifica una data URI immagine. Restituisce bytes o None."""
+    if not source or not isinstance(source, str) or not source.startswith("data:image/"):
+        return None
+    try:
+        header, encoded = source.split(",", 1)
+        if ";base64" not in header:
+            return None
+        return base64.b64decode(encoded)
+    except Exception:
+        return None
+
+
+def _luxury_background(size, seed):
+    """Crea uno sfondo nero/ardesia con luce dorata molto discreta."""
+    width, height = size
+    bg = Image.new("RGB", size, (4, 4, 4))
+    pixels = bg.load()
+
+    # Seed deterministico: ogni prodotto resta sempre identico.
+    seed_value = int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
+    cx = width * (0.50 + ((seed_value % 17) - 8) / 180)
+    cy = height * (0.43 + (((seed_value // 17) % 13) - 6) / 180)
+    max_radius = max(width, height) * 0.78
+
+    for y in range(height):
+        for x in range(width):
+            dx = x - cx
+            dy = y - cy
+            distance = (dx * dx + dy * dy) ** 0.5
+            glow = max(0.0, 1.0 - distance / max_radius)
+            glow = glow ** 2.25
+
+            # Trama ardesia estremamente leggera.
+            noise = ((x * 17 + y * 29 + seed_value) % 37) / 37.0
+            grain = int((noise - 0.5) * 5)
+
+            r = max(0, min(255, int(4 + 28 * glow + grain)))
+            g = max(0, min(255, int(4 + 18 * glow + grain)))
+            b = max(0, min(255, int(4 + 6 * glow + grain)))
+            pixels[x, y] = (r, g, b)
+
+    # Piano d'appoggio/ombra morbida nella parte bassa.
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    draw.ellipse(
+        (int(width * 0.17), int(height * 0.67), int(width * 0.83), int(height * 0.90)),
+        fill=(0, 0, 0, 105),
+    )
+    overlay = overlay.filter(ImageFilter.GaussianBlur(max(8, width // 30)))
+    return Image.alpha_composite(bg.convert("RGBA"), overlay)
+
+
+def _remove_connected_white_background(image):
+    """
+    Rimuove esclusivamente il bianco/quasi bianco connesso ai bordi.
+    Le pietre bianche e i riflessi interni del gioiello vengono preservati.
+    """
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    pixels = rgba.load()
+
+    visited = bytearray(width * height)
+    queue = deque()
+
+    def looks_like_background(x, y):
+        r, g, b, a = pixels[x, y]
+        if a < 8:
+            return True
+        maximum = max(r, g, b)
+        minimum = min(r, g, b)
+        chroma = maximum - minimum
+        brightness = (r + g + b) / 3
+        # Bianco, grigio chiarissimo e sfondo catalogo leggermente caldo.
+        return brightness >= 218 and chroma <= 42
+
+    def push(x, y):
+        idx = y * width + x
+        if visited[idx]:
+            return
+        if looks_like_background(x, y):
+            visited[idx] = 1
+            queue.append((x, y))
+
+    # Avvio flood fill da tutti i bordi.
+    for x in range(width):
+        push(x, 0)
+        push(x, height - 1)
+    for y in range(height):
+        push(0, y)
+        push(width - 1, y)
+
+    while queue:
+        x, y = queue.popleft()
+        if x > 0:
+            push(x - 1, y)
+        if x + 1 < width:
+            push(x + 1, y)
+        if y > 0:
+            push(x, y - 1)
+        if y + 1 < height:
+            push(x, y + 1)
+
+    # Maschera dello sfondo con leggero feathering.
+    mask = Image.new("L", (width, height), 0)
+    mask_pixels = mask.load()
+    for y in range(height):
+        offset = y * width
+        for x in range(width):
+            if visited[offset + x]:
+                mask_pixels[x, y] = 255
+
+    mask = mask.filter(ImageFilter.GaussianBlur(max(1.0, min(width, height) / 280)))
+    alpha = rgba.getchannel("A")
+    # Alpha finale = alpha originale - maschera sfondo.
+    alpha = Image.eval(alpha, lambda value: value)
+    alpha_pixels = alpha.load()
+    mask_pixels = mask.load()
+    for y in range(height):
+        for x in range(width):
+            alpha_pixels[x, y] = max(0, alpha_pixels[x, y] - mask_pixels[x, y])
+
+    rgba.putalpha(alpha)
+    return rgba
+
+
+@lru_cache(maxsize=512)
+def luxury_product_photo(source):
+    """
+    Trasforma automaticamente una foto prodotto in un'immagine luxury.
+    La cache evita di rielaborare la stessa immagine a ogni richiesta.
+    """
+    if not source or not PILLOW_AVAILABLE:
+        return source
+
+    raw = _decode_data_image(source)
+    if not raw:
+        # Le immagini statiche o URL rimangono invariate.
+        return source
+
+    try:
+        image = Image.open(BytesIO(raw))
+        image.load()
+        image = image.convert("RGBA")
+
+        # Riduce immagini enormi per contenere RAM e dimensione HTML.
+        image.thumbnail((920, 920), Image.Resampling.LANCZOS)
+
+        foreground = _remove_connected_white_background(image)
+        bbox = foreground.getbbox()
+        if not bbox:
+            return source
+        foreground = foreground.crop(bbox)
+
+        # Migliora leggermente dettaglio e contrasto senza falsare il prodotto.
+        rgb = foreground.convert("RGB")
+        rgb = ImageEnhance.Contrast(rgb).enhance(1.10)
+        rgb = ImageEnhance.Sharpness(rgb).enhance(1.18)
+        foreground = rgb.convert("RGBA")
+        foreground.putalpha(_remove_connected_white_background(image).crop(bbox).getchannel("A"))
+
+        canvas_size = (900, 900)
+        background = _luxury_background(canvas_size, hashlib.sha256(raw).hexdigest())
+
+        # Il gioiello occupa circa il 70% del riquadro.
+        max_w = int(canvas_size[0] * 0.72)
+        max_h = int(canvas_size[1] * 0.70)
+        scale = min(max_w / foreground.width, max_h / foreground.height)
+        new_size = (
+            max(1, int(foreground.width * scale)),
+            max(1, int(foreground.height * scale)),
+        )
+        foreground = foreground.resize(new_size, Image.Resampling.LANCZOS)
+
+        x = (canvas_size[0] - foreground.width) // 2
+        y = int(canvas_size[1] * 0.47 - foreground.height / 2)
+
+        # Ombra realistica.
+        shadow = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+        shadow_alpha = foreground.getchannel("A").filter(ImageFilter.GaussianBlur(20))
+        shadow_shape = Image.new("RGBA", foreground.size, (0, 0, 0, 160))
+        shadow_shape.putalpha(shadow_alpha.point(lambda a: int(a * 0.56)))
+        shadow.alpha_composite(shadow_shape, (x + 12, y + 24))
+        background = Image.alpha_composite(background, shadow)
+
+        # Alone dorato appena percettibile.
+        glow = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+        glow_alpha = foreground.getchannel("A").filter(ImageFilter.GaussianBlur(30))
+        glow_shape = Image.new("RGBA", foreground.size, (198, 139, 34, 0))
+        glow_shape.putalpha(glow_alpha.point(lambda a: int(a * 0.12)))
+        glow.alpha_composite(glow_shape, (x, y))
+        background = Image.alpha_composite(background, glow)
+
+        background.alpha_composite(foreground, (x, y))
+
+        out = BytesIO()
+        background.convert("RGB").save(out, format="WEBP", quality=88, method=6)
+        return "data:image/webp;base64," + base64.b64encode(out.getvalue()).decode("ascii")
+    except Exception as exc:
+        app.logger.warning("Luxury image conversion skipped: %s", exc)
+        return source
+
+
+app.jinja_env.filters["luxury_photo"] = luxury_product_photo
 
 def values(form):
     brand=form["brand_code"].strip().upper()
@@ -3988,144 +4202,6 @@ body{background:#020202}
   }
 }
 
-
-/* =========================================================
-   v45.5.0 · PRODUCT IMAGE LUXURY BACKDROP
-   SOLO sfondo e resa fotografica delle immagini gioiello.
-   Nessuna modifica a layout, home, cerchi, header o checkout.
-   ========================================================= */
-
-:root{
-  --jewel-photo-black:#050504;
-  --jewel-photo-charcoal:#12100c;
-  --jewel-photo-gold:rgba(194,137,34,.30);
-}
-
-/* Fondo premium comune a catalogo, home e prodotti in evidenza */
-.pixel-products .product-image,
-.atelier-products .product-image,
-.featured-photo,
-.product-detail>img,
-.client-cart-row img,
-.cart-item-photo,
-.image-modal img{
-  background:
-    radial-gradient(circle at 50% 42%,
-      rgba(191,135,31,.26) 0%,
-      rgba(95,62,16,.17) 23%,
-      rgba(18,16,12,.96) 58%,
-      #030303 100%)!important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,226,157,.08),
-    inset 0 -34px 58px rgba(0,0,0,.50),
-    0 12px 28px rgba(0,0,0,.30)!important;
-}
-
-/* Texture nera discreta senza cambiare le proporzioni */
-.pixel-products .product-image:before,
-.atelier-products .product-image:before,
-.featured-photo:before,
-.cart-item-photo:before{
-  content:""!important;
-  position:absolute!important;
-  inset:0!important;
-  z-index:0!important;
-  pointer-events:none!important;
-  border:0!important;
-  background:
-    radial-gradient(ellipse at 20% 82%,rgba(255,255,255,.025),transparent 32%),
-    radial-gradient(ellipse at 78% 18%,rgba(204,151,49,.055),transparent 26%),
-    repeating-radial-gradient(ellipse at 50% 65%,
-      rgba(255,255,255,.014) 0 1px,
-      transparent 1px 5px)!important;
-}
-
-/*
-  Le immagini fornitore hanno spesso il bianco incorporato.
-  Il blend multiply rende quel bianco trasparente visivamente,
-  lasciando apparire il fondale nero sottostante.
-*/
-.pixel-products .product-image img,
-.atelier-products .product-image img,
-.featured-photo img,
-.product-detail>img,
-.client-cart-row img,
-.cart-item-photo img,
-.image-modal img{
-  position:relative!important;
-  z-index:1!important;
-  background:transparent!important;
-  mix-blend-mode:multiply!important;
-  filter:
-    contrast(1.27)
-    brightness(1.08)
-    saturate(1.04)
-    drop-shadow(0 17px 15px rgba(0,0,0,.48))
-    drop-shadow(0 0 12px rgba(210,158,57,.12))!important;
-}
-
-/* Leggero riflesso editoriale sopra la foto */
-.pixel-products .product-image:after,
-.atelier-products .product-image:after,
-.featured-photo:after,
-.cart-item-photo:after{
-  content:""!important;
-  position:absolute!important;
-  inset:0!important;
-  z-index:2!important;
-  pointer-events:none!important;
-  background:
-    linear-gradient(145deg,
-      rgba(255,238,190,.055),
-      transparent 32%,
-      transparent 70%,
-      rgba(199,145,39,.045))!important;
-}
-
-/* Badge e cuore devono restare sopra la nuova resa fotografica */
-.pixel-products .new-label,
-.pixel-products .favorite-btn,
-.atelier-products .new-label,
-.atelier-products .favorite-btn,
-.featured-photo .favorite-btn{
-  z-index:5!important;
-}
-
-/* Scheda prodotto: stesso fondale senza alterare il layout */
-.product-detail>img{
-  border:1px solid rgba(204,158,59,.30)!important;
-}
-
-/* Carrello: mantiene esattamente le dimensioni già approvate */
-.cart-item-photo{
-  position:relative!important;
-  isolation:isolate!important;
-  overflow:hidden!important;
-}
-.cart-item-photo img{
-  padding:8px!important;
-  object-fit:contain!important;
-}
-
-/* Anteprima grande coerente con catalogo e dettaglio */
-.image-modal img{
-  border:1px solid rgba(204,158,59,.30)!important;
-}
-
-/* Interazione minima, solo fotografica */
-@media(hover:hover){
-  .pixel-products .shop-product:hover .product-image img,
-  .atelier-products .shop-product:hover .product-image img,
-  .featured-card:hover .featured-photo img{
-    filter:
-      contrast(1.31)
-      brightness(1.13)
-      saturate(1.07)
-      drop-shadow(0 20px 17px rgba(0,0,0,.54))
-      drop-shadow(0 0 15px rgba(210,158,57,.16))!important;
-  }
-}
-
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4348,7 +4424,7 @@ def boutique():
   {% for p in home_piercings %}
     <article class='featured-card' data-fav-key='{{p.variant_group or p.brand_code or p.supplier_code}}'>
       <a class='featured-photo' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
-        {% if p.image %}<img src='{{p.image}}' alt='{{p.model_name or p.description or p.display_category}}'>{% endif %}
+        {% if p.image %}<img src='{{p.image|luxury_photo}}' alt='{{p.model_name or p.description or p.display_category}}'>{% endif %}
         <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Aggiungi alla wishlist'>&#9825;</button>
       </a>
       <div class='featured-info'>
@@ -4407,10 +4483,10 @@ def boutique():
 <div class='shop-grid pixel-products'>
 {% for p in rows %}
 <article class='shop-product' data-fav-key='{{p.variant_group or p.brand_code or p.supplier_code}}' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'>
-  <a class='product-image' data-image='{{p.image}}' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
+  <a class='product-image' data-image='{{p.image|luxury_photo}}' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
     {% if loop.index<=12 %}<span class='new-label'>NEW</span>{% endif %}
     <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Wishlist'>&#9825;</button>
-    {% if p.image %}<img loading='lazy' src='{{p.image}}' alt='{{p.display_category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>&#9671;</span>{% endif %}
+    {% if p.image %}<img loading='lazy' src='{{p.image|luxury_photo}}' alt='{{p.display_category}} {{p.brand_code}}'>{% else %}<span class='photo-placeholder'>&#9671;</span>{% endif %}
   </a>
   <div class='shop-body'>
     <div class='product-category'>{{p.material or 'ASTM F136 TITANIUM'}}</div>
@@ -4466,6 +4542,7 @@ def boutique_product(product_id):
     data=[]
     for v in variants:
         item=dict(v)
+        item["photo_data"]=luxury_product_photo(item.get("photo_data"))
         if v["quantity"]>1:
             item["status"]="available"; item["status_text"]="Disponibile subito"
         elif v["quantity"]==1:
@@ -4480,6 +4557,8 @@ def boutique_product(product_id):
     threads=sorted({(v.get("thread_type") or "").strip() for v in data if (v.get("thread_type") or "").strip()})
 
     related_items=[dict(x) for x in related if x["photo_data"]][:6]
+    for item in related_items:
+        item["photo_data"]=luxury_product_photo(item.get("photo_data"))
 
     body=r"""
 <div class='customer-product-page'>
@@ -4487,9 +4566,9 @@ def boutique_product(product_id):
 
   <div class='customer-product-shell'>
     <section class='customer-gallery'>
-      <div class='detail-image-wrap product-image' id='detailImageBox' data-image='{{p.photo_data or ""}}'>
+      <div class='detail-image-wrap product-image' id='detailImageBox' data-image='{{(p.photo_data or "")|luxury_photo}}'>
         {% if p.photo_data %}
-          <img id='variant-image' src='{{p.photo_data}}' alt='{{p.model_name or p.category}}'>
+          <img id='variant-image' src='{{p.photo_data|luxury_photo}}' alt='{{p.model_name or p.category}}'>
           <span class='image-hint'>Tocca per ingrandire</span>
         {% else %}
           <div class='photo-placeholder'>◇</div>
@@ -4565,7 +4644,7 @@ def boutique_product(product_id):
     <div class='related-grid'>
       {% for r in related %}
       <a class='related-card' href='{{url_for("boutique_product",product_id=r.id)}}'>
-        <img src='{{r.photo_data}}' alt='{{r.model_name or r.category}}'>
+        <img src='{{r.photo_data|luxury_photo}}' alt='{{r.model_name or r.category}}'>
         <strong>{{r.model_name or r.category}}</strong>
         <span>€ {{'%.2f'|format(r.price)}}</span>
       </a>
@@ -4653,7 +4732,7 @@ update();
     return public_page(
         p["model_name"] or p["category"],
         body,
-        p=dict(p),
+        p={**dict(p), "photo_data": luxury_product_photo(p["photo_data"]) if p["photo_data"] else None},
         variants=data,
         colors=colors,
         sizes=sizes,
@@ -4778,7 +4857,7 @@ def client_cart():
       {% for p,qty,row_total in rows %}
       <article class='cart-item-luxury'>
         <div class='cart-item-photo'>
-          {% if p.photo_data %}<img src='{{p.photo_data}}' alt='{{p.category}}'>{% else %}<span>◇</span>{% endif %}
+          {% if p.photo_data %}<img src='{{p.photo_data|luxury_photo}}' alt='{{p.category}}'>{% else %}<span>◇</span>{% endif %}
         </div>
 
         <div class='cart-item-content'>
