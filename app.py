@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.8.1 DEV · LUXURY PHOTO ENGINE POLISH"
+APP_VERSION = "v45.9.0 DEV · LUXURY PHOTO CACHE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4101,6 +4101,16 @@ body{background:#020202}
     drop-shadow(0 14px 23px rgba(0,0,0,.51))!important;
 }
 
+
+/* v45.9.0 · Cache foto luxury — nessuna modifica strutturale */
+.product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img{
+  transition:opacity .24s ease,filter .24s ease!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4220,6 +4230,124 @@ if(live)live.addEventListener('input',()=>{
     '.client-cart-row img',
     '.cart-item-photo img'
   ].join(',');
+
+
+  const LUXURY_CACHE_DB='tbs_luxury_photo_cache_v1';
+  const LUXURY_CACHE_STORE='images';
+  const LUXURY_CACHE_LIMIT=700;
+
+  function openLuxuryCache(){
+    return new Promise((resolve,reject)=>{
+      if(!('indexedDB' in window)){
+        resolve(null);
+        return;
+      }
+
+      const request=indexedDB.open(LUXURY_CACHE_DB,1);
+
+      request.onupgradeneeded=()=>{
+        const db=request.result;
+        if(!db.objectStoreNames.contains(LUXURY_CACHE_STORE)){
+          const store=db.createObjectStore(LUXURY_CACHE_STORE,{keyPath:'key'});
+          store.createIndex('savedAt','savedAt',{unique:false});
+        }
+      };
+
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>resolve(null);
+    });
+  }
+
+  async function cacheKeyForSource(source){
+    try{
+      if(window.crypto?.subtle){
+        const bytes=new TextEncoder().encode(source);
+        const digest=await crypto.subtle.digest('SHA-256',bytes);
+        return Array.from(new Uint8Array(digest))
+          .map(b=>b.toString(16).padStart(2,'0'))
+          .join('');
+      }
+    }catch(_){}
+
+    let hash=2166136261;
+    for(let i=0;i<source.length;i++){
+      hash^=source.charCodeAt(i);
+      hash=Math.imul(hash,16777619);
+    }
+    return 'fallback_'+(hash>>>0).toString(16)+'_'+source.length;
+  }
+
+  async function getCachedLuxuryImage(key){
+    const db=await openLuxuryCache();
+    if(!db) return null;
+
+    return new Promise(resolve=>{
+      try{
+        const tx=db.transaction(LUXURY_CACHE_STORE,'readonly');
+        const request=tx.objectStore(LUXURY_CACHE_STORE).get(key);
+        request.onsuccess=()=>resolve(request.result?.value||null);
+        request.onerror=()=>resolve(null);
+      }catch(_){
+        resolve(null);
+      }
+    });
+  }
+
+  async function trimLuxuryCache(db){
+    if(!db) return;
+
+    return new Promise(resolve=>{
+      try{
+        const tx=db.transaction(LUXURY_CACHE_STORE,'readwrite');
+        const store=tx.objectStore(LUXURY_CACHE_STORE);
+        const countRequest=store.count();
+
+        countRequest.onsuccess=()=>{
+          const excess=countRequest.result-LUXURY_CACHE_LIMIT;
+          if(excess<=0) return;
+
+          let removed=0;
+          const index=store.index('savedAt');
+          const cursorRequest=index.openCursor();
+
+          cursorRequest.onsuccess=event=>{
+            const cursor=event.target.result;
+            if(!cursor||removed>=excess) return;
+            store.delete(cursor.primaryKey);
+            removed++;
+            cursor.continue();
+          };
+        };
+
+        tx.oncomplete=()=>resolve();
+        tx.onerror=()=>resolve();
+      }catch(_){
+        resolve();
+      }
+    });
+  }
+
+  async function saveCachedLuxuryImage(key,value){
+    const db=await openLuxuryCache();
+    if(!db) return;
+
+    await new Promise(resolve=>{
+      try{
+        const tx=db.transaction(LUXURY_CACHE_STORE,'readwrite');
+        tx.objectStore(LUXURY_CACHE_STORE).put({
+          key,
+          value,
+          savedAt:Date.now()
+        });
+        tx.oncomplete=()=>resolve();
+        tx.onerror=()=>resolve();
+      }catch(_){
+        resolve();
+      }
+    });
+
+    trimLuxuryCache(db);
+  }
 
   function median(values){
     values.sort((a,b)=>a-b);
@@ -4540,6 +4668,16 @@ if(live)live.addEventListener('input',()=>{
       const original=img.currentSrc||img.src;
       if(!original||original.startsWith('blob:')||original.startsWith('data:image/webp')) return;
 
+      const cacheKey=await cacheKeyForSource(original);
+      const cached=await getCachedLuxuryImage(cacheKey);
+      if(cached){
+        img.dataset.originalSrc=original;
+        img.src=cached;
+        const cachedLink=img.closest('.product-image[data-image]');
+        if(cachedLink) cachedLink.dataset.image=cached;
+        return;
+      }
+
       // Mai ridurre inutilmente l'originale; canvas sorgente fino a 1400 px.
       const maxSource=1400;
       const sourceScale=Math.min(1,maxSource/Math.max(img.naturalWidth,img.naturalHeight));
@@ -4642,10 +4780,21 @@ if(live)live.addEventListener('input',()=>{
 
       const link=img.closest('.product-image[data-image]');
       if(link) link.dataset.image=result;
+
+      saveCachedLuxuryImage(cacheKey,result);
     }catch(error){
       img.dataset.luxuryDone='error';
       console.warn('Foto luxury non elaborata:',error);
     }
+  }
+
+
+  function prepareProductImages(root=document){
+    root.querySelectorAll(PRODUCT_SELECTORS).forEach(img=>{
+      if(!img.hasAttribute('loading')) img.loading='lazy';
+      img.decoding='async';
+      img.fetchPriority='auto';
+    });
   }
 
   function processProductImages(root=document){
@@ -4658,13 +4807,21 @@ if(live)live.addEventListener('input',()=>{
     });
   }
 
-  document.addEventListener('DOMContentLoaded',()=>processProductImages());
+  document.addEventListener('DOMContentLoaded',()=>{
+    prepareProductImages();
+    processProductImages();
+  });
 
   const observer=new MutationObserver(mutations=>{
     for(const mutation of mutations){
       for(const node of mutation.addedNodes){
         if(node.nodeType!==1) continue;
-        if(node.matches?.(PRODUCT_SELECTORS)) luxuryImage(node);
+        if(node.matches?.(PRODUCT_SELECTORS)){
+          node.loading='lazy';
+          node.decoding='async';
+          luxuryImage(node);
+        }
+        prepareProductImages(node);
         processProductImages(node);
       }
       if(mutation.type==='attributes'&&mutation.target.matches?.(PRODUCT_SELECTORS)){
