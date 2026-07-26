@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.1.0 DEV · CARRELLO + IMPOSTAZIONI APP"
+APP_VERSION = "v47.1.1 DEV · APPROVA PUSH SESSION HOTFIX"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -562,7 +562,8 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
     const data=event.data||{};
 
     if(data.type==='discount-decision'){
-      window.setTimeout(function(){ window.location.reload(); },250);
+      try{ sessionStorage.setItem('tbsDiscountDecision',String(data.requestId||'')); }catch(error){}
+      window.setTimeout(function(){ window.location.reload(); },180);
       return;
     }
 
@@ -601,7 +602,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4703',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4711',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6436,7 +6437,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.0.3';
+const SW_VERSION='v47.1.1';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6557,7 +6558,10 @@ async function executeInteractiveAction(action,data){
   const response=await fetch('/api/push/discount-action',{
     method:'POST',
     credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{
+      'Content-Type':'application/json',
+      'Accept':'application/json'
+    },
     body:JSON.stringify({action:action,token:token})
   });
   let result={};
@@ -6609,7 +6613,8 @@ self.addEventListener('notificationclick',event=>{
             client.postMessage({
               type:'discount-decision',
               status:approved?'Approvata':String(result.status||''),
-              requestId:Number(result.request_id||0)
+              requestId:Number(result.request_id||0),
+              forceReload:true
             });
           }catch(error){}
         }
@@ -6676,7 +6681,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.0.3"
+            "X-TBS-Service-Worker-Version":"v47.1.1"
         }
     )
 
@@ -6727,42 +6732,55 @@ def push_action():
 
 
 @app.post("/api/push/discount-action")
-@login_required
 def push_discount_action():
-    if session.get("role") not in ("admin","manager"):
-        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+    """
+    Azione interattiva sicura dalla notifica.
 
+    L'autorizzazione deriva dal token firmato e temporaneo generato
+    specificamente per l'Admin/Gestore destinatario. Non dipende dalla
+    sessione browser corrente, perché sullo stesso telefono può essere
+    aperto in quel momento l'account Venditore.
+    """
     data=request.get_json(silent=True) or {}
     action=(data.get("action") or "").strip().lower()
     token=(data.get("token") or "").strip()
+
     if action not in ("approve","reject") or not token:
         return jsonify({"ok":False,"error":"Azione non valida"}),400
 
     try:
         signed=_read_discount_action_token(token,max_age=900)
     except SignatureExpired:
-        return jsonify({"ok":False,"error":"Azione scaduta. Apri TBS One per gestire la richiesta."}),410
+        return jsonify({
+            "ok":False,
+            "error":"Azione scaduta. Apri TBS One per gestire la richiesta."
+        }),410
     except BadSignature:
         return jsonify({"ok":False,"error":"Token azione non valido"}),400
 
-    if int(signed.get("user_id") or 0)!=int(session.get("user_id") or 0):
-        return jsonify({"ok":False,"error":"Azione destinata a un altro utente"}),403
     if signed.get("action")!=action:
         return jsonify({"ok":False,"error":"Azione non coerente"}),400
 
     request_id=int(signed.get("request_id") or 0)
+    approver_user_id=int(signed.get("user_id") or 0)
+
+    if not request_id or not approver_user_id:
+        return jsonify({"ok":False,"error":"Dati azione incompleti"}),400
+
     with connect() as db:
         me=db.execute(
-            "SELECT id,username,role FROM users WHERE id=? AND active=1",
-            (session.get("user_id"),)
+            "SELECT id,username,role,active FROM users WHERE id=?",
+            (approver_user_id,)
         ).fetchone()
         req=db.execute(
             "SELECT * FROM discount_requests WHERE id=?",
             (request_id,)
         ).fetchone()
 
-        if not me or me["role"] not in ("admin","manager"):
-            return jsonify({"ok":False,"error":"Utente non autorizzato"}),403
+        # Il token è valido solo se il destinatario esiste ancora ed è
+        # effettivamente Admin/Gestore.
+        if not me or not me["active"] or me["role"] not in ("admin","manager"):
+            return jsonify({"ok":False,"error":"Autorizzazione non più valida"}),403
         if not req:
             return jsonify({"ok":False,"error":"Richiesta non trovata"}),404
         if req["status"]!="In attesa":
@@ -6772,14 +6790,26 @@ def push_discount_action():
             }),409
 
         status="Approvata" if action=="approve" else "Rifiutata"
-        note="Approvazione dalla notifica push" if action=="approve" else "Rifiuto dalla notifica push"
-        db.execute(
+        note=(
+            "Approvazione dalla notifica push"
+            if action=="approve"
+            else "Rifiuto dalla notifica push"
+        )
+
+        cursor=db.execute(
             """UPDATE discount_requests
                SET status=?,counter_price=NULL,decision_note=?,
-                   approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP
+                   approver_user_id=?,approver_username=?,
+                   decided_at=CURRENT_TIMESTAMP
                WHERE id=? AND status='In attesa'""",
             (status,note,me["id"],me["username"],request_id)
         )
+        if cursor.rowcount!=1:
+            db.rollback()
+            return jsonify({
+                "ok":False,
+                "error":"La richiesta è stata gestita contemporaneamente da un altro utente."
+            }),409
 
         staff=db.execute(
             "SELECT id,username FROM users WHERE active=1 AND role IN ('admin','manager')"
@@ -6792,7 +6822,10 @@ def push_discount_action():
                        archived_at=COALESCE(archived_at,CURRENT_TIMESTAMP),
                        archived_by_user_id=?,archived_by_username=?
                    WHERE recipient_user_id=? AND event_key=?""",
-                (me["id"],me["username"],staff_user["id"],event_key)
+                (
+                    me["id"],me["username"],
+                    staff_user["id"],event_key
+                )
             )
 
         recipient=_current_user_for_identity(
@@ -6815,6 +6848,7 @@ def push_discount_action():
                     f"{req['product_code']} · prezzo richiesto € "
                     f"{float(req['requested_price']):.2f} · {me['username']}"
                 )
+
             _notify_user(
                 db,recipient["id"],kind,title,message,
                 "discount",request_id,
@@ -6824,12 +6858,13 @@ def push_discount_action():
 
         log_action(
             db,
-            "Sconto remoto approvato da notifica" if action=="approve"
+            "Sconto remoto approvato da notifica"
+            if action=="approve"
             else "Sconto remoto rifiutato da notifica",
             details=(
                 f"Richiesta #{request_id}; venditore {req['requester_username']}; "
-                f"{req['product_code']}; richiesto € {float(req['requested_price']):.2f}; "
-                f"gestore {me['username']}"
+                f"{req['product_code']}; richiesto € "
+                f"{float(req['requested_price']):.2f}; gestore {me['username']}"
             )
         )
         db.commit()
@@ -9892,7 +9927,7 @@ SELLER_ALLOWED_ENDPOINTS = {
 
     # Registrazione push del dispositivo del Venditore
     'push_config','push_subscribe','push_status','push_unsubscribe',
-    'push_test','push_open','push_action',
+    'push_test','push_open','push_action','push_discount_action',
 
     'static'
 }
