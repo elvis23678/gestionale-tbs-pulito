@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.8.0 DEV · LUXURY PHOTO ENGINE"
+APP_VERSION = "v45.8.1 DEV · LUXURY PHOTO ENGINE POLISH"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4086,6 +4086,21 @@ body{background:#020202}
     drop-shadow(0 14px 22px rgba(0,0,0,.50))!important;
 }
 
+
+/* v45.8.1 · Luxury Photo Engine Polish — solo immagini prodotto */
+.product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img,
+.image-modal img{
+  filter:
+    contrast(1.022)
+    brightness(1.006)
+    saturate(1.006)
+    drop-shadow(0 14px 23px rgba(0,0,0,.51))!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4246,7 +4261,7 @@ if(live)live.addEventListener('input',()=>{
     const chroma=max-min;
     const distance=colorDistance(r,g,b,bg);
     return strict
-      ? distance<=15 && chroma<=18
+      ? distance<=18 && chroma<=20
       : distance<=28 && chroma<=28;
   }
 
@@ -4459,6 +4474,23 @@ if(live)live.addEventListener('input',()=>{
     return canvas;
   }
 
+
+  function adaptiveSubjectScale(cropW,cropH){
+    const longSide=Math.max(cropW,cropH);
+    const shortSide=Math.max(1,Math.min(cropW,cropH));
+    const aspect=longSide/shortSide;
+
+    // Barre, labret e accessori sottili hanno bisogno di più presenza visiva.
+    if(aspect>=5.0) return 1.16;
+    if(aspect>=3.2) return 1.12;
+
+    // Soggetti piccoli e compatti: lieve incremento.
+    if(longSide<760) return 1.09;
+    if(longSide<980) return 1.05;
+
+    return 1.00;
+  }
+
   function createLuxuryBackground(ctx,w,h){
     const base=ctx.createRadialGradient(w*.50,h*.39,0,w*.50,h*.47,Math.max(w,h)*.86);
     base.addColorStop(0,'#3d260d');
@@ -4479,9 +4511,10 @@ if(live)live.addEventListener('input',()=>{
     }
     ctx.restore();
 
-    const halo=ctx.createRadialGradient(w*.50,h*.43,0,w*.50,h*.43,w*.32);
-    halo.addColorStop(0,'rgba(217,157,54,.15)');
-    halo.addColorStop(.46,'rgba(117,73,18,.055)');
+    const halo=ctx.createRadialGradient(w*.50,h*.43,0,w*.50,h*.43,w*.27);
+    halo.addColorStop(0,'rgba(221,164,63,.17)');
+    halo.addColorStop(.38,'rgba(128,79,20,.060)');
+    halo.addColorStop(.72,'rgba(63,39,12,.020)');
     halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo;ctx.fillRect(0,0,w,h);
 
@@ -4560,7 +4593,9 @@ if(live)live.addEventListener('input',()=>{
       ctx.imageSmoothingQuality='high';
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const targetW=out.width*.80,targetH=out.height*.78;
+      const adaptiveScale=adaptiveSubjectScale(crop.width,crop.height);
+      const targetW=out.width*.80*adaptiveScale;
+      const targetH=out.height*.78*adaptiveScale;
       let fit=Math.min(targetW/crop.width,targetH/crop.height);
 
       // Evita ingrandimenti distruttivi delle immagini sorgente piccole.
@@ -4591,13 +4626,13 @@ if(live)live.addEventListener('input',()=>{
       ctx.save();
       ctx.shadowColor='rgba(0,0,0,.82)';
       ctx.shadowBlur=42;ctx.shadowOffsetY=28;
-      ctx.filter='contrast(1.08) saturate(1.03) brightness(1.03)';
+      ctx.filter='contrast(1.105) saturate(1.025) brightness(1.045)';
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
       ctx.save();
       ctx.globalAlpha=.98;
-      ctx.filter='contrast(1.075) saturate(1.015) brightness(1.008)';
+      ctx.filter='contrast(1.085) saturate(1.012) brightness(1.018)';
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
