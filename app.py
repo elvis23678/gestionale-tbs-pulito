@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.2.0 DEV · APPROVA RIFIUTA DEFINITIVO"
+APP_VERSION = "v47.2.1 DEV · NOTIFICHE SEMPLICI STABILI"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -605,7 +605,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4720',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4721',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6468,7 +6468,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.2.0';
+const SW_VERSION='v47.2.1';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6607,28 +6607,6 @@ self.addEventListener('notificationclick',event=>{
   event.notification.close();
 
   event.waitUntil((async()=>{
-    if(action==='approve' || action==='reject'){
-      const token=action==='approve' ? data.approveToken : data.rejectToken;
-      if(!token){
-        await self.registration.showNotification('TBS One · errore',{
-          body:'Token della decisione assente. Apri TBS One.',
-          icon:'/push/icon',
-          badge:'/push/badge',
-          silent:true,
-          data:{url:data.manageUrl||'/discount-approvals'}
-        });
-        return;
-      }
-
-      const decisionUrl='/push/discount-decision/'+
-        encodeURIComponent(action)+'/'+encodeURIComponent(token);
-
-      if(self.clients.openWindow){
-        await self.clients.openWindow(decisionUrl);
-      }
-      return;
-    }
-
     if(action==='mark-read'){
       if(data.notificationId){
         try{
@@ -6647,7 +6625,7 @@ self.addEventListener('notificationclick',event=>{
     }
 
     if(action==='manage'){
-      await openOrFocus(data.manageUrl||data.url||'/discount-approvals');
+      await openOrFocus(data.manageUrl||'/discount-approvals');
       return;
     }
 
@@ -6662,7 +6640,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.2.0"
+            "X-TBS-Service-Worker-Version":"v47.2.1"
         }
     )
 
@@ -6872,54 +6850,6 @@ def _apply_discount_push_decision(action, token):
     },200
 
 
-@app.post("/api/push/discount-action")
-def push_discount_action():
-    data=request.get_json(silent=True) or {}
-    result,http_status=_apply_discount_push_decision(
-        data.get("action"),data.get("token")
-    )
-    return jsonify(result),http_status
-
-
-@app.get("/push/discount-decision/<action>/<path:token>")
-def push_discount_decision(action,token):
-    """Endpoint aperto dal pulsante Android: decide prima, conferma dopo."""
-    result,http_status=_apply_discount_push_decision(action,token)
-    ok=bool(result.get("ok"))
-    approved=result.get("status") in ("Approvata","Applicata")
-    title=(
-        "✅ Sconto approvato"
-        if ok and approved else
-        "❌ Sconto rifiutato"
-        if ok and result.get("status")=="Rifiutata" else
-        "⚠️ Operazione non completata"
-    )
-    message=result.get("message") or result.get("error") or "Esito non disponibile."
-
-    return f"""<!doctype html>
-<html lang="it">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title>
-<style>
-body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#070707;color:#fff;font-family:Arial,sans-serif;padding:22px;box-sizing:border-box}}
-.box{{width:min(520px,100%);padding:28px 22px;text-align:center;border:1px solid #d7a72c;border-radius:22px;background:linear-gradient(145deg,#191919,#080808);box-shadow:0 18px 50px #0008}}
-h1{{margin:0 0 14px;color:{'#71e6a0' if ok and approved else '#ff8f8f' if ok else '#f2cf66'};font-size:32px}}
-p{{font-size:20px;line-height:1.45;color:#f5f0e6}}
-small{{display:block;margin-top:18px;color:#bdb5a7}}
-button{{margin-top:22px;padding:14px 22px;border:0;border-radius:14px;background:#d7a72c;color:#111;font-size:18px;font-weight:900}}
-</style>
-</head>
-<body>
-<div class="box">
-<h1>{title}</h1>
-<p>{message}</p>
-<small>Il Venditore riceverà automaticamente l’esito.</small>
-<button onclick="window.close();history.back()">Chiudi</button>
-</div>
-</body>
-</html>""",http_status
 
 
 @app.get("/api/push/config")
@@ -7303,7 +7233,7 @@ def _send_push(db, user_id, notification_id, title, message, kind):
             reject_token=_make_discount_action_token(request_id,user_id,"reject")
 
     actions=(
-        [{"action":"approve","title":"✅ Approva"},{"action":"reject","title":"❌ Rifiuta"}]
+        [{"action":"manage","title":"Apri richiesta"}]
         if is_discount_request and request_id else
         [{"action":"open","title":"Apri"},{"action":"mark-read","title":"Segna letta"}]
     )
@@ -7318,9 +7248,9 @@ def _send_push(db, user_id, notification_id, title, message, kind):
         "icon":"/push/icon",
         "badge":"/push/badge",
         "actions":actions,
-        "approve_token":approve_token,
-        "reject_token":reject_token,
-        "requireInteraction":bool(is_discount_request)
+        "approve_token":"",
+        "reject_token":"",
+        "requireInteraction":False
     },ensure_ascii=False)
 
     sent=failed=0
