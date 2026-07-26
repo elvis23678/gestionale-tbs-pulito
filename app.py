@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.7.0 DEV · LUXURY STUDIO RENDER"
+APP_VERSION = "v45.8.0 DEV · LUXURY PHOTO ENGINE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4071,6 +4071,21 @@ body{background:#020202}
     drop-shadow(0 13px 21px rgba(0,0,0,.50))!important;
 }
 
+
+/* v45.8.0 · Luxury Photo Engine — solo resa immagini prodotto */
+.product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img,
+.image-modal img{
+  image-rendering:auto!important;
+  filter:
+    contrast(1.018)
+    saturate(1.008)
+    drop-shadow(0 14px 22px rgba(0,0,0,.50))!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4384,6 +4399,66 @@ if(live)live.addEventListener('input',()=>{
     return {x,y,w:Math.min(w,maxX+pad+1)-x,h:Math.min(h,maxY+pad+1)-y};
   }
 
+
+  function progressiveUpscale(source,targetW,targetH){
+    let current=source;
+
+    while(current.width*1.8<targetW || current.height*1.8<targetH){
+      const next=document.createElement('canvas');
+      next.width=Math.min(targetW,Math.round(current.width*1.65));
+      next.height=Math.min(targetH,Math.round(current.height*1.65));
+      const nctx=next.getContext('2d');
+      nctx.imageSmoothingEnabled=true;
+      nctx.imageSmoothingQuality='high';
+      nctx.drawImage(current,0,0,current.width,current.height,0,0,next.width,next.height);
+      current=next;
+    }
+
+    if(current.width!==targetW || current.height!==targetH){
+      const finalCanvas=document.createElement('canvas');
+      finalCanvas.width=targetW;
+      finalCanvas.height=targetH;
+      const fctx=finalCanvas.getContext('2d');
+      fctx.imageSmoothingEnabled=true;
+      fctx.imageSmoothingQuality='high';
+      fctx.drawImage(current,0,0,current.width,current.height,0,0,targetW,targetH);
+      current=finalCanvas;
+    }
+
+    return current;
+  }
+
+  function applySubtleSharpen(canvas){
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    const w=canvas.width,h=canvas.height;
+    const src=ctx.getImageData(0,0,w,h);
+    const data=src.data;
+    const out=new Uint8ClampedArray(data);
+
+    const strength=.16;
+
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        const i=(y*w+x)*4;
+        if(data[i+3]===0) continue;
+
+        for(let c=0;c<3;c++){
+          const center=data[i+c];
+          const left=data[i-4+c];
+          const right=data[i+4+c];
+          const up=data[i-w*4+c];
+          const down=data[i+w*4+c];
+          const sharpened=center*(1+4*strength)-strength*(left+right+up+down);
+          out[i+c]=Math.max(0,Math.min(255,Math.round(sharpened)));
+        }
+      }
+    }
+
+    src.data.set(out);
+    ctx.putImageData(src,0,0);
+    return canvas;
+  }
+
   function createLuxuryBackground(ctx,w,h){
     const base=ctx.createRadialGradient(w*.50,h*.39,0,w*.50,h*.47,Math.max(w,h)*.86);
     base.addColorStop(0,'#3d260d');
@@ -4456,12 +4531,26 @@ if(live)live.addEventListener('input',()=>{
       sctx.clearRect(0,0,sw,sh);
       sctx.putImageData(pixels,0,0);
 
-      const crop=document.createElement('canvas');
-      crop.width=bounds.w;crop.height=bounds.h;
-      const cctx=crop.getContext('2d');
-      cctx.imageSmoothingEnabled=true;
-      cctx.imageSmoothingQuality='high';
-      cctx.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h,0,0,bounds.w,bounds.h);
+      const rawCrop=document.createElement('canvas');
+      rawCrop.width=bounds.w;rawCrop.height=bounds.h;
+      const rawCtx=rawCrop.getContext('2d');
+      rawCtx.imageSmoothingEnabled=true;
+      rawCtx.imageSmoothingQuality='high';
+      rawCtx.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h,0,0,bounds.w,bounds.h);
+
+      // Miglioramento prudente: ricampionamento progressivo e sharpening leggero.
+      const upscaleTarget=Math.min(1600,Math.max(900,Math.round(Math.max(bounds.w,bounds.h)*2.2)));
+      const ratio=bounds.w/bounds.h;
+      let cropW,cropH;
+      if(ratio>=1){
+        cropW=upscaleTarget;
+        cropH=Math.max(1,Math.round(upscaleTarget/ratio));
+      }else{
+        cropH=upscaleTarget;
+        cropW=Math.max(1,Math.round(upscaleTarget*ratio));
+      }
+      let crop=progressiveUpscale(rawCrop,cropW,cropH);
+      crop=applySubtleSharpen(crop);
 
       // Uscita HQ 1200×1200.
       const out=document.createElement('canvas');
@@ -4475,7 +4564,7 @@ if(live)live.addEventListener('input',()=>{
       let fit=Math.min(targetW/crop.width,targetH/crop.height);
 
       // Evita ingrandimenti distruttivi delle immagini sorgente piccole.
-      const maxUpscale=Math.max(1.15,Math.min(2.20,1400/Math.max(crop.width,crop.height)));
+      const maxUpscale=Math.max(1.20,Math.min(2.55,1700/Math.max(crop.width,crop.height)));
       fit=Math.min(fit,maxUpscale);
 
       const dw=Math.max(1,Math.round(crop.width*fit));
@@ -4512,7 +4601,7 @@ if(live)live.addEventListener('input',()=>{
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
-      const result=out.toDataURL('image/webp',.96);
+      const result=out.toDataURL('image/webp',.97);
       img.dataset.originalSrc=original;
       img.src=result;
 
