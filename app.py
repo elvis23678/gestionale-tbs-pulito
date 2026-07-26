@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.0.2 DEV · NOTIFICHE CONTRASTO HOTFIX"
+APP_VERSION = "v47.1.0 DEV · CARRELLO + IMPOSTAZIONI APP"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -553,7 +553,35 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
  .mobile-dock{left:8px!important;right:8px!important}
 }
 
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics') }}">🔔 Push Manager</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user_id') and session.get('role') in ('admin','manager') %}
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">
+<script>
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+
+  navigator.serviceWorker.addEventListener('message',function(event){
+    const data=event.data||{};
+
+    if(data.type==='discount-decision'){
+      window.setTimeout(function(){ window.location.reload(); },250);
+      return;
+    }
+
+    if(
+      data.type==='tbs-push' &&
+      ['discount_approved','discount_rejected','discount_counter'].includes(String(data.kind||''))
+    ){
+      window.setTimeout(function(){ window.location.reload(); },250);
+    }
+  });
+
+  // Forza il controllo della nuova versione del service worker dopo ogni deploy.
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.getRegistration('/').then(function(registration){
+      if(registration) registration.update().catch(function(){});
+    }).catch(function(){});
+  });
+})();
+</script>{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics') }}">🔔 Push Manager</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('more_page') }}" title="Impostazioni TBS One" aria-label="Impostazioni TBS One">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user_id') and session.get('role') in ('admin','manager') %}
 <script>
 function tbsVapidKey(value){
   const padding='='.repeat((4-value.length%4)%4);
@@ -573,7 +601,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4701',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4703',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -738,7 +766,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   await tbsRefreshPushState();
 });
 </script>
-{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/more' %}active{% endif %}" href="{{url_for('more_page')}}" aria-label="Apri altre funzioni"><span>≡</span>Altro</a></nav>{% endif %}</body></html>'''
+{% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path == '/pos' %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/cart' %}active{% endif %}" href="{{url_for('cart')}}" aria-label="Apri carrello"><span style="position:relative">🛒{% if session.get('cart') %}<b style="position:absolute;right:-11px;top:-9px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;line-height:1">{{session.get('cart')|length}}</b>{% endif %}</span>Carrello</a></nav>{% endif %}</body></html>'''
 
 ROLE_LABELS = {"admin": "Admin", "manager": "Gestore", "seller": "Venditore"}
 
@@ -6408,7 +6436,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.0.1';
+const SW_VERSION='v47.0.3';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6450,16 +6478,38 @@ function normalizeActions(data){
   ];
 }
 
+async function notifyOpenClients(data){
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  for(const client of windows){
+    try{
+      client.postMessage({
+        type:'tbs-push',
+        kind:String(data.kind||'generic'),
+        notificationId:Number(data.notification_id||0),
+        url:String(data.url||'/notifications')
+      });
+    }catch(error){}
+  }
+}
+
 async function displayPushNotification(data){
   const title=String(data.title||'TBS One');
   const targetUrl=String(data.url||'/notifications');
+  const notificationTag=String(data.tag||('tbs-one-'+Date.now()));
+
+  // Chiude vecchie copie della stessa notifica prima di mostrarne una nuova.
+  try{
+    const oldNotifications=await self.registration.getNotifications({tag:notificationTag});
+    oldNotifications.forEach(item=>item.close());
+  }catch(error){}
+
   const options={
     body:String(data.body||data.message||'Hai una nuova notifica.'),
     icon:data.icon||'/push/icon',
     badge:data.badge||'/push/badge',
-    tag:String(data.tag||('tbs-one-'+Date.now())),
+    tag:notificationTag,
     renotify:false,
-    vibrate:[180,80,180],
+    silent:true,
     requireInteraction:false,
     timestamp:Date.now(),
     actions:normalizeActions(data),
@@ -6473,12 +6523,15 @@ async function displayPushNotification(data){
       swVersion:SW_VERSION
     }
   };
+
   try{
     await self.registration.showNotification(title,options);
   }catch(firstError){
     delete options.icon;
     await self.registration.showNotification(title,options);
   }
+
+  await notifyOpenClients(data);
 }
 
 self.addEventListener('push',event=>{
@@ -6536,6 +6589,31 @@ self.addEventListener('notificationclick',event=>{
 
       if(result.ok){
         const approved = String(result.status||'') === 'Approvata';
+
+        try{
+          const current=await self.registration.getNotifications();
+          current.forEach(item=>{
+            const itemData=item.data||{};
+            if(
+              String(itemData.kind||'')==='discount_request' ||
+              String(item.tag||'').includes('discount_request')
+            ){
+              item.close();
+            }
+          });
+        }catch(error){}
+
+        const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+        for(const client of windows){
+          try{
+            client.postMessage({
+              type:'discount-decision',
+              status:approved?'Approvata':String(result.status||''),
+              requestId:Number(result.request_id||0)
+            });
+          }catch(error){}
+        }
+
         await self.registration.showNotification(
           approved ? '✅ Sconto approvato' : 'TBS One · esito inatteso',
           {
@@ -6598,7 +6676,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.0.1"
+            "X-TBS-Service-Worker-Version":"v47.0.3"
         }
     )
 
@@ -7701,82 +7779,71 @@ def dashboard():
 @login_required
 def more_page():
     role=(session.get("role") or "").strip().lower()
-    return page("Altro", r"""
+    return page("Impostazioni TBS One", r"""
 <style>
-.more-head{padding:19px 18px;margin-bottom:14px;border:1px solid rgba(231,190,91,.46);border-radius:20px;background:linear-gradient(145deg,#17140d,#080808);box-shadow:0 14px 34px rgba(0,0,0,.24)}
-.more-head small{display:block;color:#f0c966;font-weight:950;letter-spacing:.14em;margin-bottom:7px}
-.more-head h1{margin:0;color:#fff;font-size:clamp(30px,9vw,43px)}
-.more-head p{margin:8px 0 0;color:#e0dbd1;line-height:1.4}
-.more-title{margin:20px 2px 10px;color:#f2c75d;font-size:14px;font-weight:950;letter-spacing:.12em;text-transform:uppercase}
-.more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.more-card{display:flex;min-width:0;min-height:116px;padding:15px;flex-direction:column;justify-content:space-between;border:1px solid rgba(231,190,91,.42);border-radius:18px;background:linear-gradient(145deg,#181818,#080808);color:#fff!important;text-decoration:none;box-shadow:0 10px 28px rgba(0,0,0,.2)}
-.more-card:active{transform:scale(.98);border-color:#f2cb6d}
-.more-card .ico{display:grid;width:40px;height:40px;place-items:center;border:1px solid rgba(231,190,91,.46);border-radius:12px;color:#f2c75d;font-size:20px;background:#0a0a0a}
-.more-card b{display:block;margin-top:14px;color:#fff;font-size:17px;line-height:1.08;word-break:normal;overflow-wrap:normal}
-.more-card small{display:block;margin-top:5px;color:#c7c1b6;line-height:1.28}
-.more-card.logout{border-color:rgba(239,68,68,.58)}
-.more-card.logout .ico{color:#ff8a8a;border-color:rgba(239,68,68,.58)}
-@media(min-width:720px){.more-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:350px){.more-grid{grid-template-columns:1fr}.more-card{min-height:96px}}
+.settings-head{padding:19px 18px;margin-bottom:15px;border:1px solid rgba(231,190,91,.48);border-radius:20px;background:linear-gradient(145deg,#17140d,#080808);box-shadow:0 14px 34px rgba(0,0,0,.25)}
+.settings-head small{display:block;color:#f0c966;font-weight:950;letter-spacing:.14em;margin-bottom:7px}
+.settings-head h1{margin:0;color:#fff;font-size:clamp(29px,8vw,42px)}
+.settings-head p{margin:8px 0 0;color:#e0dbd1;line-height:1.42}
+.settings-title{margin:20px 2px 10px;color:#f2c75d;font-size:13px;font-weight:950;letter-spacing:.13em;text-transform:uppercase}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.settings-card{display:flex;min-width:0;min-height:118px;padding:15px;flex-direction:column;justify-content:space-between;border:1px solid rgba(231,190,91,.42);border-radius:18px;background:linear-gradient(145deg,#191919,#080808);color:#fff!important;text-decoration:none;box-shadow:0 10px 28px rgba(0,0,0,.22)}
+.settings-card:active{transform:scale(.98);border-color:#f2cb6d}
+.settings-card .ico{display:grid;width:42px;height:42px;place-items:center;border:1px solid rgba(231,190,91,.5);border-radius:13px;color:#f2c75d;font-size:21px;background:#090909}
+.settings-card b{display:block;margin-top:14px;color:#fff;font-size:17px;line-height:1.1}
+.settings-card small{display:block;margin-top:5px;color:#c9c3b8;line-height:1.3}
+.settings-card.danger{border-color:rgba(239,68,68,.56)}
+.settings-card.danger .ico{color:#ff9696;border-color:rgba(239,68,68,.58)}
+.settings-version{margin-top:18px;padding:14px 16px;border-radius:16px;border:1px solid rgba(231,190,91,.28);background:#101010;color:#d7d0c4}
+.settings-version b{color:#f2c75d}
+@media(min-width:720px){.settings-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:350px){.settings-grid{grid-template-columns:1fr}.settings-card{min-height:98px}}
 </style>
 
-<section class="more-head">
-  <small>TBS ONE · CENTRO FUNZIONI</small>
-  <h1>Altro</h1>
-  <p>Tutte le funzioni secondarie raccolte in una pagina unica.</p>
+<section class="settings-head">
+  <small>TBS ONE · CONFIGURAZIONE</small>
+  <h1>Impostazioni</h1>
+  <p>Account, sicurezza, notifiche e preferenze dell’app in un solo punto.</p>
 </section>
 
-<div class="more-title">Accesso rapido</div>
-<div class="more-grid">
-  <a class="more-card" href="{{url_for('universal_search')}}"><span class="ico">⌕</span><span><b>Ricerca</b><small>Cerca prodotti e funzioni</small></span></a>
-  <a class="more-card" href="{{url_for('notification_center')}}"><span class="ico">🔔</span><span><b>Notifiche</b><small>Avvisi e richieste ricevute</small></span></a>
-  <a class="more-card" href="{{url_for('v36_notification_preferences')}}"><span class="ico">⚙</span><span><b>Preferenze</b><small>Impostazioni delle notifiche</small></span></a>
-  <a class="more-card" href="{{url_for('change_password')}}"><span class="ico">🔑</span><span><b>Password</b><small>Modifica le credenziali</small></span></a>
-  <a class="more-card" href="{{url_for('lock_register')}}"><span class="ico">🔒</span><span><b>Blocca</b><small>Proteggi la sessione</small></span></a>
+<div class="settings-title">Account e sicurezza</div>
+<div class="settings-grid">
+  <a class="settings-card" href="{{url_for('change_password')}}"><span class="ico">🔑</span><span><b>Cambio password</b><small>Modifica la password di accesso</small></span></a>
+  <a class="settings-card" href="{{url_for('lock_register')}}"><span class="ico">🔒</span><span><b>Blocca TBS One</b><small>Proteggi subito la sessione</small></span></a>
+  <a class="settings-card danger" href="{{url_for('logout')}}"><span class="ico">↪</span><span><b>Esci dall’account</b><small>Termina la sessione corrente</small></span></a>
 </div>
 
-<div class="more-title">Vendita e catalogo</div>
-<div class="more-grid">
-  <a class="more-card" href="{{url_for('price_check')}}"><span class="ico">€</span><span><b>Controlla prezzo</b><small>Prezzo e disponibilità</small></span></a>
-  <a class="more-card" href="{{url_for('cart')}}"><span class="ico">＋</span><span><b>Carrello</b><small>Apri la vendita corrente</small></span></a>
-  <a class="more-card" href="{{url_for('suspended_carts')}}"><span class="ico">Ⅱ</span><span><b>Vendite sospese</b><small>Riprendi un carrello salvato</small></span></a>
-  <a class="more-card" href="{{url_for('scan_product')}}"><span class="ico">⌗</span><span><b>Scanner QR</b><small>Leggi un'etichetta prodotto</small></span></a>
+<div class="settings-title">Notifiche</div>
+<div class="settings-grid">
+  <a class="settings-card" href="{{url_for('notification_center')}}"><span class="ico">🔔</span><span><b>Centro notifiche</b><small>Avvisi, richieste ed esiti ricevuti</small></span></a>
+  <a class="settings-card" href="{{url_for('v36_notification_preferences')}}"><span class="ico">☑</span><span><b>Gestione notifiche</b><small>Scegli quali avvisi ricevere</small></span></a>
   {% if role in ('admin','manager') %}
-  <a class="more-card" href="{{url_for('product_qr_labels')}}"><span class="ico">▦</span><span><b>Etichette QR</b><small>Stampa etichette 35×15 mm</small></span></a>
+  <a class="settings-card" href="{{url_for('push_diagnostics')}}"><span class="ico">📲</span><span><b>Dispositivo e Push</b><small>Attivazione, test e stato notifiche</small></span></a>
   {% endif %}
-  <a class="more-card" href="{{url_for('supplier_catalog')}}"><span class="ico">◇</span><span><b>Catalogo ordinabile</b><small>Articoli disponibili su richiesta</small></span></a>
 </div>
 
-{% if role in ('admin','manager') %}
-<div class="more-title">Gestione operativa</div>
-<div class="more-grid">
-  <a class="more-card" href="{{url_for('inventory_pro')}}"><span class="ico">▦</span><span><b>Magazzino PRO</b><small>Scorte, inventario e movimenti</small></span></a>
-  <a class="more-card" href="{{url_for('reorders')}}"><span class="ico">↻</span><span><b>Riordini</b><small>Ordini al fornitore</small></span></a>
-  <a class="more-card" href="{{url_for('catalog_requests')}}"><span class="ico">□</span><span><b>Ordini catalogo</b><small>Richieste da gestire</small></span></a>
-  <a class="more-card" href="{{url_for('customer_orders')}}"><span class="ico">▤</span><span><b>Ordini boutique</b><small>Consegne e clienti in attesa</small></span></a>
-  <a class="more-card" href="{{url_for('customers_crm')}}"><span class="ico">♙</span><span><b>CRM clienti</b><small>Contatti e storico</small></span></a>
-  <a class="more-card" href="{{url_for('sales_log')}}"><span class="ico">≣</span><span><b>Registro vendite</b><small>Storico delle operazioni</small></span></a>
-  <a class="more-card" href="{{url_for('treasury')}}"><span class="ico">€</span><span><b>Tesoreria</b><small>Cassa e quadrature</small></span></a>
+<div class="settings-title">Utilità app</div>
+<div class="settings-grid">
+  <a class="settings-card" href="{{url_for('universal_search')}}"><span class="ico">⌕</span><span><b>Ricerca</b><small>Trova rapidamente prodotti e funzioni</small></span></a>
+  <a class="settings-card" href="{{url_for('scan_product')}}"><span class="ico">⌗</span><span><b>Scanner QR</b><small>Leggi un’etichetta prodotto</small></span></a>
+  <a class="settings-card" href="{{url_for('suspended_carts')}}"><span class="ico">Ⅱ</span><span><b>Vendite sospese</b><small>Riprendi un carrello salvato</small></span></a>
 </div>
-{% endif %}
 
 {% if role == 'admin' %}
-<div class="more-title">Amministrazione sistema</div>
-<div class="more-grid">
-  <a class="more-card" href="{{url_for('users')}}"><span class="ico">♟</span><span><b>Utenti</b><small>Account e badge</small></span></a>
-  <a class="more-card" href="{{url_for('v36_permissions')}}"><span class="ico">✓</span><span><b>Permessi</b><small>Ruoli e autorizzazioni</small></span></a>
-  <a class="more-card" href="{{url_for('v36_manual_notifications')}}"><span class="ico">✉</span><span><b>Invia notifica</b><small>Comunicazioni allo staff</small></span></a>
-  <a class="more-card" href="{{url_for('audit_log')}}"><span class="ico">≣</span><span><b>Storico attività</b><small>Registro delle modifiche</small></span></a>
-  <a class="more-card" href="{{url_for('system_status')}}"><span class="ico">●</span><span><b>Stato sistema</b><small>Diagnostica tecnica</small></span></a>
-  <a class="more-card" href="{{url_for('backup_database')}}"><span class="ico">⇩</span><span><b>Backup</b><small>Scarica il database</small></span></a>
+<div class="settings-title">Amministrazione software</div>
+<div class="settings-grid">
+  <a class="settings-card" href="{{url_for('users')}}"><span class="ico">👥</span><span><b>Utenti</b><small>Account, ruoli e badge</small></span></a>
+  <a class="settings-card" href="{{url_for('v36_permissions')}}"><span class="ico">🛡</span><span><b>Permessi</b><small>Accessi e limiti operativi</small></span></a>
+  <a class="settings-card" href="{{url_for('system_status')}}"><span class="ico">●</span><span><b>Stato sistema</b><small>Controlli tecnici di TBS One</small></span></a>
+  <a class="settings-card" href="{{url_for('backup_database')}}"><span class="ico">💾</span><span><b>Backup database</b><small>Scarica una copia di sicurezza</small></span></a>
 </div>
 {% endif %}
 
-<div class="more-title">Sessione</div>
-<div class="more-grid">
-  <a class="more-card logout" href="{{url_for('logout')}}"><span class="ico">↪</span><span><b>Esci</b><small>Termina la sessione corrente</small></span></a>
+<div class="settings-version">
+  <b>{{app_version}}</b><br>
+  Account: {{session.get('user')}} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(role,role) }}
 </div>
-""", role=role)
+""",role=role,app_version=APP_VERSION)
 
 @app.get("/price-check")
 @login_required
@@ -9812,9 +9879,22 @@ SELLER_ALLOWED_ENDPOINTS = {
     'home','login','logout','lock_register','unlock_register','pos','price_check',
     'products','product_detail','pos_add_code','add_to_cart','cart','update_cart','remove_from_cart',
     'clear_cart','checkout_cart','suspend_cart','suspended_carts','restore_suspended_cart_route',
-    'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer','decline_counter_offer','return_discount_to_cart','notification_center','notification_count',
-    'notification_detail','archive_notification','universal_search','change_password',
-    'supplier_catalog','request_catalog_item','static'
+    'pos_set_price','discount_request_wait','cancel_discount_request','accept_counter_offer',
+    'decline_counter_offer','return_discount_to_cart',
+
+    # Navigazione e funzioni personali del Venditore
+    'more_page','universal_search','change_password','v36_notification_preferences',
+    'notification_center','notification_count','notification_detail',
+    'notification_sales_group','archive_notification',
+
+    # Scanner e catalogo ordinabile
+    'scan_product','scan_product_check','supplier_catalog','request_catalog_item',
+
+    # Registrazione push del dispositivo del Venditore
+    'push_config','push_subscribe','push_status','push_unsubscribe',
+    'push_test','push_open','push_action',
+
+    'static'
 }
 
 @app.before_request
@@ -9823,7 +9903,8 @@ def enforce_v20_role_matrix():
     if not session.get('user_id') or request.endpoint is None:
         return None
     if session.get('role') == 'seller' and request.endpoint not in SELLER_ALLOWED_ENDPOINTS:
-        flash('Questa funzione non è disponibile per il ruolo Venditore.','error')
+        if request.method == 'GET':
+            flash('Questa funzione non è disponibile per il ruolo Venditore.','error')
         return redirect(url_for('pos'))
     return None
 
