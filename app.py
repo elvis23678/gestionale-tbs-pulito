@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.5.6 DEV · CONSERVATIVE CUTOUT"
+APP_VERSION = "v45.6.0 DEV · HQ ADAPTIVE LUXURY IMAGES"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4034,17 +4034,25 @@ body{background:#020202}
 }
 
 
-/* v45.5.6 · Scontorno conservativo: preserva metallo e pietre */
+/* v45.6.0 · HQ adaptive luxury images — solo fotografia prodotto */
 .product-image img,
 .featured-photo img,
 .product-detail>img,
 .client-cart-row img,
 .cart-item-photo img,
 .image-modal img{
+  image-rendering:auto!important;
+  transform:none!important;
+  object-fit:cover!important;
   filter:
-    contrast(1.04)
-    saturate(1.02)
-    drop-shadow(0 12px 18px rgba(0,0,0,.52))!important;
+    contrast(1.025)
+    saturate(1.01)
+    drop-shadow(0 12px 20px rgba(0,0,0,.48))!important;
+}
+.product-detail>img{
+  width:100%!important;
+  height:auto!important;
+  object-fit:contain!important;
 }
 
 """
@@ -4157,7 +4165,7 @@ if(live)live.addEventListener('input',()=>{
 });
 
 
-/* --- Conversione smart-crop delle sole foto prodotto --- */
+/* --- Motore HQ adattivo: esclusivamente fotografie prodotto --- */
 (function(){
   const PRODUCT_SELECTORS=[
     '.product-image img',
@@ -4167,150 +4175,123 @@ if(live)live.addEventListener('input',()=>{
     '.cart-item-photo img'
   ].join(',');
 
-  function isNearWhite(r,g,b,a){
-    if(a<15) return true;
-    const max=Math.max(r,g,b),min=Math.min(r,g,b);
-    return ((r+g+b)/3)>=214 && (max-min)<=52;
+  function median(values){
+    values.sort((a,b)=>a-b);
+    return values[Math.floor(values.length/2)] || 255;
   }
 
-  function createLuxuryBackground(ctx,w,h){
-    const base=ctx.createRadialGradient(w*.5,h*.4,0,w*.5,h*.47,Math.max(w,h)*.84);
-    base.addColorStop(0,'#4b2e0d');
-    base.addColorStop(.18,'#2a1b0a');
-    base.addColorStop(.46,'#11100d');
-    base.addColorStop(.76,'#080807');
-    base.addColorStop(1,'#020202');
-    ctx.fillStyle=base;
-    ctx.fillRect(0,0,w,h);
+  function sampleBackground(imageData,w,h){
+    const d=imageData.data;
+    const rs=[],gs=[],bs=[];
+    const step=Math.max(1,Math.floor(Math.min(w,h)/24));
 
-    ctx.save();
-    ctx.globalAlpha=.085;
-    for(let i=0;i<190;i++){
-      const x=(i*83)%w,y=(i*149)%h,radius=.6+(i%4)*.45;
-      ctx.fillStyle=i%7===0?'#c79a3f':(i%3===0?'#7f786d':'#4d4942');
-      ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
+    function add(x,y){
+      const p=(y*w+x)*4;
+      if(d[p+3]<20) return;
+      rs.push(d[p]); gs.push(d[p+1]); bs.push(d[p+2]);
     }
-    ctx.restore();
 
-    const halo=ctx.createRadialGradient(w*.5,h*.43,0,w*.5,h*.43,w*.34);
-    halo.addColorStop(0,'rgba(226,172,71,.24)');
-    halo.addColorStop(.42,'rgba(151,94,19,.10)');
-    halo.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=halo;ctx.fillRect(0,0,w,h);
-
-    const floor=ctx.createRadialGradient(w*.5,h*.78,0,w*.5,h*.78,w*.4);
-    floor.addColorStop(0,'rgba(0,0,0,.76)');
-    floor.addColorStop(.58,'rgba(0,0,0,.38)');
-    floor.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=floor;ctx.fillRect(0,0,w,h);
+    for(let x=0;x<w;x+=step){
+      add(x,0); add(x,h-1);
+      if(h>8){add(x,3);add(x,h-4)}
+    }
+    for(let y=0;y<h;y+=step){
+      add(0,y); add(w-1,y);
+      if(w>8){add(3,y);add(w-4,y)}
+    }
+    return {r:median(rs),g:median(gs),b:median(bs)};
   }
 
-  function removeEdgeWhite(imageData,w,h){
-    const data=imageData.data,seen=new Uint8Array(w*h);
-    const queueX=new Int32Array(w*h),queueY=new Int32Array(w*h);
+  function colorDistance(r,g,b,bg){
+    const dr=r-bg.r,dg=g-bg.g,db=b-bg.b;
+    return Math.sqrt(dr*dr+dg*dg+db*db);
+  }
+
+  function isBackgroundPixel(data,index,bg,strict=false){
+    const p=index*4;
+    const r=data[p],g=data[p+1],b=data[p+2],a=data[p+3];
+    if(a<12) return true;
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    const chroma=max-min;
+    const distance=colorDistance(r,g,b,bg);
+    return strict
+      ? distance<=15 && chroma<=18
+      : distance<=28 && chroma<=28;
+  }
+
+  function removeConnectedBackground(imageData,w,h,bg){
+    const data=imageData.data;
+    const seen=new Uint8Array(w*h);
+    const qx=new Int32Array(w*h),qy=new Int32Array(w*h);
     let head=0,tail=0;
 
-    function tryPush(x,y){
-      const index=y*w+x;
-      if(seen[index]) return;
-      const p=index*4;
-      if(!isNearWhite(data[p],data[p+1],data[p+2],data[p+3])) return;
-      seen[index]=1;queueX[tail]=x;queueY[tail]=y;tail++;
+    function push(x,y){
+      const i=y*w+x;
+      if(seen[i] || !isBackgroundPixel(data,i,bg,false)) return;
+      seen[i]=1; qx[tail]=x; qy[tail]=y; tail++;
     }
 
-    for(let x=0;x<w;x++){tryPush(x,0);tryPush(x,h-1)}
-    for(let y=0;y<h;y++){tryPush(0,y);tryPush(w-1,y)}
+    for(let x=0;x<w;x++){push(x,0);push(x,h-1)}
+    for(let y=0;y<h;y++){push(0,y);push(w-1,y)}
 
     while(head<tail){
-      const x=queueX[head],y=queueY[head];head++;
-      if(x>0) tryPush(x-1,y);
-      if(x+1<w) tryPush(x+1,y);
-      if(y>0) tryPush(x,y-1);
-      if(y+1<h) tryPush(x,y+1);
+      const x=qx[head],y=qy[head]; head++;
+      if(x>0) push(x-1,y);
+      if(x+1<w) push(x+1,y);
+      if(y>0) push(x,y-1);
+      if(y+1<h) push(x,y+1);
     }
 
-    for(let i=0;i<seen.length;i++) if(seen[i]) data[i*4+3]=0;
+    // Bordo morbido: trasparenza proporzionale alla somiglianza col fondo.
+    for(let i=0;i<seen.length;i++){
+      if(!seen[i]) continue;
+      const p=i*4;
+      const dist=colorDistance(data[p],data[p+1],data[p+2],bg);
+      data[p+3]=Math.max(0,Math.min(255,Math.round((dist-5)*15)));
+    }
     return imageData;
   }
 
-
-  function removeConservativeInnerWhite(imageData,w,h){
-    /*
-      Rimuove solo grandi zone interne quasi perfettamente bianche.
-      Soglia volutamente severa per preservare metallo, pietre e riflessi.
-    */
+  function removeLargeEnclosedBackground(imageData,w,h,bg){
+    // Rimuove solo grandi aree interne dello stesso colore del fondale:
+    // tipicamente il foro bianco di anelli e clicker.
     const data=imageData.data;
     const seen=new Uint8Array(w*h);
-    const qx=new Int32Array(w*h);
-    const qy=new Int32Array(w*h);
-
-    function isPureWhite(index){
-      const p=index*4;
-      const r=data[p],g=data[p+1],b=data[p+2],a=data[p+3];
-      if(a<20) return false;
-      const max=Math.max(r,g,b);
-      const min=Math.min(r,g,b);
-      const brightness=(r+g+b)/3;
-      return brightness>=247 && (max-min)<=16;
-    }
-
-    const minimumArea=Math.max(180,Math.round(w*h*0.012));
-    const maximumArea=Math.round(w*h*0.68);
+    const qx=new Int32Array(w*h),qy=new Int32Array(w*h);
+    const minArea=Math.max(220,Math.round(w*h*.012));
+    const maxArea=Math.round(w*h*.66);
 
     for(let sy=1;sy<h-1;sy++){
       for(let sx=1;sx<w-1;sx++){
         const start=sy*w+sx;
-        if(seen[start] || !isPureWhite(start)) continue;
+        if(seen[start] || !isBackgroundPixel(data,start,bg,true)) continue;
 
-        let head=0,tail=0;
-        let touchesBorder=false;
+        let head=0,tail=0,touches=false;
         let minX=sx,maxX=sx,minY=sy,maxY=sy;
-
-        seen[start]=1;
-        qx[tail]=sx;
-        qy[tail]=sy;
-        tail++;
+        seen[start]=1; qx[tail]=sx; qy[tail]=sy; tail++;
 
         while(head<tail){
-          const x=qx[head],y=qy[head];
-          head++;
+          const x=qx[head],y=qy[head]; head++;
+          if(x===0||y===0||x===w-1||y===h-1) touches=true;
+          if(x<minX)minX=x;if(x>maxX)maxX=x;
+          if(y<minY)minY=y;if(y>maxY)maxY=y;
 
-          if(x===0||y===0||x===w-1||y===h-1) touchesBorder=true;
-          if(x<minX) minX=x;
-          if(x>maxX) maxX=x;
-          if(y<minY) minY=y;
-          if(y>maxY) maxY=y;
-
-          if(x>0){
-            const i=y*w+x-1;
-            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x-1;qy[tail]=y;tail++}
-          }
-          if(x+1<w){
-            const i=y*w+x+1;
-            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x+1;qy[tail]=y;tail++}
-          }
-          if(y>0){
-            const i=(y-1)*w+x;
-            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x;qy[tail]=y-1;tail++}
-          }
-          if(y+1<h){
-            const i=(y+1)*w+x;
-            if(!seen[i]&&isPureWhite(i)){seen[i]=1;qx[tail]=x;qy[tail]=y+1;tail++}
+          const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+          for(const [nx,ny] of ns){
+            if(nx<0||ny<0||nx>=w||ny>=h) continue;
+            const ni=ny*w+nx;
+            if(seen[ni]||!isBackgroundPixel(data,ni,bg,true)) continue;
+            seen[ni]=1;qx[tail]=nx;qy[tail]=ny;tail++;
           }
         }
 
-        if(touchesBorder || tail<minimumArea || tail>maximumArea) continue;
+        if(touches||tail<minArea||tail>maxArea) continue;
+        const bw=maxX-minX+1,bh=maxY-minY+1;
+        const aspect=Math.max(bw,bh)/Math.max(1,Math.min(bw,bh));
+        const fill=tail/Math.max(1,bw*bh);
 
-        const boxW=maxX-minX+1;
-        const boxH=maxY-minY+1;
-        const aspect=Math.max(boxW,boxH)/Math.max(1,Math.min(boxW,boxH));
-        const fillRatio=tail/Math.max(1,boxW*boxH);
-
-        // Accetta solo regioni ampie, compatte e simili al foro di un anello.
-        if(aspect<=2.8 && fillRatio>=0.55){
-          for(let i=0;i<tail;i++){
-            data[(qy[i]*w+qx[i])*4+3]=0;
-          }
+        if(aspect<=3.0 && fill>=.48){
+          for(let i=0;i<tail;i++) data[(qy[i]*w+qx[i])*4+3]=0;
         }
       }
     }
@@ -4318,25 +4299,58 @@ if(live)live.addEventListener('input',()=>{
   }
 
   function alphaBounds(imageData,w,h){
-    const data=imageData.data;
+    const d=imageData.data;
     let minX=w,minY=h,maxX=-1,maxY=-1;
     for(let y=0;y<h;y++){
       for(let x=0;x<w;x++){
-        if(data[(y*w+x)*4+3]>22){
-          if(x<minX) minX=x;if(x>maxX) maxX=x;
-          if(y<minY) minY=y;if(y>maxY) maxY=y;
+        if(d[(y*w+x)*4+3]>18){
+          if(x<minX)minX=x;if(x>maxX)maxX=x;
+          if(y<minY)minY=y;if(y>maxY)maxY=y;
         }
       }
     }
     if(maxX<minX||maxY<minY) return null;
-    const pad=Math.max(3,Math.round(Math.max(maxX-minX,maxY-minY)*.035));
+    const pad=Math.max(4,Math.round(Math.max(maxX-minX,maxY-minY)*.045));
     const x=Math.max(0,minX-pad),y=Math.max(0,minY-pad);
     return {x,y,w:Math.min(w,maxX+pad+1)-x,h:Math.min(h,maxY+pad+1)-y};
+  }
+
+  function createLuxuryBackground(ctx,w,h){
+    const base=ctx.createRadialGradient(w*.50,h*.39,0,w*.50,h*.47,Math.max(w,h)*.86);
+    base.addColorStop(0,'#3d260d');
+    base.addColorStop(.20,'#21160a');
+    base.addColorStop(.48,'#0f0e0c');
+    base.addColorStop(.78,'#070706');
+    base.addColorStop(1,'#020202');
+    ctx.fillStyle=base;ctx.fillRect(0,0,w,h);
+
+    // Velluto/ardesia molto fine.
+    ctx.save();
+    ctx.globalAlpha=.055;
+    for(let i=0;i<360;i++){
+      const x=(i*97)%w,y=(i*163)%h;
+      const radius=.45+(i%3)*.35;
+      ctx.fillStyle=i%9===0?'#b88731':'#6b665e';
+      ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+
+    const halo=ctx.createRadialGradient(w*.50,h*.43,0,w*.50,h*.43,w*.31);
+    halo.addColorStop(0,'rgba(215,155,52,.18)');
+    halo.addColorStop(.48,'rgba(117,73,18,.07)');
+    halo.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=halo;ctx.fillRect(0,0,w,h);
+
+    const vignette=ctx.createRadialGradient(w*.5,h*.5,w*.22,w*.5,h*.5,w*.72);
+    vignette.addColorStop(0,'rgba(0,0,0,0)');
+    vignette.addColorStop(1,'rgba(0,0,0,.58)');
+    ctx.fillStyle=vignette;ctx.fillRect(0,0,w,h);
   }
 
   async function luxuryImage(img){
     if(!img||img.dataset.luxuryDone==='1') return;
     img.dataset.luxuryDone='1';
+
     try{
       if(!img.complete){
         await new Promise((resolve,reject)=>{
@@ -4347,79 +4361,85 @@ if(live)live.addEventListener('input',()=>{
       if(!img.naturalWidth||!img.naturalHeight) return;
 
       const original=img.currentSrc||img.src;
-      if(!original||original.startsWith('blob:')) return;
+      if(!original||original.startsWith('blob:')||original.startsWith('data:image/webp')) return;
 
-      const maxSide=760;
-      const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
-      const sw=Math.max(1,Math.round(img.naturalWidth*scale));
-      const sh=Math.max(1,Math.round(img.naturalHeight*scale));
+      // Mai ridurre inutilmente l'originale; canvas sorgente fino a 1400 px.
+      const maxSource=1400;
+      const sourceScale=Math.min(1,maxSource/Math.max(img.naturalWidth,img.naturalHeight));
+      const sw=Math.max(1,Math.round(img.naturalWidth*sourceScale));
+      const sh=Math.max(1,Math.round(img.naturalHeight*sourceScale));
 
-      const sourceCanvas=document.createElement('canvas');
-      sourceCanvas.width=sw;sourceCanvas.height=sh;
-      const sourceCtx=sourceCanvas.getContext('2d',{willReadFrequently:true});
-      sourceCtx.drawImage(img,0,0,sw,sh);
+      const source=document.createElement('canvas');
+      source.width=sw;source.height=sh;
+      const sctx=source.getContext('2d',{willReadFrequently:true});
+      sctx.imageSmoothingEnabled=true;
+      sctx.imageSmoothingQuality='high';
+      sctx.drawImage(img,0,0,sw,sh);
 
-      let pixels=sourceCtx.getImageData(0,0,sw,sh);
-      pixels=removeEdgeWhite(pixels,sw,sh);
-      pixels=removeConservativeInnerWhite(pixels,sw,sh);
+      let pixels=sctx.getImageData(0,0,sw,sh);
+      const bg=sampleBackground(pixels,sw,sh);
+      pixels=removeConnectedBackground(pixels,sw,sh,bg);
+      pixels=removeLargeEnclosedBackground(pixels,sw,sh,bg);
       const bounds=alphaBounds(pixels,sw,sh);
       if(!bounds) return;
 
-      sourceCtx.clearRect(0,0,sw,sh);
-      sourceCtx.putImageData(pixels,0,0);
+      sctx.clearRect(0,0,sw,sh);
+      sctx.putImageData(pixels,0,0);
 
       const crop=document.createElement('canvas');
       crop.width=bounds.w;crop.height=bounds.h;
-      crop.getContext('2d').drawImage(
-        sourceCanvas,bounds.x,bounds.y,bounds.w,bounds.h,
-        0,0,bounds.w,bounds.h
-      );
+      const cctx=crop.getContext('2d');
+      cctx.imageSmoothingEnabled=true;
+      cctx.imageSmoothingQuality='high';
+      cctx.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h,0,0,bounds.w,bounds.h);
 
+      // Uscita HQ 1200×1200.
       const out=document.createElement('canvas');
-      out.width=700;out.height=700;
+      out.width=1200;out.height=1200;
       const ctx=out.getContext('2d');
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const targetW=out.width*.80,targetH=out.height*.78;
-      const fit=Math.min(targetW/crop.width,targetH/crop.height);
+      const targetW=out.width*.78,targetH=out.height*.76;
+      let fit=Math.min(targetW/crop.width,targetH/crop.height);
+
+      // Evita ingrandimenti distruttivi delle immagini sorgente piccole.
+      const maxUpscale=Math.max(1.15,Math.min(2.20,1400/Math.max(crop.width,crop.height)));
+      fit=Math.min(fit,maxUpscale);
+
       const dw=Math.max(1,Math.round(crop.width*fit));
       const dh=Math.max(1,Math.round(crop.height*fit));
       const dx=Math.round((out.width-dw)/2);
-      const dy=Math.round((out.height-dh)/2-10);
+      const dy=Math.round((out.height-dh)/2-8);
 
       const contact=ctx.createRadialGradient(
-        out.width*.5,Math.min(out.height*.84,dy+dh*.86),0,
-        out.width*.5,Math.min(out.height*.84,dy+dh*.86),Math.max(dw,dh)*.34
+        out.width*.5,Math.min(out.height*.83,dy+dh*.88),0,
+        out.width*.5,Math.min(out.height*.83,dy+dh*.88),Math.max(dw,dh)*.32
       );
-      contact.addColorStop(0,'rgba(0,0,0,.70)');
+      contact.addColorStop(0,'rgba(0,0,0,.66)');
       contact.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=contact;ctx.fillRect(0,0,out.width,out.height);
 
       ctx.save();
-      ctx.shadowColor='rgba(0,0,0,.86)';
-      ctx.shadowBlur=34;ctx.shadowOffsetY=24;
-      ctx.filter='contrast(1.16) saturate(1.06) brightness(1.06)';
+      ctx.shadowColor='rgba(0,0,0,.82)';
+      ctx.shadowBlur=42;ctx.shadowOffsetY=28;
+      ctx.filter='contrast(1.08) saturate(1.03) brightness(1.03)';
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
       ctx.save();
-      ctx.globalCompositeOperation='screen';
-      ctx.globalAlpha=.07;
-      ctx.shadowColor='#e2ad49';ctx.shadowBlur=22;
+      ctx.globalAlpha=.98;
+      ctx.filter='contrast(1.10) saturate(1.025) brightness(1.015)';
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
-      ctx.save();
-      ctx.globalAlpha=.96;
-      ctx.filter='contrast(1.20) saturate(1.05) brightness(1.03)';
-      ctx.drawImage(crop,dx,dy,dw,dh);
-      ctx.restore();
-
-      const result=out.toDataURL('image/webp',.93);
+      const result=out.toDataURL('image/webp',.96);
       img.dataset.originalSrc=original;
       img.src=result;
-      const productLink=img.closest('.product-image[data-image]');
-      if(productLink) productLink.dataset.image=result;
+
+      const link=img.closest('.product-image[data-image]');
+      if(link) link.dataset.image=result;
     }catch(error){
       img.dataset.luxuryDone='error';
       console.warn('Foto luxury non elaborata:',error);
@@ -4429,9 +4449,9 @@ if(live)live.addEventListener('input',()=>{
   function processProductImages(root=document){
     root.querySelectorAll(PRODUCT_SELECTORS).forEach((img,index)=>{
       if('requestIdleCallback' in window){
-        requestIdleCallback(()=>luxuryImage(img),{timeout:900+index*70});
+        requestIdleCallback(()=>luxuryImage(img),{timeout:1000+index*80});
       }else{
-        setTimeout(()=>luxuryImage(img),70+index*70);
+        setTimeout(()=>luxuryImage(img),80+index*80);
       }
     });
   }
@@ -4448,8 +4468,7 @@ if(live)live.addEventListener('input',()=>{
       if(mutation.type==='attributes'&&mutation.target.matches?.(PRODUCT_SELECTORS)){
         const img=mutation.target;
         if(img.src!==img.dataset.originalSrc&&!img.src.startsWith('data:image/webp')){
-          img.dataset.luxuryDone='0';
-          luxuryImage(img);
+          img.dataset.luxuryDone='0';luxuryImage(img);
         }
       }
     }
