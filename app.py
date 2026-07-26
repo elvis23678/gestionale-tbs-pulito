@@ -126,7 +126,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.0.0 DEV · PUSH FOUNDATION"
+APP_VERSION = "v46.1.0 DEV · PUSH MANAGER"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -551,57 +551,185 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
  .mobile-dock{left:8px!important;right:8px!important}
 }
 
-</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user_id') and session.get('role') in ('admin','manager') %}
+</style></head><body class="{% if request.path in ('/pos','/cart') %}pos-page{% elif request.path.startswith('/products') %}catalog-page{% endif %}">{% if session.get("user") %}<header class="main-header"><a class="header-brand" href="{{ url_for('home') }}"><strong>TBS ONE</strong><span>BUSINESS OPERATING SYSTEM</span></a><nav class="main-nav" aria-label="Navigazione principale"><a class="nav-direct" href="{{ url_for('home') }}">🏠 Home</a><a class="nav-direct" href="{{ url_for('universal_search') }}">🔎 Ricerca</a><details class="nav-group"><summary>💳 Vendita</summary><div class="nav-dropdown"><a href="{{ url_for('pos') }}">💰 CASSA</a><a href="{{ url_for('price_check') }}">Assistente banco</a><a href="{{ url_for('cart') }}">Carrello{% if session.get('cart') %} ({{ session.get('cart')|length }}){% endif %}</a><a href="{{ url_for('suspended_carts') }}">Vendite sospese</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('sales_log') }}">Registro vendite</a>{% endif %}{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('discount_approvals') }}">🔔 Autorizzazioni sconto<span data-discount-count></span></a><a href="{{ url_for('discount_settings') }}">⚙️ Margini sconto</a>{% endif %}</div></details><details class="nav-group"><summary>💎 Magazzino</summary><div class="nav-dropdown"><a href="{{ url_for('products') }}">Prodotti</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('inventory_pro') }}">Magazzino PRO</a>{% endif %}<a href="{{ url_for('supplier_catalog') }}">Catalogo ordinabile</a>{% if session.get('role') in ('admin','manager') %}<a href="{{ url_for('reorders') }}">Riordini fornitore</a>{% endif %}</div></details>{% if session.get('role') in ('admin','manager') %}<details class="nav-group"><summary>📦 Ordini</summary><div class="nav-dropdown"><a href="{{ url_for('catalog_requests') }}">Ordini catalogo</a><a href="{{ url_for('customer_orders') }}">Ordini boutique</a><a href="{{ url_for('customers_crm') }}">CRM Clienti</a></div></details><details class="nav-group"><summary>💰 Amministrazione</summary><div class="nav-dropdown"><a href="{{ url_for('treasury') }}">Tesoreria</a></div></details>{% endif %}{% if session.get('role') == 'admin' %}<details class="nav-group"><summary>⚙️ Sistema</summary><div class="nav-dropdown nav-dropdown-right"><a href="{{ url_for('users') }}">Utenti</a><a href="{{ url_for('v36_permissions') }}">Permessi e sconti</a><a href="{{ url_for('v36_manual_notifications') }}">Invia notifica</a><a href="{{ url_for('audit_log') }}">Storico attività</a><a href="{{ url_for('system_status') }}">Stato sistema</a><a href="{{ url_for('push_diagnostics') }}">🔔 Push Manager</a><a href="{{ url_for('backup_database') }}">Backup database</a></div></details>{% endif %}</nav><div class="user-menu"><span class="user-label">{{ session.get('user') }} · {{ {'admin':'Admin','manager':'Gestore','seller':'Venditore'}.get(session.get('role'), session.get('role')) }}</span><a class="header-icon" href="{{ url_for('notification_center') }}" title="Notifiche" aria-label="Notifiche" style="position:relative">🔔<span id="notificationBadge" style="display:none;position:absolute;right:-5px;top:-7px;background:#dc2626;color:white;border-radius:999px;min-width:18px;height:18px;padding:0 4px;font-size:11px;align-items:center;justify-content:center;font-weight:900"></span></a><a class="header-icon" href="{{ url_for('v36_notification_preferences') }}" title="Preferenze notifiche" aria-label="Preferenze notifiche">⚙️</a><a class="header-icon" href="{{ url_for('change_password') }}" title="Cambia password" aria-label="Cambia password">🔑</a><a class="header-icon" href="{{ url_for('lock_register') }}" title="Blocca gestionale" aria-label="Blocca gestionale">🔒</a><a class="logout-link" href="{{ url_for('logout') }}" title="Esci" aria-label="Esci"><span aria-hidden="true">↪</span><b>Esci</b></a></div></header>{% endif %}<main>{% if session.get("role") == "admin" and db_is_ephemeral %}<div class="flash" style="border-left:5px solid #b45309"><b>Attenzione:</b> il database è su memoria temporanea. Configura un disco persistente o DATABASE_PATH prima del prossimo aggiornamento.</div>{% endif %}<div class="toast-stack" id="toastStack">{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="toast toast-{{ category if category in ('success','info','warning','error') else 'info' }}">{{ message }}</div>{% endfor %}{% endwith %}</div>{{ body|safe }}</main>{% if session.get('user_id') %}<script>(function(){const timeout={{ lock_timeout_ms }};const lockUrl="{{ url_for('lock_register') }}?auto=1";let lastActivity=Date.now();let locked=false;function markActivity(){lastActivity=Date.now()}function checkIdle(){if(locked)return;if(Date.now()-lastActivity>=timeout){locked=true;window.location.replace(lockUrl)}}['pointerdown','pointermove','keydown','touchstart','wheel','scroll'].forEach(e=>document.addEventListener(e,markActivity,{passive:true}));document.addEventListener('visibilitychange',function(){if(!document.hidden)checkIdle()});window.addEventListener('focus',checkIdle);setInterval(checkIdle,1000);document.addEventListener('click',function(e){document.querySelectorAll('.nav-group[open]').forEach(function(group){if(!group.contains(e.target))group.removeAttribute('open')})});{% if session.get('role') in ('admin','manager') %}let lastPending=0;async function checkDiscounts(){try{const r=await fetch("{{url_for('discount_pending_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();if(d.count>lastPending&&d.count>0&&'Notification' in window&&Notification.permission==='granted'){new Notification('TBS · richiesta sconto',{body:d.count===1?'Hai una richiesta da autorizzare':'Hai '+d.count+' richieste da autorizzare'});}lastPending=d.count;document.querySelectorAll('[data-discount-count]').forEach(el=>{el.textContent=d.count?(' '+d.count):'';});}catch(e){}}if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',function ask(){Notification.requestPermission();document.removeEventListener('click',ask)},{once:true});}async function checkInternalNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(!b)return;if(d.count>0){b.textContent=d.count>99?'99+':d.count;b.style.display='inline-flex';}else{b.style.display='none';}}catch(e){}}checkDiscounts();checkInternalNotifications();setInterval(checkDiscounts,8000);setInterval(checkInternalNotifications,10000);{% endif %}{% if session.get('role') == 'seller' %}async function checkSellerNotifications(){try{const r=await fetch("{{url_for('notification_count')}}",{cache:'no-store'});if(!r.ok)return;const d=await r.json();const b=document.getElementById('notificationBadge');if(d.count>0){b.textContent=d.count;b.style.display='inline-flex';}else b.style.display='none';}catch(e){}}checkSellerNotifications();setInterval(checkSellerNotifications,6000);{% endif %}})();</script>{% endif %}<script>setTimeout(function(){document.querySelectorAll('.toast-stack .toast').forEach(function(el){el.classList.add('toast-hide');setTimeout(function(){el.remove()},450)})},4000);</script>{% if session.get('user_id') and session.get('role') in ('admin','manager') %}
 <script>
-function tbsVapidKey(s){
-  const p='='.repeat((4-s.length%4)%4);
-  const b=(s+p).replace(/-/g,'+').replace(/_/g,'/');
-  return Uint8Array.from([...atob(b)].map(c=>c.charCodeAt(0)));
+function tbsVapidKey(value){
+  const padding='='.repeat((4-value.length%4)%4);
+  const base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/');
+  return Uint8Array.from([...atob(base64)].map(c=>c.charCodeAt(0)));
 }
-async function tbsEnablePush(){
+
+function tbsPushMessage(message,isError=false){
   const status=document.getElementById('pushStatus');
+  if(status){
+    status.textContent=(isError?'❌ ':'✅ ')+message;
+    status.style.color=isError?'#b91c1c':'#166534';
+  }
+}
+
+async function tbsPushRegistration(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+    throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
+  }
+  return navigator.serviceWorker.register('/push-sw.js',{scope:'/'});
+}
+
+async function tbsCurrentSubscription(){
+  const registration=await tbsPushRegistration();
+  await navigator.serviceWorker.ready;
+  const subscription=await registration.pushManager.getSubscription();
+  return {registration,subscription};
+}
+
+async function tbsRefreshPushState(){
+  const panel=document.getElementById('pushManagerState');
+  if(!panel) return;
+
   try{
-    if(!('serviceWorker' in navigator)||!('PushManager' in window))
-      throw new Error('Browser non compatibile.');
-    const cfg=await fetch('/api/push/config',{cache:'no-store'}).then(r=>r.json());
-    if(!cfg.configured) throw new Error('Server push non configurato.');
-    if(await Notification.requestPermission()!=='granted')
-      throw new Error('Permesso notifiche non concesso.');
-    const reg=await navigator.serviceWorker.register(cfg.serviceWorker,{scope:'/'});
-    await navigator.serviceWorker.ready;
-    let sub=await reg.pushManager.getSubscription();
-    if(!sub){
-      sub=await reg.pushManager.subscribe({
+    const supported=('serviceWorker' in navigator)&&('PushManager' in window);
+    const permission=('Notification' in window)?Notification.permission:'unsupported';
+    let subscription=null;
+
+    if(supported){
+      const current=await tbsCurrentSubscription();
+      subscription=current.subscription;
+    }
+
+    let server={registered:false,active_devices:0};
+    if(subscription){
+      const endpoint=encodeURIComponent(subscription.endpoint);
+      server=await fetch('/api/push/status?endpoint='+endpoint,{
+        cache:'no-store'
+      }).then(r=>r.json());
+    }else{
+      server=await fetch('/api/push/status',{cache:'no-store'}).then(r=>r.json());
+    }
+
+    const permissionText={
+      granted:'✅ Autorizzato',
+      denied:'❌ Bloccato da Chrome',
+      default:'⚠️ Non ancora richiesto',
+      unsupported:'❌ Non supportato'
+    }[permission]||permission;
+
+    panel.innerHTML=
+      '<p><b>Browser:</b> '+(supported?'✅ Compatibile':'❌ Non compatibile')+'</p>'+
+      '<p><b>Permesso:</b> '+permissionText+'</p>'+
+      '<p><b>Registrazione browser:</b> '+(subscription?'✅ Presente':'⚠️ Assente')+'</p>'+
+      '<p><b>Registrazione TBS One:</b> '+(server.registered?'✅ Attiva':'⚠️ Assente')+'</p>'+
+      '<p><b>Dispositivi attivi:</b> '+(server.active_devices||0)+'</p>';
+  }catch(error){
+    panel.innerHTML='<p>❌ Impossibile leggere lo stato: '+error.message+'</p>';
+  }
+}
+
+async function tbsEnablePush(){
+  try{
+    if(!('Notification' in window)){
+      throw new Error('Notifiche non supportate.');
+    }
+
+    const config=await fetch('/api/push/config',{
+      cache:'no-store'
+    }).then(r=>r.json());
+
+    if(!config.configured){
+      throw new Error('Server push non configurato.');
+    }
+
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted'){
+      throw new Error(
+        permission==='denied'
+          ? 'Permesso bloccato. Apri Chrome → Impostazioni sito → Notifiche.'
+          : 'Permesso notifiche non concesso.'
+      );
+    }
+
+    const current=await tbsCurrentSubscription();
+    let subscription=current.subscription;
+
+    if(!subscription){
+      subscription=await current.registration.pushManager.subscribe({
         userVisibleOnly:true,
-        applicationServerKey:tbsVapidKey(cfg.publicKey)
+        applicationServerKey:tbsVapidKey(config.publicKey)
       });
     }
-    const result=await fetch('/api/push/subscribe',{
+
+    const response=await fetch('/api/push/subscribe',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        subscription:sub.toJSON(),
-        platform:navigator.userAgentData?.platform||navigator.platform||''
+        subscription:subscription.toJSON(),
+        platform:navigator.userAgentData?.platform||
+                 navigator.platform||
+                 'Android Chrome'
       })
     }).then(r=>r.json());
-    if(!result.ok) throw new Error(result.error||'Registrazione fallita');
-    if(status) status.textContent='✅ Notifiche attive su questo dispositivo.';
+
+    if(!response.ok){
+      throw new Error(response.error||'Registrazione fallita.');
+    }
+
+    tbsPushMessage('Notifiche attivate su questo dispositivo.');
+    await tbsRefreshPushState();
     return true;
-  }catch(e){
-    if(status) status.textContent='❌ '+e.message;
+  }catch(error){
+    tbsPushMessage(error.message,true);
+    await tbsRefreshPushState();
     return false;
   }
 }
+
 async function tbsTestPush(){
-  const status=document.getElementById('pushStatus');
   if(!await tbsEnablePush()) return;
-  const r=await fetch('/api/push/test',{method:'POST'}).then(x=>x.json());
-  if(status) status.textContent=r.ok
-    ?'✅ Notifica di prova inviata.'
-    :'❌ '+(r.result?.reason||r.error||'Invio fallito');
+
+  try{
+    const response=await fetch('/api/push/test',{
+      method:'POST'
+    }).then(r=>r.json());
+
+    if(!response.ok){
+      throw new Error(
+        response.error||
+        response.result?.reason||
+        'Invio della prova non riuscito.'
+      );
+    }
+
+    tbsPushMessage('Notifica di prova inviata. Chiudi Chrome e attendi qualche secondo.');
+  }catch(error){
+    tbsPushMessage(error.message,true);
+  }
 }
-document.addEventListener('DOMContentLoaded',()=>{
-  navigator.serviceWorker?.register('/push-sw.js',{scope:'/'}).catch(()=>{});
+
+async function tbsDisablePush(){
+  try{
+    const current=await tbsCurrentSubscription();
+    const endpoint=current.subscription?.endpoint||'';
+
+    if(current.subscription){
+      await current.subscription.unsubscribe();
+    }
+
+    await fetch('/api/push/unsubscribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint})
+    });
+
+    tbsPushMessage('Notifiche disattivate su questo dispositivo.');
+    await tbsRefreshPushState();
+  }catch(error){
+    tbsPushMessage(error.message,true);
+  }
+}
+
+document.addEventListener('DOMContentLoaded',async()=>{
+  try{
+    await tbsPushRegistration();
+  }catch(_){}
+  await tbsRefreshPushState();
 });
 </script>
 {% endif %}{% if session.get('user') %}<nav class="mobile-dock" aria-label="Navigazione mobile"><a class="{% if request.path in ('/','/home','/dashboard-smart') %}active{% endif %}" href="{{url_for('home')}}"><span>⌂</span>Home</a><a class="{% if request.path in ('/pos','/cart') %}active{% endif %}" href="{{url_for('pos')}}"><span>€</span>Cassa</a><a class="{% if request.path.startswith('/products') or request.path == '/scan-product' %}active{% endif %}" href="{{url_for('products')}}"><span>◇</span>Catalogo</a>{% if session.get('role') in ('admin','manager') %}<a class="{% if request.path.startswith('/catalog-requests') or request.path.startswith('/customer-orders') %}active{% endif %}" href="{{url_for('catalog_requests')}}"><span>□</span>Ordini</a>{% else %}<a class="{% if request.path.startswith('/search') %}active{% endif %}" href="{{url_for('universal_search')}}"><span>⌕</span>Cerca</a>{% endif %}<a class="{% if request.path == '/more' %}active{% endif %}" href="{{url_for('more_page')}}" aria-label="Apri altre funzioni"><span>≡</span>Altro</a></nav>{% endif %}</body></html>'''
@@ -6366,6 +6494,78 @@ def push_subscribe():
     return jsonify({"ok":True})
 
 
+
+@app.get("/api/push/status")
+@login_required
+def push_status():
+    if session.get("role") not in ("admin","manager"):
+        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+
+    endpoint=(request.args.get("endpoint") or "").strip()
+    with connect() as db:
+        if endpoint:
+            row=db.execute(
+                """SELECT id,username,role,platform,enabled,created_at,
+                          updated_at,last_success_at,last_error_at,last_error
+                   FROM push_devices
+                   WHERE endpoint=? AND user_id=?
+                   LIMIT 1""",
+                (endpoint,session["user_id"])
+            ).fetchone()
+        else:
+            row=db.execute(
+                """SELECT id,username,role,platform,enabled,created_at,
+                          updated_at,last_success_at,last_error_at,last_error
+                   FROM push_devices
+                   WHERE user_id=?
+                   ORDER BY updated_at DESC LIMIT 1""",
+                (session["user_id"],)
+            ).fetchone()
+
+        device_count=db.execute(
+            "SELECT COUNT(*) c FROM push_devices WHERE user_id=? AND enabled=1",
+            (session["user_id"],)
+        ).fetchone()["c"]
+
+    return jsonify({
+        "ok":True,
+        "configured":PUSH_SERVER_READY,
+        "permission_hint":"browser",
+        "registered":bool(row and row["enabled"]),
+        "active_devices":device_count,
+        "device":dict(row) if row else None
+    })
+
+
+@app.post("/api/push/unsubscribe")
+@login_required
+def push_unsubscribe():
+    if session.get("role") not in ("admin","manager"):
+        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+
+    data=request.get_json(silent=True) or {}
+    endpoint=(data.get("endpoint") or "").strip()
+
+    with connect() as db:
+        if endpoint:
+            db.execute(
+                """UPDATE push_devices
+                   SET enabled=0,updated_at=CURRENT_TIMESTAMP
+                   WHERE endpoint=? AND user_id=?""",
+                (endpoint,session["user_id"])
+            )
+        else:
+            db.execute(
+                """UPDATE push_devices
+                   SET enabled=0,updated_at=CURRENT_TIMESTAMP
+                   WHERE user_id=?""",
+                (session["user_id"],)
+            )
+        db.commit()
+
+    return jsonify({"ok":True})
+
+
 @app.post("/api/push/test")
 @login_required
 def push_test():
@@ -6417,15 +6617,88 @@ def push_diagnostics():
         logs=[dict(x) for x in db.execute(
             "SELECT * FROM push_delivery_log ORDER BY id DESC LIMIT 30"
         ).fetchall()]
-    return jsonify({
-        "version":APP_VERSION,
-        "server_ready":PUSH_SERVER_READY,
-        "module_available":WEBPUSH_AVAILABLE,
-        "public_key":bool(PUSH_VAPID_PUBLIC_KEY),
-        "private_key":bool(PUSH_VAPID_PRIVATE_KEY),
-        "devices":devices,
-        "recent_deliveries":logs
-    })
+
+    body="""<div class="dash-head">
+      <div>
+        <span class="eyebrow">TBS ONE MOBILE</span>
+        <h1>🔔 Push Manager</h1>
+        <p class="muted">Attiva, prova e controlla le notifiche del dispositivo.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Questo dispositivo</h2>
+      <div id="pushManagerState" class="push-manager-state">
+        <b>Controllo in corso…</b>
+      </div>
+      <div class="actions" style="margin-top:14px">
+        <button type="button" onclick="tbsEnablePush()">Attiva notifiche</button>
+        <button type="button" class="secondary" onclick="tbsTestPush()">Invia prova</button>
+        <button type="button" class="danger" onclick="tbsDisablePush()">Disattiva</button>
+      </div>
+      <p id="pushStatus" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>Stato infrastruttura</h2>
+      <div class="table-wrap"><table>
+        <tbody>
+          <tr><td>Versione</td><td><b>{{version}}</b></td></tr>
+          <tr><td>Server Web Push</td><td>{{'✅ Pronto' if ready else '❌ Non configurato'}}</td></tr>
+          <tr><td>Modulo pywebpush</td><td>{{'✅ Disponibile' if module else '❌ Mancante'}}</td></tr>
+          <tr><td>Chiave pubblica</td><td>{{'✅ Presente' if public_key else '❌ Mancante'}}</td></tr>
+          <tr><td>Chiave privata</td><td>{{'✅ Presente' if private_key else '❌ Mancante'}}</td></tr>
+          <tr><td>Service Worker</td><td><a href="/push-sw.js" target="_blank">Apri controllo</a></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Dispositivi registrati</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Utente</th><th>Piattaforma</th><th>Stato</th><th>Ultimo successo</th><th>Errore</th></tr></thead>
+        <tbody>
+        {% for d in devices %}
+          <tr>
+            <td><b>{{d.username}}</b><br><small>{{d.role}}</small></td>
+            <td>{{d.platform or 'Browser'}}</td>
+            <td>{{'✅ Attivo' if d.enabled else '⛔ Disattivato'}}</td>
+            <td>{{d.last_success_at or 'Mai'}}</td>
+            <td>{{d.last_error or '—'}}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">Nessun dispositivo registrato.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Ultimi invii</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Data</th><th>Stato</th><th>Dettaglio</th></tr></thead>
+        <tbody>
+        {% for r in logs %}
+          <tr>
+            <td>{{r.created_at}}</td>
+            <td>{{'✅ Inviata' if r.status=='sent' else '❌ Fallita'}}</td>
+            <td>{{r.detail or '—'}}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3">Nessun invio registrato.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+    """
+    return page(
+        "Push Manager",body,
+        version=APP_VERSION,ready=PUSH_SERVER_READY,
+        module=WEBPUSH_AVAILABLE,
+        public_key=bool(PUSH_VAPID_PUBLIC_KEY),
+        private_key=bool(PUSH_VAPID_PRIVATE_KEY),
+        devices=devices,logs=logs
+    )
 
 
 @app.get("/health")
@@ -9970,7 +10243,7 @@ def v36_notification_preferences():
         rows={r['event_type']:r for r in db.execute('SELECT * FROM notification_preferences WHERE user_id=?',(uid,)).fetchall()}
     grouped={}
     for key,(cat,label) in V36_NOTIFICATION_DEFS.items(): grouped.setdefault(cat,[]).append((key,label))
-    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div>{% if session.get('role') in ('admin','manager') %}<div class="card"><h2>Notifiche su questo dispositivo</h2><p>Ricevi gli avvisi anche con TBS One chiuso.</p><div class="actions"><button type="button" onclick="tbsEnablePush()">Attiva notifiche</button><button type="button" class="secondary" onclick="tbsTestPush()">Invia prova</button><a class="secondary" href="{{url_for('push_diagnostics')}}">Diagnostica tecnica</a></div><p id="pushStatus" class="muted"></p></div>{% endif %}<form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
+    body='''<div class="dash-head"><div><span class="eyebrow">PERSONALIZZAZIONE</span><h1>🔔 Preferenze notifiche</h1><p class="muted">Scegli quali avvisi ricevere e quali mostrare anche come pop-up.</p></div></div>{% if session.get('role') in ('admin','manager') %}<div class="card"><h2>🔔 Notifiche su questo dispositivo</h2><div id="pushManagerState"><b>Controllo in corso…</b></div><div class="actions" style="margin-top:14px"><button type="button" onclick="tbsEnablePush()">Attiva notifiche</button><button type="button" class="secondary" onclick="tbsTestPush()">Invia prova</button><button type="button" class="danger" onclick="tbsDisablePush()">Disattiva</button><a class="secondary" href="{{url_for('push_diagnostics')}}">Apri Push Manager</a></div><p id="pushStatus" class="muted"></p></div>{% endif %}<form method="post">{% for category,items in grouped.items() %}<div class="card"><h2>{{category}}</h2><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Centro notifiche</th><th>Pop-up</th></tr></thead><tbody>{% for key,label in items %}{% set p=rows.get(key) %}<tr><td><b>{{label}}</b></td><td><input type="checkbox" name="enabled_{{key}}" value="1" {% if not p or p.enabled %}checked{% endif %}></td><td><input type="checkbox" name="popup_{{key}}" value="1" {% if not p or p.popup_enabled %}checked{% endif %}></td></tr>{% endfor %}</tbody></table></div></div>{% endfor %}<button>Salva preferenze</button></form>'''
     return page('Preferenze notifiche',body,grouped=grouped,rows=rows)
 
 @app.route('/v36/notifications/send',methods=['GET','POST'])
