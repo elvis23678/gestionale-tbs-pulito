@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.2.2 DEV · FLUSSO SCONTI DB FIX"
+APP_VERSION = "v47.3.0 DEV · AUDIT GENERALE CONSOLIDATO"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -605,7 +605,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4722',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4730',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6468,7 +6468,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.2.2';
+const SW_VERSION='v47.3.0';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6640,7 +6640,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.2.2"
+            "X-TBS-Service-Worker-Version":"v47.3.0"
         }
     )
 
@@ -7192,20 +7192,6 @@ def _response_text(response, limit=700):
 
 
 
-def _push_action_serializer():
-    return URLSafeTimedSerializer(app.secret_key, salt="tbs-push-discount-action-v1")
-
-
-def _make_discount_action_token(request_id, user_id, action):
-    return _push_action_serializer().dumps({
-        "request_id":int(request_id),
-        "user_id":int(user_id),
-        "action":str(action)
-    })
-
-
-def _read_discount_action_token(token, max_age=900):
-    return _push_action_serializer().loads(token, max_age=max_age)
 
 
 def _send_push(db, user_id, notification_id, title, message, kind):
@@ -7219,8 +7205,6 @@ def _send_push(db, user_id, notification_id, title, message, kind):
     ).fetchall()
 
     is_discount_request=(kind=="discount_request")
-    approve_token=""
-    reject_token=""
     request_id=0
     if is_discount_request:
         notice=db.execute(
@@ -7228,10 +7212,9 @@ def _send_push(db, user_id, notification_id, title, message, kind):
             (notification_id,user_id)
         ).fetchone()
         request_id=int(notice["reference_id"] or 0) if notice else 0
-        if request_id:
-            approve_token=_make_discount_action_token(request_id,user_id,"approve")
-            reject_token=_make_discount_action_token(request_id,user_id,"reject")
 
+    # Le notifiche non eseguono più decisioni amministrative in background.
+    # La richiesta viene aperta nella pagina protetta del gestionale.
     actions=(
         [{"action":"manage","title":"Apri richiesta"}]
         if is_discount_request and request_id else
@@ -10541,19 +10524,7 @@ def enterprise_dashboard():
 @login_required
 @role_required('admin','manager')
 def v31_dashboard():
-    with connect() as db:
-        today=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) revenue, COALESCE(SUM(quantity),0) pieces, COUNT(DISTINCT COALESCE(sale_number,id)) receipts FROM sales WHERE COALESCE(status,'Confermata')='Confermata' AND date(created_at,'localtime')=date('now','localtime')").fetchone()
-        pending=db.execute("SELECT COUNT(*) FROM discount_requests WHERE status='In attesa'").fetchone()[0]
-        waiting=db.execute("SELECT COUNT(*) FROM supplier_catalog_requests WHERE status NOT IN ('Consegnato','Rifiutato')").fetchone()[0]
-        low=db.execute("SELECT COUNT(*) FROM products WHERE active=1 AND quantity<=COALESCE(min_stock,1)").fetchone()[0]
-        value=db.execute("SELECT COALESCE(SUM(quantity*COALESCE(cost_price,0)),0) FROM products WHERE active=1").fetchone()[0]
-        recent=db.execute("SELECT sale_number,username,created_at,SUM(quantity) pieces,SUM(quantity*unit_price) total FROM sales WHERE COALESCE(status,'Confermata')='Confermata' GROUP BY COALESCE(sale_number,id) ORDER BY MAX(id) DESC LIMIT 6").fetchall()
-    body="""<style>.ux-hero{padding:24px;border-radius:24px;background:linear-gradient(135deg,#111722,#252b36);color:white;margin-bottom:18px}.ux-hero h1{margin:4px 0}.ux-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.ux-card{background:white;border:1px solid #e7e2d5;border-radius:20px;padding:18px;box-shadow:0 10px 28px rgba(17,23,34,.07);text-decoration:none;color:inherit}.ux-card .metric{font-size:34px;font-weight:900;margin-top:8px}.ux-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}.ux-actions a{padding:18px;border-radius:18px;background:#111722;color:white;text-decoration:none;text-align:center;font-weight:850}.ux-actions a b{display:block;font-size:18px}.ux-actions a small{color:#d8b75c}.ux-two{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}@media(max-width:800px){.ux-grid,.ux-actions{grid-template-columns:1fr 1fr}.ux-two{grid-template-columns:1fr}}</style>
-<div class='ux-hero'><span class='eyebrow'>V31 · ENTERPRISE UX</span><h1>Buongiorno, <span style='color:#d8b75c'>Elvis</span>.</h1><p>La giornata in un colpo d'occhio.</p></div>
-<div class='ux-grid'><a class='ux-card' href='{{url_for("sales_log")}}'><strong>Incasso oggi</strong><div class='metric'>€ {{'%.2f'|format(today.revenue)}}</div><small>{{today.receipts}} vendite · {{today.pieces}} pezzi</small></a><a class='ux-card' href='{{url_for("enterprise_orders")}}'><strong>Ordini aperti</strong><div class='metric'>{{waiting}}</div></a><a class='ux-card' href='{{url_for("enterprise_inventory")}}'><strong>Scorte critiche</strong><div class='metric'>{{low}}</div></a><a class='ux-card' href='{{url_for("discount_requests")}}'><strong>Sconti da valutare</strong><div class='metric'>{{pending}}</div></a></div>
-<div class='ux-actions'><a href='{{url_for("pos")}}'><b>€ Cassa</b><small>Nuova vendita</small></a><a href='{{url_for("scan_product")}}'><b>⌗ Scanner</b><small>QR prodotto</small></a><a href='{{url_for("products")}}'><b>◇ Catalogo</b><small>Ricerca rapida</small></a><a href='{{url_for("enterprise_dashboard")}}'><b>↗ Controllo</b><small>Business intelligence</small></a></div>
-<div class='ux-two'><div class='card'><h2>Ultime vendite</h2>{% for x in recent %}<p><b>{{x.sale_number or 'Vendita'}}</b> · € {{'%.2f'|format(x.total)}}<br><small class='muted'>{{x.created_at|rome_time}} · {{x.username}} · {{x.pieces}} pezzi</small></p>{% else %}<p class='muted'>Nessuna vendita.</p>{% endfor %}</div><div class='card'><h2>Valore magazzino</h2><div class='metric'>€ {{'%.2f'|format(value)}}</div><p class='muted'>Valore al costo.</p><a href='{{url_for("admin_system_status")}}'>Sistema e backup →</a></div></div>"""
-    return page('V31 Enterprise UX',body,today=today,pending=pending,waiting=waiting,low=low,value=value,recent=recent)
+    return redirect(url_for('dashboard_smart'))
 
 # ============================================================
 # v32.0 SMART INVENTORY
@@ -10562,17 +10533,7 @@ def v31_dashboard():
 @login_required
 @role_required('admin','manager')
 def v32_inventory():
-    days=max(30,min(180,int(request.args.get('days','60') or 60)))
-    with connect() as db:
-        rows=db.execute("SELECT p.id,p.brand_code,p.supplier_code,p.category,p.quantity,p.min_stock,COALESCE(p.cost_price,0) cost_price,COALESCE(SUM(CASE WHEN datetime(s.created_at)>=datetime('now',?) AND COALESCE(s.status,'Confermata')='Confermata' THEN s.quantity ELSE 0 END),0) sold FROM products p LEFT JOIN sales s ON s.product_id=p.id WHERE p.active=1 GROUP BY p.id ORDER BY sold DESC,p.quantity ASC",(f'-{days} days',)).fetchall()
-    smart=[]
-    for r in rows:
-        velocity=float(r['sold'] or 0)/days; cover=(float(r['quantity'])/velocity) if velocity>0 else None
-        target=max(int(r['min_stock'] or 1),int(round(velocity*45))); suggested=max(0,target-int(r['quantity']))
-        risk='Fermo' if not r['sold'] else ('Urgente' if cover is not None and cover<=14 else ('Attenzione' if cover is not None and cover<=30 else 'Regolare'))
-        smart.append(dict(r)|{'cover':cover,'suggested':suggested,'risk':risk})
-    body="""<div class='dash-head'><div><span class='eyebrow'>V32 · SMART INVENTORY</span><h1>Magazzino intelligente</h1><p class='muted'>Copertura, rotazione e quantità suggerite.</p></div></div><div class='card'><form class='inline'><select name='days'><option value='30'>30 giorni</option><option value='60' selected>60 giorni</option><option value='90'>90 giorni</option><option value='180'>180 giorni</option></select><button>Aggiorna</button></form></div><div class='card'><div class='table-wrap'><table><thead><tr><th>Prodotto</th><th>Disponibili</th><th>Venduti</th><th>Copertura</th><th>Stato</th><th>Riordino</th></tr></thead><tbody>{% for x in rows %}<tr><td><b>{{x.brand_code}}</b><br><small>{{x.supplier_code}} · {{x.category}}</small></td><td>{{x.quantity}}</td><td>{{x.sold}}</td><td>{% if x.cover is not none %}{{'%.0f'|format(x.cover)}} giorni{% else %}—{% endif %}</td><td><span class='badge'>{{x.risk}}</span></td><td><b>{{x.suggested}}</b></td></tr>{% endfor %}</tbody></table></div></div>"""
-    return page('V32 Smart Inventory',body,rows=smart,days=days)
+    return redirect(url_for('inventory_pro'))
 
 # ============================================================
 # v33.0 BUSINESS ASSISTANT
@@ -10581,19 +10542,7 @@ def v32_inventory():
 @login_required
 @role_required('admin','manager')
 def v33_assistant():
-    with connect() as db:
-        low=db.execute("SELECT brand_code,quantity,min_stock FROM products WHERE active=1 AND quantity<=COALESCE(min_stock,1) ORDER BY quantity ASC LIMIT 8").fetchall()
-        stale=db.execute("SELECT p.brand_code,p.quantity,MAX(s.created_at) last_sale FROM products p LEFT JOIN sales s ON s.product_id=p.id AND COALESCE(s.status,'Confermata')='Confermata' WHERE p.active=1 AND p.quantity>0 GROUP BY p.id HAVING MAX(s.created_at) IS NULL OR datetime(MAX(s.created_at))<datetime('now','-90 days') LIMIT 8").fetchall()
-        discounts=db.execute("SELECT COUNT(*) FROM discount_requests WHERE status='In attesa'").fetchone()[0]
-        trend=db.execute("SELECT product_code,SUM(quantity) qty FROM sales WHERE COALESCE(status,'Confermata')='Confermata' AND datetime(created_at)>=datetime('now','-30 days') GROUP BY product_code ORDER BY qty DESC LIMIT 1").fetchone()
-    advice=[]
-    if low: advice.append(('Priorità alta',f'{len(low)} articoli sono sotto la scorta minima.',url_for('v32_inventory')))
-    if discounts: advice.append(('Decisione richiesta',f'{discounts} richieste sconto attendono una risposta.',url_for('discount_requests')))
-    if stale: advice.append(('Capitale fermo',f'{len(stale)} articoli non vendono da almeno 90 giorni.',url_for('enterprise_dashboard')))
-    if trend: advice.append(('Opportunità',f'Il prodotto più richiesto è {trend["product_code"]}: {trend["qty"]} pezzi in 30 giorni.',url_for('enterprise_sales')))
-    if not advice: advice.append(('Tutto regolare','Non risultano criticità operative.',url_for('v31_dashboard')))
-    body="""<div class='dash-head'><div><span class='eyebrow'>V33 · BUSINESS ASSISTANT</span><h1>Assistente decisionale</h1><p class='muted'>Suggerimenti basati sui dati reali.</p></div></div><div class='grid'>{% for level,text,link in advice %}<a class='card' href='{{link}}' style='text-decoration:none;color:inherit'><span class='eyebrow'>{{level}}</span><h2>{{text}}</h2><b>Apri →</b></a>{% endfor %}</div><div class='grid'><div class='card'><h2>Scorte urgenti</h2>{% for x in low %}<p><b>{{x.brand_code}}</b> · {{x.quantity}} disponibili · minimo {{x.min_stock}}</p>{% else %}<p class='muted'>Nessuna urgenza.</p>{% endfor %}</div><div class='card'><h2>Prodotti fermi</h2>{% for x in stale %}<p><b>{{x.brand_code}}</b> · {{x.quantity}} pezzi<br><small class='muted'>Ultima vendita: {{x.last_sale|rome_time if x.last_sale else 'mai'}}</small></p>{% else %}<p class='muted'>Nessun prodotto fermo.</p>{% endfor %}</div></div>"""
-    return page('V33 Business Assistant',body,advice=advice,low=low,stale=stale)
+    return redirect(url_for('dashboard_smart'))
 
 # ============================================================
 # v34.0 ANALYTICS
@@ -10602,15 +10551,7 @@ def v33_assistant():
 @login_required
 @role_required('admin','manager')
 def v34_analytics():
-    days=max(7,min(180,int(request.args.get('days','30') or 30)))
-    with connect() as db:
-        daily=db.execute("SELECT date(created_at,'localtime') day,SUM(quantity*unit_price) revenue FROM sales WHERE COALESCE(status,'Confermata')='Confermata' AND datetime(created_at)>=datetime('now',?) GROUP BY date(created_at,'localtime') ORDER BY day",(f'-{days} days',)).fetchall()
-        categories=db.execute("SELECT COALESCE(p.category,'Altro') category,SUM(s.quantity) pieces,SUM(s.quantity*s.unit_price) revenue FROM sales s LEFT JOIN products p ON p.id=s.product_id WHERE COALESCE(s.status,'Confermata')='Confermata' AND datetime(s.created_at)>=datetime('now',?) GROUP BY COALESCE(p.category,'Altro') ORDER BY revenue DESC LIMIT 10",(f'-{days} days',)).fetchall()
-        totals=db.execute("SELECT COALESCE(SUM(quantity*unit_price),0) revenue,COALESCE(SUM(quantity),0) pieces,COUNT(DISTINCT COALESCE(sale_number,id)) receipts FROM sales WHERE COALESCE(status,'Confermata')='Confermata' AND datetime(created_at)>=datetime('now',?)",(f'-{days} days',)).fetchone()
-    labels=[x['day'] for x in daily]; values=[round(float(x['revenue'] or 0),2) for x in daily]
-    avg=float(totals['revenue'])/days; ticket=float(totals['revenue'])/totals['receipts'] if totals['receipts'] else 0
-    body="""<div class='dash-head'><div><span class='eyebrow'>V34 · ANALYTICS</span><h1>Analisi vendite</h1><p class='muted'>Trend, ticket medio e categorie.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Incasso</strong><div class='metric'>€ {{'%.2f'|format(totals.revenue)}}</div></div><div class='kpi'><strong>Media giorno</strong><div class='metric'>€ {{'%.2f'|format(avg)}}</div></div><div class='kpi'><strong>Ticket medio</strong><div class='metric'>€ {{'%.2f'|format(ticket)}}</div></div><div class='kpi'><strong>Pezzi</strong><div class='metric'>{{totals.pieces}}</div></div></div><div class='card'><h2>Incasso giornaliero</h2><canvas id='salesChart' height='95'></canvas></div><div class='card'><h2>Categorie</h2><div class='table-wrap'><table><thead><tr><th>Categoria</th><th>Pezzi</th><th>Incasso</th></tr></thead><tbody>{% for x in categories %}<tr><td><b>{{x.category}}</b></td><td>{{x.pieces}}</td><td>€ {{'%.2f'|format(x.revenue)}}</td></tr>{% endfor %}</tbody></table></div></div><script>(function(){const c=document.getElementById('salesChart'),w=c.clientWidth||800,h=260,d=window.devicePixelRatio||1;c.width=w*d;c.height=h*d;const x=c.getContext('2d');x.scale(d,d);const vals={{values|tojson}},max=Math.max(1,...vals);x.strokeStyle='#d8b75c';x.lineWidth=3;x.beginPath();vals.forEach((v,i)=>{const px=vals.length<2?w/2:20+i*(w-40)/(vals.length-1),py=h-25-(v/max)*(h-50);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()})();</script>"""
-    return page('V34 Analytics',body,days=days,totals=totals,avg=avg,ticket=ticket,categories=categories,labels=labels,values=values)
+    return redirect(url_for('enterprise_sales'))
 
 # ============================================================
 # v35.0 ENTERPRISE
@@ -10628,13 +10569,7 @@ def _v35_health():
 @login_required
 @role_required('admin')
 def v35_release_center():
-    if request.method=='POST' and request.form.get('action')=='backup':
-        stamp=now_rome().strftime('%Y%m%d_%H%M%S'); target=os.path.join(BACKUP_DIR,f'tbs_v35_{stamp}.db')
-        with sqlite3.connect(DB_PATH) as source, sqlite3.connect(target) as dest: source.backup(dest)
-        flash('Backup v35 creato correttamente.'); return redirect(url_for('v35_release_center'))
-    health=_v35_health()
-    body="""<div class='dash-head'><div><span class='eyebrow'>V35 · ENTERPRISE</span><h1>Release Center</h1><p class='muted'>Controllo tecnico e accesso ai moduli finali.</p></div></div><div class='kpi-grid'><div class='kpi'><strong>Database</strong><div class='metric'>{{health.database}}</div></div><div class='kpi'><strong>Integrità</strong><div class='metric'>{{health.integrity}}</div></div><div class='kpi'><strong>Storage</strong><div class='metric'>{{health.storage}}</div></div><div class='kpi'><strong>Ultimo backup</strong><div style='font-size:18px;font-weight:900;margin-top:12px'>{{health.backup}}</div></div></div><div class='grid'><a class='card' href='{{url_for("v31_dashboard")}}' style='text-decoration:none;color:inherit'><h2>Enterprise UX</h2><p>Home operativa.</p></a><a class='card' href='{{url_for("v32_inventory")}}' style='text-decoration:none;color:inherit'><h2>Smart Inventory</h2><p>Scorte e riordini.</p></a><a class='card' href='{{url_for("v33_assistant")}}' style='text-decoration:none;color:inherit'><h2>Business Assistant</h2><p>Priorità guidate.</p></a><a class='card' href='{{url_for("v34_analytics")}}' style='text-decoration:none;color:inherit'><h2>Analytics</h2><p>Grafici e KPI.</p></a></div><div class='card'><h2>Backup manuale</h2><form method='post'><input type='hidden' name='action' value='backup'><button>Crea backup ora</button></form></div>"""
-    return page('V35 Release Center',body,health=health)
+    return redirect(url_for('system_status'))
 
 
 
