@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.0.0 DEV · PUSH PRO INTERATTIVE"
+APP_VERSION = "v47.0.2 DEV · NOTIFICHE CONTRASTO HOTFIX"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -573,7 +573,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4700',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4701',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6408,7 +6408,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.0.0';
+const SW_VERSION='v47.0.1';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6458,9 +6458,9 @@ async function displayPushNotification(data){
     icon:data.icon||'/push/icon',
     badge:data.badge||'/push/badge',
     tag:String(data.tag||('tbs-one-'+Date.now())),
-    renotify:true,
-    vibrate:[300,100,300,100,500],
-    requireInteraction:Boolean(data.requireInteraction),
+    renotify:false,
+    vibrate:[180,80,180],
+    requireInteraction:false,
     timestamp:Date.now(),
     actions:normalizeActions(data),
     data:{
@@ -6521,24 +6521,31 @@ self.addEventListener('notificationclick',event=>{
   event.notification.close();
 
   event.waitUntil((async()=>{
-    if(action==='approve' || action==='reject'){
+    if(action==='manage-reject'){
+      await openOrFocus(data.manageUrl||'/discount-approvals');
+      return;
+    }
+
+    if(action==='approve'){
       let result;
       try{
-        result=await executeInteractiveAction(action,data);
+        result=await executeInteractiveAction('approve',data);
       }catch(error){
         result={ok:false,error:'Connessione non disponibile'};
       }
 
       if(result.ok){
+        const approved = String(result.status||'') === 'Approvata';
         await self.registration.showNotification(
-          action==='approve' ? '✅ Sconto approvato' : '❌ Sconto rifiutato',
+          approved ? '✅ Sconto approvato' : 'TBS One · esito inatteso',
           {
             body:String(result.message||'Operazione completata.'),
             icon:'/push/icon',
             badge:'/push/badge',
             tag:'discount-result-'+String(result.request_id||Date.now()),
-            renotify:true,
-            vibrate:[200,80,300],
+            renotify:false,
+            silent:true,
+            requireInteraction:false,
             data:{url:'/discount-approvals'}
           }
         );
@@ -6550,7 +6557,9 @@ self.addEventListener('notificationclick',event=>{
             icon:'/push/icon',
             badge:'/push/badge',
             tag:'discount-action-error-'+Date.now(),
-            renotify:true,
+            renotify:false,
+            silent:true,
+            requireInteraction:false,
             data:{url:data.manageUrl||'/discount-approvals'}
           }
         );
@@ -6589,7 +6598,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.0.0"
+            "X-TBS-Service-Worker-Version":"v47.0.1"
         }
     )
 
@@ -7141,7 +7150,7 @@ def _send_push(db, user_id, notification_id, title, message, kind):
             reject_token=_make_discount_action_token(request_id,user_id,"reject")
 
     actions=(
-        [{"action":"approve","title":"✅ Approva"},{"action":"reject","title":"❌ Rifiuta"}]
+        [{"action":"approve","title":"✅ Approva"},{"action":"manage-reject","title":"❌ Rifiuta"}]
         if is_discount_request and request_id else
         [{"action":"open","title":"Apri"},{"action":"mark-read","title":"Segna letta"}]
     )
@@ -7158,7 +7167,7 @@ def _send_push(db, user_id, notification_id, title, message, kind):
         "actions":actions,
         "approve_token":approve_token,
         "reject_token":reject_token,
-        "requireInteraction":bool(is_discount_request)
+        "requireInteraction":False
     },ensure_ascii=False)
 
     sent=failed=0
@@ -7417,10 +7426,32 @@ def notification_center():
             rows.append(item)
 
     body="""<style>
-    .notice-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0}.notice-tabs a{padding:14px 8px;border-radius:14px;background:#e5e7eb;color:#111;text-align:center;text-decoration:none;font-weight:950}.notice-tabs a.active{background:#111827;color:#fff}
-    .notice-list{display:grid;gap:12px;margin-top:16px}.notice-row{display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:16px;padding:14px;cursor:pointer;transition:transform .12s,box-shadow .12s}.notice-row:active{transform:scale(.99)}.notice-row:hover{box-shadow:0 8px 22px rgba(15,23,42,.08)}.notice-row.unread{border-left:7px solid #dc2626}.notice-row.read{border-left:7px solid #10b981}
-    .notice-main{text-decoration:none;color:inherit}.trash{background:#fff0f0;color:#b91c1c;padding:10px;border-radius:12px}.status-pill{border-radius:99px;padding:3px 8px;font-size:11px;color:#fff;white-space:nowrap}.status-new{background:#dc2626}.status-read{background:#059669}.group-pill{background:#d7a72c;color:#111;border-radius:99px;padding:3px 8px;font-size:11px;font-weight:900}
-    @media(max-width:560px){.notice-tabs{grid-template-columns:1fr}.notice-row{grid-template-columns:38px 1fr auto;padding:13px 10px}}
+    .notice-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0}
+    .notice-tabs a{padding:15px 10px;border-radius:16px;background:#171717;color:#f8f3e7;border:1px solid rgba(214,174,63,.38);text-align:center;text-decoration:none;font-weight:950;box-shadow:0 6px 18px rgba(0,0,0,.22)}
+    .notice-tabs a.active{background:linear-gradient(135deg,#f5d978,#c69420);color:#111;border-color:#f5d978;box-shadow:0 8px 22px rgba(198,148,32,.30)}
+    .notice-list{display:grid;gap:14px;margin-top:16px}
+    .notice-row{display:grid;grid-template-columns:48px 1fr auto;gap:12px;align-items:center;background:linear-gradient(145deg,#181818,#101010);color:#f8f3e7;border:1px solid rgba(214,174,63,.38);border-radius:18px;padding:15px;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s;box-shadow:0 8px 24px rgba(0,0,0,.34)}
+    .notice-row:active{transform:scale(.99)}
+    .notice-row:hover{box-shadow:0 12px 28px rgba(0,0,0,.42);border-color:rgba(245,217,120,.72)}
+    .notice-row.unread{border-left:6px solid #dc2626}
+    .notice-row.read{border-left:6px solid #d7a72c}
+    .notice-main{text-decoration:none;color:#f8f3e7;line-height:1.42;min-width:0}
+    .notice-main b{color:#fff;font-weight:950}
+    .notice-main small{color:#c9c2b3}
+    .notice-main br+small{display:inline-block;margin-top:3px}
+    .trash{background:#2a1212;color:#ff8f8f;border:1px solid rgba(255,143,143,.38);padding:10px 12px;border-radius:12px;min-width:46px;min-height:46px;display:inline-flex;align-items:center;justify-content:center;font-size:20px}
+    .trash:hover,.trash:focus{background:#7f1d1d;color:#fff;border-color:#ef4444}
+    .status-pill{display:inline-flex;align-items:center;border-radius:99px;padding:4px 9px;font-size:11px;line-height:1;font-weight:950;white-space:nowrap;border:1px solid transparent}
+    .status-new{background:#dc2626;color:#fff;border-color:#ff6b6b}
+    .status-read{background:#f2cf66;color:#111;border-color:#ffe49b}
+    .group-pill{display:inline-flex;align-items:center;background:#d7a72c;color:#111;border:1px solid #f5d978;border-radius:99px;padding:4px 9px;font-size:11px;line-height:1;font-weight:950}
+    .muted{color:#e5ded0!important}
+    @media(max-width:560px){
+      .notice-tabs{grid-template-columns:1fr}
+      .notice-row{grid-template-columns:40px minmax(0,1fr) auto;padding:14px 11px;gap:10px}
+      .notice-main{font-size:15px}
+      .trash{min-width:44px;min-height:44px;padding:8px}
+    }
     </style>
     <h1>🔔 Centro notifiche</h1>
     <div class='notice-tabs'><a class='{% if view=="unread" %}active{% endif %}' href='{{url_for("notification_center",view="unread")}}'>🔴 Da leggere ({{counts.unread}})</a><a class='{% if view=="read" %}active{% endif %}' href='{{url_for("notification_center",view="read")}}'>🟢 Lette ({{counts.read}})</a><a class='{% if view=="archive" %}active{% endif %}' href='{{url_for("notification_center",view="archive")}}'>📚 Archivio ({{counts.archive}})</a></div>
