@@ -126,7 +126,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.1.0 DEV · PUSH MANAGER"
+APP_VERSION = "v46.1.1 DEV · PUSH LOG HOTFIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -6776,6 +6776,15 @@ def _send_push(db, user_id, notification_id, title, message, kind):
     if not PUSH_SERVER_READY:
         return {"sent":0, "failed":0, "reason":"server_not_configured"}
 
+    # Guardia aggiuntiva: corregge automaticamente lo schema anche su database
+    # persistenti provenienti da versioni precedenti.
+    ensure_column(db,'push_delivery_log','user_id','INTEGER')
+    ensure_column(db,'push_delivery_log','device_id','INTEGER')
+    ensure_column(db,'push_delivery_log','notification_id','INTEGER')
+    ensure_column(db,'push_delivery_log','status','TEXT NOT NULL DEFAULT "unknown"')
+    ensure_column(db,'push_delivery_log','detail','TEXT')
+    ensure_column(db,'push_delivery_log','created_at','TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP')
+
     devices=db.execute(
         "SELECT * FROM push_devices WHERE user_id=? AND enabled=1",
         (user_id,)
@@ -10052,6 +10061,14 @@ def _v36_init():
             detail TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Migrazione compatibile con database già esistenti: CREATE TABLE IF NOT EXISTS
+        # non aggiunge le nuove colonne a una tabella creata da versioni precedenti.
+        ensure_column(db,'push_delivery_log','user_id','INTEGER')
+        ensure_column(db,'push_delivery_log','device_id','INTEGER')
+        ensure_column(db,'push_delivery_log','notification_id','INTEGER')
+        ensure_column(db,'push_delivery_log','status','TEXT NOT NULL DEFAULT "unknown"')
+        ensure_column(db,'push_delivery_log','detail','TEXT')
+        ensure_column(db,'push_delivery_log','created_at','TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP')
         db.execute('''CREATE TABLE IF NOT EXISTS internal_messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sender_user_id INTEGER,
