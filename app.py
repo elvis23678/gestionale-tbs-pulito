@@ -82,6 +82,7 @@ PAYPAL_CLIENT_SECRET = os.environ.get("PAYPAL_CLIENT_SECRET", "").strip()
 PAYPAL_ENV = os.environ.get("PAYPAL_ENV", "sandbox").strip().lower()
 PAYPAL_API_BASE = "https://api-m.paypal.com" if PAYPAL_ENV == "live" else "https://api-m.sandbox.paypal.com"
 PAYPAL_ENABLED = bool(PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET)
+SHIPPING_COST_EUR = 8.90
 
 
 ROME_TZ = ZoneInfo("Europe/Rome")
@@ -108,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.3.5 DEV · HERO TRIANGLE REMOVED"
+APP_VERSION = "v45.4.0 DEV · CHECKOUT SHIPPING"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -770,6 +771,12 @@ def init_db():
         ensure_column(db,"sales","payment_method","TEXT DEFAULT 'Altro'")
         ensure_column(db,"customer_orders","paypal_order_id","TEXT")
         ensure_column(db,"customer_orders","payment_method","TEXT DEFAULT 'Da concordare'")
+        ensure_column(db,"customer_orders","delivery_method","TEXT DEFAULT 'Ritiro in negozio'")
+        ensure_column(db,"customer_orders","shipping_cost","REAL NOT NULL DEFAULT 0")
+        ensure_column(db,"customer_orders","shipping_address","TEXT")
+        ensure_column(db,"customer_orders","shipping_postcode","TEXT")
+        ensure_column(db,"customer_orders","shipping_city","TEXT")
+        ensure_column(db,"customer_orders","shipping_province","TEXT")
         ensure_column(db,"sales","channel","TEXT DEFAULT 'Negozio'")
         ensure_column(db,"sales","status","TEXT DEFAULT 'Confermata'")
         ensure_column(db,"sales","original_unit_price","REAL")
@@ -3200,6 +3207,148 @@ body{background:#020202}
   }
 }
 
+
+/* v45.3.6 · pulsante PayPal nella scheda prodotto */
+.paypal-product-button{
+  width:100%;
+  min-height:50px;
+  margin-top:11px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  border:0;
+  border-radius:999px;
+  background:#ffc439;
+  color:#111;
+  box-shadow:0 9px 24px rgba(255,196,57,.22);
+  cursor:pointer;
+}
+.paypal-product-button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  filter:grayscale(.65);
+}
+.paypal-product-button .paypal-word{
+  color:#003087;
+  font-family:Arial,sans-serif;
+  font-size:19px;
+  font-weight:900;
+  font-style:italic;
+}
+.paypal-product-button .paypal-pal{
+  color:#009cde;
+  font-family:Arial,sans-serif;
+  font-size:19px;
+  font-weight:900;
+  font-style:italic;
+}
+.paypal-product-button .paypal-action{
+  margin-left:8px;
+  color:#111;
+  font-family:Arial,sans-serif;
+  font-size:13px;
+  font-weight:800;
+}
+#paypal-checkout{
+  scroll-margin-top:95px;
+}
+
+
+/* v45.4.0 · Checkout con spedizione € 8,90 o ritiro gratuito */
+.delivery-choice{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  margin:15px 0;
+}
+.delivery-option{
+  position:relative;
+  min-height:112px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:5px;
+  padding:15px;
+  border:1px solid rgba(202,166,77,.30);
+  border-radius:14px;
+  background:#060605;
+  color:#f4eee3;
+  cursor:pointer;
+}
+.delivery-option.selected{
+  border-color:#d7a741;
+  background:linear-gradient(180deg,rgba(211,165,65,.13),#060605);
+  box-shadow:0 0 0 1px rgba(211,165,65,.14),0 12px 28px rgba(0,0,0,.28);
+}
+.delivery-option input{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.delivery-option b{
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:16px;
+  font-weight:400;
+}
+.delivery-option small{
+  color:#b9ad99;
+  line-height:1.35;
+}
+.delivery-icon{
+  color:#ddb04e;
+  font-size:25px;
+}
+.shipping-fields{
+  display:grid;
+  gap:10px;
+  margin-top:10px;
+}
+.shipping-fields[hidden]{
+  display:none!important;
+}
+.shipping-row{
+  display:grid;
+  grid-template-columns:.7fr 1.3fr;
+  gap:10px;
+}
+.order-totals{
+  margin:18px 0;
+  padding:15px 0;
+  border-top:1px solid rgba(202,166,77,.23);
+  border-bottom:1px solid rgba(202,166,77,.23);
+}
+.order-totals>div{
+  display:flex;
+  justify-content:space-between;
+  gap:15px;
+  padding:6px 0;
+  color:#c9bead;
+}
+.order-totals .grand-total{
+  margin-top:6px;
+  padding-top:13px;
+  border-top:1px solid rgba(202,166,77,.20);
+  color:#f5ead4;
+  font-size:20px;
+}
+.order-totals .grand-total b{
+  color:#e1b450;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:25px;
+}
+@media(max-width:620px){
+  .delivery-choice{
+    grid-template-columns:1fr;
+  }
+  .delivery-option{
+    min-height:94px;
+  }
+  .shipping-row{
+    grid-template-columns:1fr;
+  }
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -3587,14 +3736,19 @@ def boutique_product(product_id):
       {% endif %}
 
       <form id='variant-form' method='post'>
+        <input type='hidden' id='checkoutTarget' name='checkout_target' value=''>
         <div class='customer-buy-row'>
           <div class='qty-picker'>
             <button type='button' id='qtyMinus' aria-label='Diminuisci'>−</button>
             <input id='qtyInput' name='quantity' value='1' inputmode='numeric' readonly>
             <button type='button' id='qtyPlus' aria-label='Aumenta'>+</button>
           </div>
-          <button id='variant-button' class='gold-btn customer-add'>Aggiungi al carrello</button>
+          <button id='variant-button' class='gold-btn customer-add' type='submit' onclick="document.getElementById('checkoutTarget').value=''">Aggiungi al carrello</button>
         </div>
+        <button type='submit' id='paypal-product-button' class='paypal-product-button' name='checkout_target' value='paypal'>
+          <span class='paypal-word'>Pay</span><span class='paypal-pal'>Pal</span>
+          <span class='paypal-action'>Paga con PayPal</span>
+        </button>
       </form>
 
       <div class='customer-actions'>
@@ -3693,9 +3847,14 @@ function show(v){
 
   document.getElementById('variant-form').action='/boutique/carrello/aggiungi/'+v.id;
   const b=document.getElementById('variant-button');
+  const paypalButton=document.getElementById('paypal-product-button');
   const canAdd=Number(v.quantity)>0;
   b.disabled=!canAdd;
   b.textContent=canAdd?'Aggiungi al carrello':'Richiedi disponibilità';
+  if(paypalButton){
+    paypalButton.disabled=!canAdd;
+    paypalButton.title=canAdd?'Aggiungi il gioiello e vai al pagamento PayPal':'Prodotto non disponibile';
+  }
   currentMax=Math.max(1,Number(v.quantity)||1);
   qty.value='1';
 }
@@ -3823,11 +3982,13 @@ def client_add_cart(product_id):
     session["client_cart"]=cart
     session.modified=True
     flash("Prodotto aggiunto al carrello.")
+    if request.form.get("checkout_target") == "paypal":
+        return redirect(url_for("client_cart") + "#paypal-checkout")
     return redirect(request.referrer or url_for("boutique"))
 
 @app.get("/boutique/carrello")
 def client_cart():
-    rows,total=current_client_cart()
+    rows,subtotal=current_client_cart()
     body=r"""
 <div class='checkout-luxury'>
   <span class='eyebrow'>Jewelry Atelier</span>
@@ -3837,7 +3998,7 @@ def client_cart():
   <div class='checkout-grid'>
     <section class='checkout-panel'>
       <h2>Riepilogo gioielli</h2>
-      {% for p,qty,subtotal in rows %}
+      {% for p,qty,row_total in rows %}
       <div class='cart-summary-row'>
         {% if p.photo_data %}<img src='{{p.photo_data}}' alt='{{p.category}}'>{% else %}<div></div>{% endif %}
         <div>
@@ -3849,44 +4010,106 @@ def client_cart():
           </form>
         </div>
         <div>
-          <b>€ {{'%.2f'|format(subtotal)}}</b>
+          <b>€ {{'%.2f'|format(row_total)}}</b>
           <form method='post' action='{{url_for("client_remove_cart",product_id=p.id)}}'>
             <button class='detail-link'>Rimuovi</button>
           </form>
         </div>
       </div>
       {% endfor %}
-      <div class='checkout-total'>Totale € {{'%.2f'|format(total)}}</div>
-      <a class='detail-link' style='display:inline-flex;text-decoration:none;padding:11px 15px' href='{{url_for("boutique")}}#collezione'>← Continua gli acquisti</a>
+
+      <div class='order-totals'>
+        <div><span>Subtotale gioielli</span><b>€ {{'%.2f'|format(subtotal)}}</b></div>
+        <div><span id='deliveryLabel'>Ritiro in negozio</span><b id='shippingAmount'>Gratis</b></div>
+        <div class='grand-total'><span>Totale</span><b id='grandTotal'>€ {{'%.2f'|format(subtotal)}}</b></div>
+      </div>
+
+      <a class='detail-link' style='display:inline-flex;text-decoration:none;padding:11px 15px' href='{{url_for("boutique")}}#collezione'>&larr; Continua gli acquisti</a>
     </section>
 
     <section class='checkout-panel'>
       <span class='eyebrow'>Pagamento sicuro</span>
-      <h2>Completa l’ordine</h2>
+      <h2>Consegna e dati cliente</h2>
+
+      <div class='delivery-choice'>
+        <label class='delivery-option selected' id='pickupOption'>
+          <input type='radio' name='delivery_method_ui' value='pickup' checked>
+          <span class='delivery-icon'>⌖</span>
+          <b>Ritiro in negozio</b>
+          <small>Gratuito · Tattoo Beauty Saloon, Condove</small>
+        </label>
+        <label class='delivery-option' id='shippingOption'>
+          <input type='radio' name='delivery_method_ui' value='shipping'>
+          <span class='delivery-icon'>▱</span>
+          <b>Spedizione in Italia</b>
+          <small>€ 8,90</small>
+        </label>
+      </div>
+
       <div class='checkout-form'>
         <input id='checkout-name' autocomplete='name' required placeholder='Nome e cognome'>
         <input id='checkout-phone' autocomplete='tel' required placeholder='Telefono'>
-        <input id='checkout-email' type='email' autocomplete='email' placeholder='Email'>
-        <textarea id='checkout-notes' placeholder='Note, ritiro in studio oppure spedizione'></textarea>
+        <input id='checkout-email' type='email' autocomplete='email' required placeholder='Email'>
+        <div id='shippingFields' class='shipping-fields' hidden>
+          <input id='checkout-address' autocomplete='street-address' placeholder='Via e numero civico'>
+          <div class='shipping-row'>
+            <input id='checkout-postcode' inputmode='numeric' autocomplete='postal-code' placeholder='CAP'>
+            <input id='checkout-city' autocomplete='address-level2' placeholder='Città'>
+          </div>
+          <input id='checkout-province' maxlength='2' autocomplete='address-level1' placeholder='Provincia (es. TO)'>
+        </div>
+        <textarea id='checkout-notes' placeholder='Note all’ordine (facoltative)'></textarea>
       </div>
 
       {% if paypal_enabled %}
-      <div class='paypal-box'>
+      <div class='paypal-box' id='paypal-checkout'>
         <div class='paypal-title'>Paga subito con PayPal</div>
         <div id='paypal-button-container'></div>
         <div id='paypal-message' style='color:#9b1c1c;font:13px Arial,sans-serif;margin-top:8px'></div>
       </div>
       <script src='https://www.paypal.com/sdk/js?client-id={{paypal_client_id|urlencode}}&currency=EUR&intent=capture&components=buttons'></script>
       <script>
+      const SUBTOTAL={{'%.2f'|format(subtotal)}};
+      const SHIPPING_COST={{'%.2f'|format(shipping_cost)}};
+
+      function selectedDelivery(){
+        return document.querySelector('input[name="delivery_method_ui"]:checked').value;
+      }
+
+      function updateDeliveryUI(){
+        const method=selectedDelivery();
+        const shipping=method==='shipping';
+        document.getElementById('shippingFields').hidden=!shipping;
+        document.getElementById('pickupOption').classList.toggle('selected',!shipping);
+        document.getElementById('shippingOption').classList.toggle('selected',shipping);
+        document.getElementById('deliveryLabel').textContent=shipping?'Spedizione':'Ritiro in negozio';
+        document.getElementById('shippingAmount').textContent=shipping?'€ '+SHIPPING_COST.toFixed(2).replace('.',','):'Gratis';
+        document.getElementById('grandTotal').textContent='€ '+(SUBTOTAL+(shipping?SHIPPING_COST:0)).toFixed(2).replace('.',',');
+      }
+
+      document.querySelectorAll('input[name="delivery_method_ui"]').forEach(el=>{
+        el.addEventListener('change',updateDeliveryUI);
+      });
+      updateDeliveryUI();
+
       function customerPayload(){
+        const delivery_method=selectedDelivery();
         const name=document.getElementById('checkout-name').value.trim();
         const phone=document.getElementById('checkout-phone').value.trim();
         const email=document.getElementById('checkout-email').value.trim();
         const notes=document.getElementById('checkout-notes').value.trim();
-        if(!name||!phone){
-          throw new Error('Inserisci nome e telefono prima di pagare.');
+        const address=document.getElementById('checkout-address').value.trim();
+        const postcode=document.getElementById('checkout-postcode').value.trim();
+        const city=document.getElementById('checkout-city').value.trim();
+        const province=document.getElementById('checkout-province').value.trim().toUpperCase();
+
+        if(!name||!phone||!email){
+          throw new Error('Inserisci nome, telefono ed email.');
         }
-        return {name,phone,email,notes};
+        if(delivery_method==='shipping'&&(!address||!postcode||!city||!province)){
+          throw new Error('Compila tutti i dati per la spedizione.');
+        }
+        return {name,phone,email,notes,delivery_method,address,postcode,city,province};
       }
 
       paypal.Buttons({
@@ -3920,6 +4143,39 @@ def client_cart():
       }).render('#paypal-button-container');
       </script>
       {% else %}
+      <script>
+      const SUBTOTAL={{'%.2f'|format(subtotal)}};
+      const SHIPPING_COST={{'%.2f'|format(shipping_cost)}};
+      function selectedDelivery(){return document.querySelector('input[name="delivery_method_ui"]:checked').value}
+      function updateDeliveryUI(){
+        const shipping=selectedDelivery()==='shipping';
+        document.getElementById('shippingFields').hidden=!shipping;
+        document.getElementById('pickupOption').classList.toggle('selected',!shipping);
+        document.getElementById('shippingOption').classList.toggle('selected',shipping);
+        document.getElementById('deliveryLabel').textContent=shipping?'Spedizione':'Ritiro in negozio';
+        document.getElementById('shippingAmount').textContent=shipping?'€ '+SHIPPING_COST.toFixed(2).replace('.',','):'Gratis';
+        document.getElementById('grandTotal').textContent='€ '+(SUBTOTAL+(shipping?SHIPPING_COST:0)).toFixed(2).replace('.',',');
+      }
+      document.querySelectorAll('input[name="delivery_method_ui"]').forEach(el=>el.addEventListener('change',updateDeliveryUI));
+      updateDeliveryUI();
+      function customerPayload(){
+        const delivery_method=selectedDelivery();
+        const data={
+          name:document.getElementById('checkout-name').value.trim(),
+          phone:document.getElementById('checkout-phone').value.trim(),
+          email:document.getElementById('checkout-email').value.trim(),
+          notes:document.getElementById('checkout-notes').value.trim(),
+          delivery_method,
+          address:document.getElementById('checkout-address').value.trim(),
+          postcode:document.getElementById('checkout-postcode').value.trim(),
+          city:document.getElementById('checkout-city').value.trim(),
+          province:document.getElementById('checkout-province').value.trim().toUpperCase()
+        };
+        if(!data.name||!data.phone||!data.email)throw new Error('Inserisci nome, telefono ed email.');
+        if(delivery_method==='shipping'&&(!data.address||!data.postcode||!data.city||!data.province))throw new Error('Compila tutti i dati per la spedizione.');
+        return data;
+      }
+      </script>
       <div class='paypal-disabled'>
         <b>Pulsante PayPal pronto.</b><br>
         Per attivarlo sulla DEV servono le variabili Render
@@ -3933,6 +4189,11 @@ def client_cart():
         <input type='hidden' name='phone'>
         <input type='hidden' name='email'>
         <input type='hidden' name='notes'>
+        <input type='hidden' name='delivery_method'>
+        <input type='hidden' name='address'>
+        <input type='hidden' name='postcode'>
+        <input type='hidden' name='city'>
+        <input type='hidden' name='province'>
         <button class='gold-btn' style='width:100%'>Invia richiesta senza pagamento</button>
       </form>
       <script>
@@ -3961,7 +4222,8 @@ def client_cart():
         "Carrello e pagamento",
         body,
         rows=rows,
-        total=total,
+        subtotal=subtotal,
+        shipping_cost=SHIPPING_COST_EUR,
         paypal_enabled=PAYPAL_ENABLED,
         paypal_client_id=PAYPAL_CLIENT_ID,
     )
@@ -3994,15 +4256,28 @@ def paypal_create_order():
     phone=str(data.get("phone","")).strip()
     email=str(data.get("email","")).strip()
     notes=str(data.get("notes","")).strip()
-    if not name or not phone:
-        return jsonify(error="Inserisci nome e telefono."), 400
+    delivery_method=str(data.get("delivery_method","pickup")).strip().lower()
+    address=str(data.get("address","")).strip()
+    postcode=str(data.get("postcode","")).strip()
+    city=str(data.get("city","")).strip()
+    province=str(data.get("province","")).strip().upper()
 
-    rows,total=current_client_cart()
-    if not rows or total<=0:
+    if not name or not phone or not email:
+        return jsonify(error="Inserisci nome, telefono ed email."), 400
+    if delivery_method not in ("pickup","shipping"):
+        return jsonify(error="Metodo di consegna non valido."), 400
+    if delivery_method=="shipping" and not all((address,postcode,city,province)):
+        return jsonify(error="Compila tutti i dati per la spedizione."), 400
+
+    rows,subtotal=current_client_cart()
+    if not rows or subtotal<=0:
         return jsonify(error="Il carrello è vuoto o non più disponibile."), 400
 
+    shipping_cost=SHIPPING_COST_EUR if delivery_method=="shipping" else 0.0
+    total=round(subtotal+shipping_cost,2)
+
     items=[]
-    for product,quantity,subtotal in rows:
+    for product,quantity,row_total in rows:
         items.append({
             "name": (product["model_name"] or product["category"] or product["brand_code"])[:127],
             "sku": (product["brand_code"] or str(product["id"]))[:127],
@@ -4013,23 +4288,41 @@ def paypal_create_order():
             },
         })
 
+    amount_breakdown={
+        "item_total":{"currency_code":"EUR","value":f"{subtotal:.2f}"}
+    }
+    if shipping_cost:
+        amount_breakdown["shipping"]={"currency_code":"EUR","value":f"{shipping_cost:.2f}"}
+
+    purchase_unit={
+        "reference_id":"TBS-JEWELRY",
+        "description":"Jewelry Atelier · Premium Piercing Jewelry",
+        "amount":{
+            "currency_code":"EUR",
+            "value":f"{total:.2f}",
+            "breakdown":amount_breakdown,
+        },
+        "items":items,
+    }
+
+    if delivery_method=="shipping":
+        purchase_unit["shipping"]={
+            "name":{"full_name":name[:300]},
+            "address":{
+                "address_line_1":address[:300],
+                "admin_area_2":city[:120],
+                "admin_area_1":province[:120],
+                "postal_code":postcode[:60],
+                "country_code":"IT",
+            },
+        }
+
     payload={
         "intent":"CAPTURE",
-        "purchase_units":[{
-            "reference_id":"TBS-JEWELRY",
-            "description":"Jewelry Atelier · Premium Piercing Jewelry",
-            "amount":{
-                "currency_code":"EUR",
-                "value":f"{total:.2f}",
-                "breakdown":{
-                    "item_total":{"currency_code":"EUR","value":f"{total:.2f}"}
-                },
-            },
-            "items":items,
-        }],
+        "purchase_units":[purchase_unit],
         "application_context":{
             "brand_name":"Jewelry Atelier",
-            "shipping_preference":"GET_FROM_FILE",
+            "shipping_preference":"SET_PROVIDED_ADDRESS" if delivery_method=="shipping" else "NO_SHIPPING",
             "user_action":"PAY_NOW",
         },
     }
@@ -4050,10 +4343,89 @@ def paypal_create_order():
         "phone":phone,
         "email":email,
         "notes":notes,
+        "delivery_method":delivery_method,
+        "address":address,
+        "postcode":postcode,
+        "city":city,
+        "province":province,
+        "shipping_cost":shipping_cost,
+        "subtotal":subtotal,
         "total":total,
     }
     session.modified=True
     return jsonify(id=paypal_order_id)
+
+
+
+def save_paid_paypal_order(paypal_order_id, payer):
+    pending=session.get("paypal_pending") or {}
+    rows,subtotal=current_client_cart()
+    if not rows:
+        raise RuntimeError("Il carrello non contiene più prodotti disponibili.")
+
+    delivery_method=pending.get("delivery_method","pickup")
+    shipping_cost=float(pending.get("shipping_cost",0) or 0)
+    total=round(float(pending.get("total",subtotal+shipping_cost)),2)
+    delivery_label="Spedizione" if delivery_method=="shipping" else "Ritiro in negozio"
+
+    with connect() as db:
+        existing=db.execute(
+            "SELECT order_number FROM customer_orders WHERE paypal_order_id=?",
+            (paypal_order_id,),
+        ).fetchone()
+        if existing:
+            session.pop("paypal_pending",None)
+            session.pop("client_cart",None)
+            session.modified=True
+            return existing["order_number"]
+
+        number=next_customer_order_number(db)
+        cur=db.execute(
+            """INSERT INTO customer_orders(
+                order_number,customer_name,customer_phone,customer_email,notes,total,
+                paypal_order_id,payment_method,delivery_method,shipping_cost,
+                shipping_address,shipping_postcode,shipping_city,shipping_province
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                number,
+                pending.get("name",""),
+                pending.get("phone",""),
+                pending.get("email",""),
+                pending.get("notes",""),
+                total,
+                paypal_order_id,
+                "PayPal",
+                delivery_label,
+                shipping_cost,
+                pending.get("address",""),
+                pending.get("postcode",""),
+                pending.get("city",""),
+                pending.get("province",""),
+            ),
+        )
+        order_id=cur.lastrowid
+
+        for product,quantity,row_total in rows:
+            db.execute(
+                """INSERT INTO customer_order_items(
+                    order_id,product_id,product_code,quantity,unit_price
+                ) VALUES(?,?,?,?,?)""",
+                (order_id,product["id"],product["brand_code"],quantity,product["price"]),
+            )
+            updated=db.execute(
+                "UPDATE products SET quantity=quantity-? WHERE id=? AND quantity>=?",
+                (quantity,product["id"],quantity),
+            )
+            if updated.rowcount!=1:
+                db.rollback()
+                raise RuntimeError(f"Disponibilità cambiata per {product['brand_code']}.")
+
+        db.commit()
+
+    session.pop("paypal_pending",None)
+    session.pop("client_cart",None)
+    session.modified=True
+    return number
 
 
 @app.post("/api/paypal/orders/<order_id>/capture")
@@ -4100,21 +4472,91 @@ def paypal_payment_success():
 
 @app.post("/boutique/ordine")
 def client_checkout():
-    raw=dict(session.get("client_cart",{})); name=request.form.get("name","").strip(); phone=request.form.get("phone","").strip(); email=request.form.get("email","").strip(); notes=request.form.get("notes","").strip()
-    if not raw or not name or not phone: flash("Compila nome e telefono."); return redirect(url_for("client_cart"))
+    raw=dict(session.get("client_cart",{}))
+    name=request.form.get("name","").strip()
+    phone=request.form.get("phone","").strip()
+    email=request.form.get("email","").strip()
+    notes=request.form.get("notes","").strip()
+    delivery_method=request.form.get("delivery_method","pickup").strip().lower()
+    address=request.form.get("address","").strip()
+    postcode=request.form.get("postcode","").strip()
+    city=request.form.get("city","").strip()
+    province=request.form.get("province","").strip().upper()
+
+    if not raw or not name or not phone or not email:
+        flash("Compila nome, telefono ed email.")
+        return redirect(url_for("client_cart"))
+    if delivery_method not in ("pickup","shipping"):
+        flash("Metodo di consegna non valido.")
+        return redirect(url_for("client_cart"))
+    if delivery_method=="shipping" and not all((address,postcode,city,province)):
+        flash("Compila tutti i dati per la spedizione.")
+        return redirect(url_for("client_cart"))
+
     with connect() as db:
-        items=[]; total=0
+        items=[]
+        subtotal=0.0
         for key,qty in raw.items():
-            try: pid=int(key); qty=int(qty)
-            except ValueError: continue
-            p=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
-            if p and 0<qty<=p["quantity"]: items.append((p,qty)); total+=p["price"]*qty
-        if not items: flash("Prodotti non più disponibili."); return redirect(url_for("client_cart"))
-        number=next_customer_order_number(db); cur=db.execute("INSERT INTO customer_orders(order_number,customer_name,customer_phone,customer_email,notes,total) VALUES(?,?,?,?,?,?)",(number,name,phone,email,notes,total))
-        for p,qty in items: db.execute("INSERT INTO customer_order_items(order_id,product_id,product_code,quantity,unit_price) VALUES(?,?,?,?,?)",(cur.lastrowid,p["id"],p["brand_code"],qty,p["price"]))
+            try:
+                pid=int(key)
+                qty=int(qty)
+            except (TypeError,ValueError):
+                continue
+            product=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
+            if product and 0<qty<=product["quantity"]:
+                items.append((product,qty))
+                subtotal+=float(product["price"])*qty
+
+        if not items:
+            flash("Prodotti non più disponibili.")
+            return redirect(url_for("client_cart"))
+
+        shipping_cost=SHIPPING_COST_EUR if delivery_method=="shipping" else 0.0
+        total=round(subtotal+shipping_cost,2)
+        delivery_label="Spedizione" if delivery_method=="shipping" else "Ritiro in negozio"
+
+        number=next_customer_order_number(db)
+        cur=db.execute(
+            """INSERT INTO customer_orders(
+                order_number,customer_name,customer_phone,customer_email,notes,total,
+                payment_method,delivery_method,shipping_cost,
+                shipping_address,shipping_postcode,shipping_city,shipping_province
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                number,name,phone,email,notes,total,
+                "Da concordare",delivery_label,shipping_cost,
+                address,postcode,city,province,
+            ),
+        )
+        for product,qty in items:
+            db.execute(
+                """INSERT INTO customer_order_items(
+                    order_id,product_id,product_code,quantity,unit_price
+                ) VALUES(?,?,?,?,?)""",
+                (cur.lastrowid,product["id"],product["brand_code"],qty,product["price"]),
+            )
         db.commit()
-    session.pop("client_cart",None); session.modified=True
-    return public_page("Ordine ricevuto","""<div class='hero'><h1>Grazie, {{name}}</h1><p>La richiesta <b>{{number}}</b> è stata ricevuta.</p><p>Ti contatteremo per la conferma.</p><a class='gold-btn' href='{{url_for("boutique")}}'>Continua</a></div>""",name=name,number=number)
+
+    session.pop("client_cart",None)
+    session.modified=True
+    return public_page(
+        "Ordine ricevuto",
+        """<div class='paypal-success'>
+        <span class='eyebrow'>Richiesta ricevuta</span>
+        <h1>Grazie, {{name}}.</h1>
+        <p>La richiesta <b>{{number}}</b> è stata registrata.</p>
+        <p>{{delivery}}{% if shipping_cost %} · Spese di spedizione € {{'%.2f'|format(shipping_cost)}}{% endif %}</p>
+        <p>Totale ordine: <b>€ {{'%.2f'|format(total)}}</b></p>
+        <p>Ti contatteremo per la conferma.</p>
+        <a class='gold-btn' href='{{url_for("boutique")}}'>Continua</a>
+        </div>""",
+        name=name,
+        number=number,
+        delivery=delivery_label,
+        shipping_cost=shipping_cost,
+        total=total,
+    )
+
 
 @app.get("/customer-orders")
 @role_required("admin","manager")
