@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.1.1 DEV · APPROVA PUSH SESSION HOTFIX"
+APP_VERSION = "v47.1.3 DEV · SCANNER QR 500 HOTFIX"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -563,7 +563,9 @@ input[type="checkbox"],input[type="radio"]{accent-color:#d9ac42}
 
     if(data.type==='discount-decision'){
       try{ sessionStorage.setItem('tbsDiscountDecision',String(data.requestId||'')); }catch(error){}
-      window.setTimeout(function(){ window.location.reload(); },180);
+      window.setTimeout(function(){
+        window.location.href='/cart?discount_applied='+encodeURIComponent(String(data.requestId||''));
+      },180);
       return;
     }
 
@@ -1388,230 +1390,258 @@ def badge_scanner_html(target_url, button_label="Accedi con badge", auto_start=T
     )
 
 def product_scanner_html(target_url):
-    """Scanner QR prodotti: lettore nativo Android + fallback jsQR."""
-    html=badge_scanner_html(target_url,"Cerca prodotto",auto_start=True)
-    old_vars = "  let stream=null,running=false,submitted=false,scanTimer=null,jsQRPromise=null;"
-    new_vars = """  let stream=null,running=false,submitted=false,scanTimer=null,jsQRPromise=null;
-  let productDetector=null,lastProductScanAt=0,detectorBusy=false;"""
-    if old_vars not in html:
-        raise RuntimeError("Variabili scanner non trovate")
-    html=html.replace(old_vars,new_vars,1)
+    """Scanner QR prodotti autonomo, senza dipendenze dal template badge."""
+    safe_target=json.dumps(target_url)
+    return f"""
+<div class="card product-scanner-card" style="max-width:560px;margin:20px auto;text-align:center">
+  <style>
+    .product-scanner-card{{background:linear-gradient(145deg,#17140d,#080808)!important;border:1px solid rgba(232,190,91,.52)!important;color:#fff!important}}
+    .product-scanner-card h2{{color:#fff!important;margin-top:0}}
+    .product-scanner-card .muted{{color:#d9d2c5!important}}
+    .product-camera-shell{{position:relative;overflow:hidden;border-radius:18px;background:#050505;min-height:260px;border:1px solid rgba(232,190,91,.44)}}
+    #productVideo{{width:100%;height:330px;object-fit:cover;display:block;background:#111}}
+    #productGuide{{position:absolute;inset:18%;border:3px solid #f5d978;border-radius:18px;box-shadow:0 0 0 999px rgba(0,0,0,.30),0 0 24px rgba(245,217,120,.26);pointer-events:none}}
+    .product-scan-actions{{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}}
+    .product-scan-actions button{{min-height:50px}}
+    #productCode{{margin-top:12px;font-size:18px}}
+    @media(max-width:520px){{.product-scan-actions{{grid-template-columns:1fr}}#productVideo{{height:300px}}}}
+  </style>
 
-    old_scan = r"""  function scanFrame(){
-    if(!running||submitted) return;
-    if(video.readyState>=2 && video.videoWidth>0 && video.videoHeight>0 && window.jsQR){
-      const maxWidth=900;
-      const scale=Math.min(1,maxWidth/video.videoWidth);
-      canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-      canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      try{
-        const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-        const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
-        if(code&&code.data){submitBadge(code.data);return;}
-      }catch(e){}
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
+  <h2>📷 Scansiona il prodotto</h2>
+  <p class="muted">Inquadra il QR applicato al gioiello oppure inserisci il codice manualmente.</p>
 
-    new_scan = r"""  function decodeCanvas(){
-    if(!window.jsQR)return null;
-    try{
+  <div class="product-camera-shell">
+    <video id="productVideo" playsinline webkit-playsinline muted autoplay></video>
+    <canvas id="productCanvas" style="display:none"></canvas>
+    <div id="productGuide"></div>
+  </div>
+
+  <form id="productScanForm" method="post" action={safe_target}>
+    <input id="productCode" name="badge_payload" placeholder="Codice prodotto o lettore USB" autocomplete="off">
+    <div class="product-scan-actions">
+      <button type="button" id="productStart">Avvia fotocamera</button>
+      <button type="submit" class="secondary">Invia codice</button>
+    </div>
+  </form>
+
+  <p id="productStatus" class="muted" aria-live="polite">Fotocamera pronta.</p>
+</div>
+
+<script>
+(function(){{
+  const video=document.getElementById('productVideo');
+  const canvas=document.getElementById('productCanvas');
+  const ctx=canvas.getContext('2d',{{willReadFrequently:true}});
+  const form=document.getElementById('productScanForm');
+  const field=document.getElementById('productCode');
+  const status=document.getElementById('productStatus');
+  const guide=document.getElementById('productGuide');
+  const start=document.getElementById('productStart');
+
+  let stream=null;
+  let running=false;
+  let submitted=false;
+  let frameId=null;
+  let detector=null;
+  let jsQRPromise=null;
+
+  function loadJsQR(){{
+    if(window.jsQR)return Promise.resolve(window.jsQR);
+    if(jsQRPromise)return jsQRPromise;
+    jsQRPromise=new Promise((resolve,reject)=>{{
+      const sources=[
+        'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
+        'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js'
+      ];
+      let index=0;
+      const next=()=>{{
+        if(index>=sources.length){{reject(new Error('Lettore QR non disponibile'));return;}}
+        const script=document.createElement('script');
+        script.src=sources[index++];
+        script.async=true;
+        script.onload=()=>window.jsQR?resolve(window.jsQR):next();
+        script.onerror=next;
+        document.head.appendChild(script);
+      }};
+      next();
+    }});
+    return jsQRPromise;
+  }}
+
+  async function stopCamera(){{
+    running=false;
+    if(frameId)cancelAnimationFrame(frameId);
+    frameId=null;
+    if(stream)stream.getTracks().forEach(track=>track.stop());
+    stream=null;
+    try{{video.pause();video.srcObject=null;}}catch(error){{}}
+    start.disabled=false;
+    start.textContent='Avvia fotocamera';
+  }}
+
+  async function submitCode(value){{
+    if(submitted)return;
+    const clean=String(value||'').trim();
+    if(!clean)return;
+
+    submitted=true;
+    field.value=clean;
+    guide.style.borderColor='#34d399';
+    status.textContent='Verifica prodotto…';
+
+    try{{
+      const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{{
+        cache:'no-store',
+        headers:{{'Accept':'application/json'}}
+      }});
+      const data=await response.json().catch(()=>({{}}));
+      if(!response.ok||!data.ok){{
+        submitted=false;
+        guide.style.borderColor='#ef4444';
+        status.textContent='Prodotto non trovato: '+clean;
+        setTimeout(()=>{{
+          guide.style.borderColor='#f5d978';
+          status.textContent='Inquadra un altro QR.';
+        }},1400);
+        return;
+      }}
+
+      try{{if(navigator.vibrate)navigator.vibrate(70)}}catch(error){{}}
+      status.textContent='✓ '+data.brand_code+' riconosciuto.';
+      await stopCamera();
+      form.submit();
+    }}catch(error){{
+      submitted=false;
+      guide.style.borderColor='#ef4444';
+      status.textContent='Errore durante la verifica. Riprova.';
+    }}
+  }}
+
+  function decodeWithJsQR(){{
+    if(!window.jsQR||video.readyState<2||!video.videoWidth)return null;
+    const vw=video.videoWidth;
+    const vh=video.videoHeight;
+    const ratio=.58;
+    const sw=Math.round(vw*ratio);
+    const sh=Math.round(vh*ratio);
+    const sx=Math.round((vw-sw)/2);
+    const sy=Math.round((vh-sh)/2);
+    const width=Math.min(1300,Math.max(900,sw));
+    canvas.width=width;
+    canvas.height=Math.round(width*sh/sw);
+    ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+    try{{
       const image=ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code=window.jsQR(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'});
+      const code=window.jsQR(image.data,image.width,image.height,{{inversionAttempts:'attemptBoth'}});
       return code&&code.data?code.data:null;
-    }catch(e){return null;}
-  }
+    }}catch(error){{return null;}}
+  }}
 
-  async function detectNative(){
-    if(!productDetector||detectorBusy||!running||submitted)return null;
-    detectorBusy=true;
-    try{
-      const results=await productDetector.detect(video);
-      return results&&results.length&&results[0].rawValue?results[0].rawValue:null;
-    }catch(e){
-      return null;
-    }finally{
-      detectorBusy=false;
-    }
-  }
-
-  async function scanFrame(){
+  async function scanLoop(){{
     if(!running||submitted)return;
 
-    const now=performance.now();
-    if(now-lastProductScanAt<85){
-      scanTimer=requestAnimationFrame(scanFrame);
+    try{{
+      if(detector){{
+        const values=await detector.detect(video);
+        if(values&&values.length&&values[0].rawValue){{
+          submitCode(values[0].rawValue);
+          return;
+        }}
+      }}
+    }}catch(error){{}}
+
+    const fallback=decodeWithJsQR();
+    if(fallback){{
+      submitCode(fallback);
       return;
-    }
-    lastProductScanAt=now;
+    }}
 
-    if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
-      const nativeValue=await detectNative();
-      if(nativeValue){submitBadge(nativeValue);return;}
+    frameId=requestAnimationFrame(scanLoop);
+  }}
 
-      if(window.jsQR){
-        const vw=video.videoWidth, vh=video.videoHeight;
+  async function startCamera(){{
+    if(running)return;
+    submitted=false;
 
-        // Prima analizza la zona centrale, ingrandita: è la più efficace
-        // con etichette QR da 13 mm.
-        const cropRatio=.56;
-        const sw=Math.round(vw*cropRatio);
-        const sh=Math.round(vh*cropRatio);
-        const sx=Math.round((vw-sw)/2);
-        const sy=Math.round((vh-sh)/2);
-        const targetWidth=Math.min(1400,Math.max(1000,sw*1.35));
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){{
+      status.textContent='Fotocamera non disponibile. Inserisci il codice manualmente.';
+      return;
+    }}
 
-        canvas.width=Math.max(1,Math.round(targetWidth));
-        canvas.height=Math.max(1,Math.round(targetWidth*sh/sw));
-        ctx.imageSmoothingEnabled=false;
-        ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+    try{{
+      start.disabled=true;
+      status.textContent='Richiesta accesso alla fotocamera…';
 
-        let value=decodeCanvas();
-        if(value){submitBadge(value);return;}
+      stream=await navigator.mediaDevices.getUserMedia({{
+        audio:false,
+        video:{{
+          facingMode:{{ideal:'environment'}},
+          width:{{ideal:1920}},
+          height:{{ideal:1080}}
+        }}
+      }});
 
-        // Secondo tentativo sul fotogramma completo.
-        const fullWidth=Math.min(1200,vw);
-        canvas.width=Math.max(1,Math.round(fullWidth));
-        canvas.height=Math.max(1,Math.round(fullWidth*vh/vw));
-        ctx.drawImage(video,0,0,vw,vh,0,0,canvas.width,canvas.height);
-
-        value=decodeCanvas();
-        if(value){submitBadge(value);return;}
-      }
-    }
-    scanTimer=requestAnimationFrame(scanFrame);
-  }"""
-
-    if old_scan not in html:
-        raise RuntimeError("Funzione scanFrame originale non trovata")
-    html=html.replace(old_scan,new_scan,1)
-
-    old_begin_part = """      video.srcObject=stream;
-      video.setAttribute('playsinline','');
-      video.setAttribute('webkit-playsinline','');
-      await video.play();
-      running=true;
-      start.style.display='none';
-      stop.style.display='inline-block';
-      status.textContent='Fotocamera attiva. Preparazione lettore QR…';
-      try{
-        await loadJsQR();
-        status.textContent='Fotocamera attiva. Inquadra il QR dentro il riquadro.';
-        scanTimer=requestAnimationFrame(scanFrame);
-      }catch(readerError){
-        status.textContent='Fotocamera attiva, ma il lettore QR non è disponibile. Usa il codice o il lettore USB.';
-        console.error('Product QR reader error',readerError);
-      }"""
-
-    new_begin_part = """      video.srcObject=stream;
-      video.setAttribute('playsinline','');
-      video.setAttribute('webkit-playsinline','');
+      video.srcObject=stream;
       await video.play();
 
-      // Prova ad attivare la messa a fuoco continua senza bloccare
-      // i dispositivi che non la supportano.
-      try{
+      try{{
         const track=stream.getVideoTracks()[0];
-        const caps=track&&track.getCapabilities?track.getCapabilities():{};
-        const advanced={};
-        if(caps.focusMode&&caps.focusMode.includes('continuous'))advanced.focusMode='continuous';
-        if(caps.exposureMode&&caps.exposureMode.includes('continuous'))advanced.exposureMode='continuous';
-        if(Object.keys(advanced).length)await track.applyConstraints({advanced:[advanced]});
-      }catch(e){}
+        const caps=track&&track.getCapabilities?track.getCapabilities():{{}};
+        if(caps.focusMode&&caps.focusMode.includes('continuous')){{
+          await track.applyConstraints({{advanced:[{{focusMode:'continuous'}}]}});
+        }}
+      }}catch(error){{}}
 
-      try{
-        if('BarcodeDetector' in window){
+      try{{
+        if('BarcodeDetector' in window){{
           const formats=await BarcodeDetector.getSupportedFormats();
-          if(formats.includes('qr_code'))productDetector=new BarcodeDetector({formats:['qr_code']});
-        }
-      }catch(e){productDetector=null;}
+          if(formats.includes('qr_code'))detector=new BarcodeDetector({{formats:['qr_code']}});
+        }}
+      }}catch(error){{detector=null;}}
 
+      loadJsQR().catch(()=>{{}});
       running=true;
-      start.style.display='none';
-      stop.style.display='inline-block';
+      start.disabled=false;
+      start.textContent='Ferma fotocamera';
       status.textContent='Fotocamera attiva. Avvicina il QR finché è nitido.';
+      frameId=requestAnimationFrame(scanLoop);
+    }}catch(error){{
+      await stopCamera();
+      status.textContent='Impossibile avviare la fotocamera. Controlla i permessi del sito.';
+    }}
+  }}
 
-      // Il lettore nativo parte subito. jsQR viene caricato come seconda lettura.
-      loadJsQR().catch(readerError=>console.error('Product QR fallback error',readerError));
-      scanTimer=requestAnimationFrame(scanFrame);"""
+  start.addEventListener('click',()=>{{
+    if(running)stopCamera();
+    else startCamera();
+  }});
 
-    if old_begin_part not in html:
-        raise RuntimeError("Blocco avvio scanner non trovato")
-    html=html.replace(old_begin_part,new_begin_part,1)
+  form.addEventListener('submit',event=>{{
+    const value=field.value.trim();
+    if(!value){{
+      event.preventDefault();
+      status.textContent='Inserisci o scansiona un codice prodotto.';
+      startCamera();
+    }}
+  }});
 
-    old_submit = """  function submitBadge(value){
-    if(submitted) return;
-    const clean=(value||'').trim();
-    if(!clean) return;
-    submitted=true;
-    field.value=clean;
-    status.textContent='✓ QR letto. Ricerca del prodotto…';
-    guide.style.borderColor='#34d399';
-    const badgeCard=video.closest('.badge-login');
-    if(badgeCard) badgeCard.classList.add('badge-success');
-    halt().finally(()=>form.submit());
-  }"""
+  field.addEventListener('input',()=>{{
+    const value=field.value.trim();
+    if(value.length>20){{
+      clearTimeout(field._timer);
+      field._timer=setTimeout(()=>submitCode(value),150);
+    }}
+  }});
 
-    new_submit = """  async function submitBadge(value){
-    if(submitted)return;
-    const clean=(value||'').trim();
-    if(!clean)return;
-    submitted=true;
-    field.value=clean;
-    status.textContent='Verifica prodotto…';
-    guide.style.borderColor='#d6ae58';
-    try{
-      const response=await fetch('/products/scan-check?code='+encodeURIComponent(clean),{
-        cache:'no-store',
-        headers:{'Accept':'application/json'}
-      });
-      let data={};try{data=await response.json()}catch(e){}
-      if(!response.ok||!data.ok){
-        guide.style.borderColor='#ef4444';
-        status.textContent='✕ Prodotto non trovato: '+clean;
-        submitted=false;
-        setTimeout(()=>{
-          guide.style.borderColor='rgba(255,255,255,.9)';
-          status.textContent='Inquadra un altro QR.';
-        },1300);
-        return;
-      }
-      try{if(navigator.vibrate)navigator.vibrate(70)}catch(e){}
-      guide.style.borderColor='#34d399';
-      status.textContent='✓ '+data.brand_code+' riconosciuto. Apertura…';
-      await halt();
-      form.submit();
-    }catch(e){
-      guide.style.borderColor='#ef4444';
-      status.textContent='Impossibile verificare il prodotto. Riprova.';
-      submitted=false;
-    }
-  }"""
+  window.addEventListener('pagehide',stopCamera);
+  window.addEventListener('beforeunload',stopCamera);
 
-    if old_submit not in html:
-        raise RuntimeError("Submit scanner originale non trovato")
-    html=html.replace(old_submit,new_submit,1)
+  setTimeout(startCamera,180);
+}})();
+</script>
+"""
 
-    # Testo guida più utile per QR piccoli.
-    html=html.replace(
-        "Fotocamera attiva. Inquadra il QR dentro il riquadro.",
-        "Fotocamera attiva. Avvicina il QR finché è nitido."
-    )
-    replacements={
-        "📷 Inquadra il badge":"📷 Scansiona il prodotto",
-        "Inquadra il QR nel riquadro.":"Inquadra il QR applicato al gioiello.",
-        'placeholder="Codice badge o lettore USB"':'placeholder="Codice prodotto o lettore USB"',
-        "Badge letto. Accesso in corso…":"QR letto. Ricerca del prodotto…",
-        "Questo browser non permette l’accesso alla fotocamera. Usa password o lettore USB.":"Questo browser non permette l’accesso alla fotocamera. Usa il codice prodotto o un lettore USB.",
-        "Inquadra il QR oppure inserisci il codice del badge.":"Inquadra il QR oppure inserisci il codice del prodotto.",
-        "Badge camera error":"Product QR camera error",
-        "Fotocamera non avviata.":"Fotocamera pronta.",
-    }
-    for old,new in replacements.items():
-        html=html.replace(old,new)
-
-    return html
 
 def create_badge_pdf(badge_name, token):
     """Crea un badge A6 verticale fronte/retro, pronto per stampa duplex."""
@@ -8717,16 +8747,38 @@ def discount_request_wait(token):
     if req["status"]=="Approvata":
         with connect() as db:
             p=db.execute("SELECT * FROM products WHERE id=?",(req["product_id"],)).fetchone()
-            if not p or str(req["product_id"]) not in session.get("cart",{}):
-                flash("L'articolo non è più nel carrello.")
-                return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
+            if not p:
+                flash("Il prodotto non è più presente nel catalogo.")
+                return redirect(url_for("cart"))
+            if int(p["quantity"] or 0)<=0:
+                flash("Sconto approvato, ma il prodotto non è più disponibile in magazzino.")
+                return redirect(url_for("cart"))
+
+            key=str(req["product_id"])
+            raw=dict(session.get("cart",{}))
+            if key not in raw:
+                raw[key]=1
+                session["cart"]=raw
+
             cp=dict(session.get("cart_prices",{}))
-            cp[str(req["product_id"])]= {"price":req["requested_price"],"reason":req["reason"],"authorized_by_user_id":req["approver_user_id"],"authorized_by_username":req["approver_username"]}
+            cp[key]={
+                "price":float(req["requested_price"]),
+                "reason":req["reason"],
+                "authorized_by_user_id":req["approver_user_id"],
+                "authorized_by_username":req["approver_username"]
+            }
             session["cart_prices"]=cp
             session.pop("pending_discount_token",None)
             session.modified=True
-            db.execute("UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",(req["id"],))
-            log_action(db,"Sconto remoto applicato",p,f"Autorizzato da {req['approver_username']}; prezzo € {req['requested_price']:.2f}")
+
+            db.execute(
+                "UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",
+                (req["id"],)
+            )
+            log_action(
+                db,"Sconto remoto applicato",p,
+                f"Autorizzato da {req['approver_username']}; prezzo € {req['requested_price']:.2f}"
+            )
             db.commit()
         flash(f"Sconto autorizzato da {req['approver_username']}.")
         return redirect(url_for(req["return_to"] if req["return_to"] in ("pos","cart") else "pos"))
@@ -8943,18 +8995,37 @@ def cart():
                 status=req["status"]
                 if status == "In attesa":
                     has_pending_discount=True
-                if status == "Approvata" and str(req["product_id"]) in raw:
-                    cp=dict(session.get("cart_prices",{}))
-                    cp[str(req["product_id"])]= {
-                        "price":req["requested_price"],
-                        "reason":req["reason"],
-                        "authorized_by_user_id":req["approver_user_id"],
-                        "authorized_by_username":req["approver_username"]
-                    }
-                    session["cart_prices"]=cp
-                    session.modified=True
-                    db.execute("UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",(req["id"],))
-                    status="Applicata"
+
+                if status == "Approvata":
+                    key=str(req["product_id"])
+                    product=db.execute(
+                        "SELECT id,quantity FROM products WHERE id=?",
+                        (req["product_id"],)
+                    ).fetchone()
+
+                    # L'approvazione deve avere effetto reale anche se il carrello
+                    # della sessione è stato perso o svuotato durante il cambio account.
+                    if product and int(product["quantity"] or 0)>0:
+                        if key not in raw:
+                            raw[key]=1
+                            session["cart"]=raw
+
+                        cp=dict(session.get("cart_prices",{}))
+                        cp[key]={
+                            "price":float(req["requested_price"]),
+                            "reason":req["reason"],
+                            "authorized_by_user_id":req["approver_user_id"],
+                            "authorized_by_username":req["approver_username"]
+                        }
+                        session["cart_prices"]=cp
+                        session.pop("pending_discount_token",None)
+                        session.modified=True
+
+                        db.execute(
+                            "UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",
+                            (req["id"],)
+                        )
+                        status="Applicata"
                 discount_feedback.append({
                     "id":req["id"],
                     "product_id":req["product_id"],
