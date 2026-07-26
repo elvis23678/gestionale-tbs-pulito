@@ -19,6 +19,7 @@ import urllib.error
 
 from flask import Flask, flash, redirect, render_template_string, request, session, url_for, send_file, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 try:
     from pywebpush import webpush
@@ -126,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.2.0 DEV · PUSH INTERATTIVE + BADGE HOTFIX"
+APP_VERSION = "v47.0.0 DEV · PUSH PRO INTERATTIVE"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -572,7 +573,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4620',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4700',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6407,7 +6408,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v46.2.0';
+const SW_VERSION='v47.0.0';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6426,8 +6427,7 @@ function readPushPayload(event){
   };
   if(!event.data) return fallback;
   try{
-    const parsed=event.data.json();
-    return Object.assign({},fallback,parsed||{});
+    return Object.assign({},fallback,event.data.json()||{});
   }catch(jsonError){
     try{
       const text=event.data.text();
@@ -6453,38 +6453,31 @@ function normalizeActions(data){
 async function displayPushNotification(data){
   const title=String(data.title||'TBS One');
   const targetUrl=String(data.url||'/notifications');
-  const notificationId=Number(data.notification_id||0);
   const options={
     body:String(data.body||data.message||'Hai una nuova notifica.'),
     icon:data.icon||'/push/icon',
     badge:data.badge||'/push/badge',
     tag:String(data.tag||('tbs-one-'+Date.now())),
     renotify:true,
-    vibrate:[250,90,250,90,380],
+    vibrate:[300,100,300,100,500],
     requireInteraction:Boolean(data.requireInteraction),
     timestamp:Date.now(),
     actions:normalizeActions(data),
     data:{
       url:targetUrl,
       manageUrl:String(data.manage_url||targetUrl),
-      notificationId:notificationId,
+      notificationId:Number(data.notification_id||0),
       kind:String(data.kind||'generic'),
+      approveToken:String(data.approve_token||''),
+      rejectToken:String(data.reject_token||''),
       swVersion:SW_VERSION
     }
   };
   try{
     await self.registration.showNotification(title,options);
   }catch(firstError){
-    await self.registration.showNotification(title,{
-      body:options.body,
-      badge:'/push/badge',
-      tag:options.tag+'-fallback',
-      renotify:true,
-      vibrate:[250,90,380],
-      timestamp:Date.now(),
-      actions:options.actions,
-      data:options.data
-    });
+    delete options.icon;
+    await self.registration.showNotification(title,options);
   }
 }
 
@@ -6505,11 +6498,67 @@ async function openOrFocus(target){
   if(self.clients.openWindow) await self.clients.openWindow(absolute);
 }
 
+async function executeInteractiveAction(action,data){
+  const token=action==='approve' ? data.approveToken : data.rejectToken;
+  if(!token) return {ok:false,error:'Token azione assente'};
+  const response=await fetch('/api/push/discount-action',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:action,token:token})
+  });
+  let result={};
+  try{ result=await response.json(); }catch(error){}
+  if(!response.ok || !result.ok){
+    return {ok:false,error:result.error||('Errore HTTP '+response.status),login:response.status===401||response.status===403};
+  }
+  return result;
+}
+
 self.addEventListener('notificationclick',event=>{
   const action=event.action||'open';
   const data=event.notification.data||{};
   event.notification.close();
+
   event.waitUntil((async()=>{
+    if(action==='approve' || action==='reject'){
+      let result;
+      try{
+        result=await executeInteractiveAction(action,data);
+      }catch(error){
+        result={ok:false,error:'Connessione non disponibile'};
+      }
+
+      if(result.ok){
+        await self.registration.showNotification(
+          action==='approve' ? '✅ Sconto approvato' : '❌ Sconto rifiutato',
+          {
+            body:String(result.message||'Operazione completata.'),
+            icon:'/push/icon',
+            badge:'/push/badge',
+            tag:'discount-result-'+String(result.request_id||Date.now()),
+            renotify:true,
+            vibrate:[200,80,300],
+            data:{url:'/discount-approvals'}
+          }
+        );
+      }else{
+        await self.registration.showNotification(
+          'TBS One · azione non completata',
+          {
+            body:String(result.error||'Apri TBS One per completare l’operazione.'),
+            icon:'/push/icon',
+            badge:'/push/badge',
+            tag:'discount-action-error-'+Date.now(),
+            renotify:true,
+            data:{url:data.manageUrl||'/discount-approvals'}
+          }
+        );
+        if(result.login) await openOrFocus(data.manageUrl||'/discount-approvals');
+      }
+      return;
+    }
+
     if(action==='mark-read'){
       if(data.notificationId){
         try{
@@ -6523,10 +6572,12 @@ self.addEventListener('notificationclick',event=>{
       }
       return;
     }
+
     if(action==='manage'){
       await openOrFocus(data.manageUrl||data.url||'/discount-approvals');
       return;
     }
+
     await openOrFocus(data.url||'/notifications');
   })());
 });
@@ -6538,7 +6589,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v46.2.0"
+            "X-TBS-Service-Worker-Version":"v47.0.0"
         }
     )
 
@@ -6586,6 +6637,127 @@ def push_action():
         )
         db.commit()
     return jsonify({"ok":True,"action":"mark-read","notification_id":notification_id})
+
+
+@app.post("/api/push/discount-action")
+@login_required
+def push_discount_action():
+    if session.get("role") not in ("admin","manager"):
+        return jsonify({"ok":False,"error":"Ruolo non autorizzato"}),403
+
+    data=request.get_json(silent=True) or {}
+    action=(data.get("action") or "").strip().lower()
+    token=(data.get("token") or "").strip()
+    if action not in ("approve","reject") or not token:
+        return jsonify({"ok":False,"error":"Azione non valida"}),400
+
+    try:
+        signed=_read_discount_action_token(token,max_age=900)
+    except SignatureExpired:
+        return jsonify({"ok":False,"error":"Azione scaduta. Apri TBS One per gestire la richiesta."}),410
+    except BadSignature:
+        return jsonify({"ok":False,"error":"Token azione non valido"}),400
+
+    if int(signed.get("user_id") or 0)!=int(session.get("user_id") or 0):
+        return jsonify({"ok":False,"error":"Azione destinata a un altro utente"}),403
+    if signed.get("action")!=action:
+        return jsonify({"ok":False,"error":"Azione non coerente"}),400
+
+    request_id=int(signed.get("request_id") or 0)
+    with connect() as db:
+        me=db.execute(
+            "SELECT id,username,role FROM users WHERE id=? AND active=1",
+            (session.get("user_id"),)
+        ).fetchone()
+        req=db.execute(
+            "SELECT * FROM discount_requests WHERE id=?",
+            (request_id,)
+        ).fetchone()
+
+        if not me or me["role"] not in ("admin","manager"):
+            return jsonify({"ok":False,"error":"Utente non autorizzato"}),403
+        if not req:
+            return jsonify({"ok":False,"error":"Richiesta non trovata"}),404
+        if req["status"]!="In attesa":
+            return jsonify({
+                "ok":False,
+                "error":f"Richiesta già gestita: {req['status']}"
+            }),409
+
+        status="Approvata" if action=="approve" else "Rifiutata"
+        note="Approvazione dalla notifica push" if action=="approve" else "Rifiuto dalla notifica push"
+        db.execute(
+            """UPDATE discount_requests
+               SET status=?,counter_price=NULL,decision_note=?,
+                   approver_user_id=?,approver_username=?,decided_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status='In attesa'""",
+            (status,note,me["id"],me["username"],request_id)
+        )
+
+        staff=db.execute(
+            "SELECT id,username FROM users WHERE active=1 AND role IN ('admin','manager')"
+        ).fetchall()
+        for staff_user in staff:
+            event_key=f"discount:{request_id}:request:user:{staff_user['id']}"
+            db.execute(
+                """UPDATE notifications
+                   SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP),
+                       archived_at=COALESCE(archived_at,CURRENT_TIMESTAMP),
+                       archived_by_user_id=?,archived_by_username=?
+                   WHERE recipient_user_id=? AND event_key=?""",
+                (me["id"],me["username"],staff_user["id"],event_key)
+            )
+
+        recipient=_current_user_for_identity(
+            db,req["requester_user_id"],req["requester_username"]
+        )
+        if recipient:
+            if action=="approve":
+                kind="discount_approved"
+                title="Sconto autorizzato"
+                event_suffix="approved"
+                message=(
+                    f"{req['product_code']} · € {float(req['original_price']):.2f} "
+                    f"→ € {float(req['requested_price']):.2f} · {me['username']}"
+                )
+            else:
+                kind="discount_rejected"
+                title="Sconto rifiutato"
+                event_suffix="rejected"
+                message=(
+                    f"{req['product_code']} · prezzo richiesto € "
+                    f"{float(req['requested_price']):.2f} · {me['username']}"
+                )
+            _notify_user(
+                db,recipient["id"],kind,title,message,
+                "discount",request_id,
+                f"discount:{request_id}:{event_suffix}",
+                recipient["username"]
+            )
+
+        log_action(
+            db,
+            "Sconto remoto approvato da notifica" if action=="approve"
+            else "Sconto remoto rifiutato da notifica",
+            details=(
+                f"Richiesta #{request_id}; venditore {req['requester_username']}; "
+                f"{req['product_code']}; richiesto € {float(req['requested_price']):.2f}; "
+                f"gestore {me['username']}"
+            )
+        )
+        db.commit()
+
+    return jsonify({
+        "ok":True,
+        "action":action,
+        "request_id":request_id,
+        "status":status,
+        "message":(
+            f"{req['product_code']} · € {float(req['requested_price']):.2f}"
+            if action=="approve"
+            else f"{req['product_code']} · richiesta rifiutata"
+        )
+    })
 
 
 @app.get("/api/push/config")
@@ -6927,6 +7099,23 @@ def _response_text(response, limit=700):
     return str(text).replace("\n"," ").replace("\r"," ")[:limit]
 
 
+
+def _push_action_serializer():
+    return URLSafeTimedSerializer(app.secret_key, salt="tbs-push-discount-action-v1")
+
+
+def _make_discount_action_token(request_id, user_id, action):
+    return _push_action_serializer().dumps({
+        "request_id":int(request_id),
+        "user_id":int(user_id),
+        "action":str(action)
+    })
+
+
+def _read_discount_action_token(token, max_age=900):
+    return _push_action_serializer().loads(token, max_age=max_age)
+
+
 def _send_push(db, user_id, notification_id, title, message, kind):
     if not PUSH_SERVER_READY:
         print("[TBS PUSH] BLOCCATO: server_not_configured", flush=True)
@@ -6938,9 +7127,22 @@ def _send_push(db, user_id, notification_id, title, message, kind):
     ).fetchall()
 
     is_discount_request=(kind=="discount_request")
+    approve_token=""
+    reject_token=""
+    request_id=0
+    if is_discount_request:
+        notice=db.execute(
+            "SELECT reference_id FROM notifications WHERE id=? AND recipient_user_id=?",
+            (notification_id,user_id)
+        ).fetchone()
+        request_id=int(notice["reference_id"] or 0) if notice else 0
+        if request_id:
+            approve_token=_make_discount_action_token(request_id,user_id,"approve")
+            reject_token=_make_discount_action_token(request_id,user_id,"reject")
+
     actions=(
-        [{"action":"manage","title":"Gestisci"},{"action":"mark-read","title":"Segna letta"}]
-        if is_discount_request else
+        [{"action":"approve","title":"✅ Approva"},{"action":"reject","title":"❌ Rifiuta"}]
+        if is_discount_request and request_id else
         [{"action":"open","title":"Apri"},{"action":"mark-read","title":"Segna letta"}]
     )
     payload=json.dumps({
@@ -6954,6 +7156,8 @@ def _send_push(db, user_id, notification_id, title, message, kind):
         "icon":"/push/icon",
         "badge":"/push/badge",
         "actions":actions,
+        "approve_token":approve_token,
+        "reject_token":reject_token,
         "requireInteraction":bool(is_discount_request)
     },ensure_ascii=False)
 
@@ -8450,7 +8654,7 @@ def discount_approvals():
                 x['suggested_margin']=None
             rows.append(x)
         recent=db.execute("SELECT * FROM discount_requests WHERE status!='In attesa' ORDER BY COALESCE(decided_at,created_at) DESC,id DESC LIMIT 20").fetchall()
-    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}.price-advisor{grid-column:1/-1;background:#f6f0df;border:1px solid #d7b36a;border-radius:16px;padding:14px;margin:8px 0}.price-advisor strong{color:#72510d}.advisor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.advisor-value{font-size:22px;font-weight:900}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><div class="price-advisor"><h3>💡 Suggerimento prezzo</h3>{% if x.cost_price and x.cost_price>0 %}<div class="advisor-grid"><div><span class="muted">Pagato</span><div class="advisor-value">€ {{'%.2f'|format(x.cost_price)}}</div></div><div><span class="muted">Utile al prezzo richiesto</span><div class="advisor-value">€ {{'%.2f'|format(x.requested_profit)}}</div></div><div><span class="muted">Margine richiesto</span><div><b>{{'%.1f'|format(x.requested_margin)}}%</b></div></div><div><span class="muted">Prezzo consigliato</span><div class="advisor-value">€ {{'%.2f'|format(x.suggested_price)}}</div></div></div><p class="muted" style="margin-bottom:0">Il suggerimento tutela almeno il 50% di margine lordo, senza superare il listino.</p>{% else %}<p><b>Costo di acquisto non inserito.</b> Aggiungilo nella scheda prodotto per ottenere il suggerimento automatico.</p>{% endif %}</div><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure invia una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" value="{{'%.2f'|format(x.suggested_price)}}" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta suggerita</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
+    return page("Autorizzazioni sconto",'''<style>.approval-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}.approval-card{border-left:7px solid #d7a72c}.discount-big{font-size:32px;font-weight:950;color:#9b1c1c}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.decision-actions input{grid-column:1/-1;font-size:20px;text-align:center;letter-spacing:5px}.price-advisor{grid-column:1/-1;background:#f6f0df;border:1px solid #d7b36a;border-radius:16px;padding:14px;margin:8px 0}.price-advisor strong{color:#72510d}.advisor-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.advisor-value{font-size:22px;font-weight:900}</style><h1>🔔 Autorizzazioni sconto</h1>{% if not has_pin %}<div class="flash"><b>PIN rapido non configurato.</b> Impostalo dalla gestione utenti prima di approvare.</div>{% endif %}<div class="approval-grid">{% for x in rows %}<div class="card approval-card"><span class="badge">In attesa</span><h2>{{x.product_code}}</h2><p>Richiesta da <b>{{x.requester_username}}</b><br><span class="muted">{{x.created_at|rome_time}}</span></p><div>Listino € {{'%.2f'|format(x.original_price)}}</div><div class="discount-big">€ {{'%.2f'|format(x.requested_price)}}</div><p>Sconto {{'%.1f'|format((1-(x.requested_price/x.original_price))*100 if x.original_price else 0)}}% · {{x.reason or 'Altro'}}</p><div class="price-advisor"><h3>💡 Suggerimento prezzo</h3>{% if x.cost_price and x.cost_price>0 %}<div class="advisor-grid"><div><span class="muted">Pagato</span><div class="advisor-value">€ {{'%.2f'|format(x.cost_price)}}</div></div><div><span class="muted">Utile al prezzo richiesto</span><div class="advisor-value">€ {{'%.2f'|format(x.requested_profit)}}</div></div><div><span class="muted">Margine richiesto</span><div><b>{{'%.1f'|format(x.requested_margin)}}%</b></div></div><div><span class="muted">Prezzo consigliato</span><div class="advisor-value">€ {{'%.2f'|format(x.suggested_price)}}</div></div></div><p class="muted" style="margin-bottom:0">Il suggerimento tutela almeno il 50% di margine lordo, senza superare il listino.</p>{% else %}<p><b>Costo di acquisto non inserito.</b> Aggiungilo nella scheda prodotto per ottenere il suggerimento automatico.</p>{% endif %}</div><form method="post" action="{{url_for('decide_discount_request',request_id=x.id)}}" class="decision-actions"><input name="pin" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" placeholder="PIN rapido" required><button name="decision" value="approve" class="success" {% if not has_pin %}disabled{% endif %}>✅ Approva</button><button name="decision" value="reject" class="danger" {% if not has_pin %}disabled{% endif %}>❌ Rifiuta</button><div style="grid-column:1/-1;border-top:1px solid #ddd;padding-top:10px"><label>Oppure invia una controproposta</label><input name="counter_price" type="number" min="0" max="{{x.original_price}}" step="0.01" value="{{'%.2f'|format(x.suggested_price)}}" style="letter-spacing:0"><textarea name="decision_note" placeholder="Nota facoltativa al venditore"></textarea><button name="decision" value="counter" class="secondary" {% if not has_pin %}disabled{% endif %}>↔ Invia controproposta suggerita</button></div></form></div>{% else %}<div class="card"><p>Nessuna richiesta in attesa.</p></div>{% endfor %}</div><div class="card"><h2>Ultime decisioni</h2>{% for x in recent %}<p><b>{{x.product_code}}</b> · {{x.status}} · {{x.requester_username}} · € {{'%.2f'|format(x.requested_price)}}{% if x.approver_username %} · {{x.approver_username}}{% endif %}<br><span class="muted">{{(x.decided_at or x.created_at)|rome_time}}</span></p>{% else %}<p class="muted">Nessuno storico.</p>{% endfor %}</div>''',rows=rows,recent=recent,has_pin=bool(me and me["approval_pin_hash"]))
 
 @app.post("/discount-approvals/<int:request_id>/decision")
 @role_required("admin","manager")
@@ -8468,6 +8672,8 @@ def decide_discount_request(request_id):
             return redirect(url_for("discount_approvals"))
         if decision=="approve":
             status="Approvata"; counter_price=None
+        elif decision=="reject":
+            status="Rifiutata"; counter_price=None
         elif decision=="counter":
             try: counter_price=round(float(request.form.get("counter_price")),2)
             except (TypeError,ValueError):
@@ -8495,10 +8701,16 @@ def decide_discount_request(request_id):
                        (me['id'],me['username'],staff_user['id'],event_key))
         recipient=_current_user_for_identity(db,req['requester_user_id'],req['requester_username'])
         if recipient:
-            _notify_user(db,recipient['id'],'discount_approved' if status=='Approvata' else 'discount_counter','Sconto autorizzato' if status=='Approvata' else 'Nuova proposta sconto',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {(float(req['requested_price']) if status=='Approvata' else float(counter_price)):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:{'approved' if status=='Approvata' else 'counter'}",recipient['username'])
-        log_action(db,"Sconto remoto approvato" if status=="Approvata" else "Controproposta sconto inviata",details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; richiesto € {req['requested_price']:.2f}" + (f"; proposto € {counter_price:.2f}" if counter_price is not None else ""))
+            if status=='Approvata':
+                _notify_user(db,recipient['id'],'discount_approved','Sconto autorizzato',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:approved",recipient['username'])
+            elif status=='Rifiutata':
+                _notify_user(db,recipient['id'],'discount_rejected','Sconto rifiutato',f"{req['product_code']} · richiesta € {float(req['requested_price']):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:rejected",recipient['username'])
+            else:
+                _notify_user(db,recipient['id'],'discount_counter','Nuova proposta sconto',f"{req['product_code']} · € {float(req['original_price']):.2f} → € {float(counter_price):.2f} · {me['username']}",'discount',request_id,f"discount:{request_id}:counter",recipient['username'])
+        action_label="Sconto remoto approvato" if status=="Approvata" else ("Sconto remoto rifiutato" if status=="Rifiutata" else "Controproposta sconto inviata")
+        log_action(db,action_label,details=f"Richiesta #{request_id}; venditore {req['requester_username']}; {req['product_code']}; richiesto € {req['requested_price']:.2f}" + (f"; proposto € {counter_price:.2f}" if counter_price is not None else ""))
         db.commit()
-    flash("Sconto approvato." if status=="Approvata" else "Controproposta inviata al Venditore.")
+    flash("Sconto approvato." if status=="Approvata" else ("Sconto rifiutato." if status=="Rifiutata" else "Controproposta inviata al Venditore."))
     return redirect(url_for("discount_approvals"))
 
 @app.route("/pos/authorize-price",methods=['GET','POST'])
