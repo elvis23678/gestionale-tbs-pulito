@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.4.3 DEV · CART LAYOUT FIX"
+APP_VERSION = "v45.5.0 DEV · PRODUCT IMAGE LUXURY BACKDROP"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3985,6 +3985,144 @@ body{background:#020202}
   .cart-remove-form button{
     padding:0 9px!important;
     font-size:8px!important;
+  }
+}
+
+
+/* =========================================================
+   v45.5.0 · PRODUCT IMAGE LUXURY BACKDROP
+   SOLO sfondo e resa fotografica delle immagini gioiello.
+   Nessuna modifica a layout, home, cerchi, header o checkout.
+   ========================================================= */
+
+:root{
+  --jewel-photo-black:#050504;
+  --jewel-photo-charcoal:#12100c;
+  --jewel-photo-gold:rgba(194,137,34,.30);
+}
+
+/* Fondo premium comune a catalogo, home e prodotti in evidenza */
+.pixel-products .product-image,
+.atelier-products .product-image,
+.featured-photo,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo,
+.image-modal img{
+  background:
+    radial-gradient(circle at 50% 42%,
+      rgba(191,135,31,.26) 0%,
+      rgba(95,62,16,.17) 23%,
+      rgba(18,16,12,.96) 58%,
+      #030303 100%)!important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,226,157,.08),
+    inset 0 -34px 58px rgba(0,0,0,.50),
+    0 12px 28px rgba(0,0,0,.30)!important;
+}
+
+/* Texture nera discreta senza cambiare le proporzioni */
+.pixel-products .product-image:before,
+.atelier-products .product-image:before,
+.featured-photo:before,
+.cart-item-photo:before{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  pointer-events:none!important;
+  border:0!important;
+  background:
+    radial-gradient(ellipse at 20% 82%,rgba(255,255,255,.025),transparent 32%),
+    radial-gradient(ellipse at 78% 18%,rgba(204,151,49,.055),transparent 26%),
+    repeating-radial-gradient(ellipse at 50% 65%,
+      rgba(255,255,255,.014) 0 1px,
+      transparent 1px 5px)!important;
+}
+
+/*
+  Le immagini fornitore hanno spesso il bianco incorporato.
+  Il blend multiply rende quel bianco trasparente visivamente,
+  lasciando apparire il fondale nero sottostante.
+*/
+.pixel-products .product-image img,
+.atelier-products .product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img,
+.image-modal img{
+  position:relative!important;
+  z-index:1!important;
+  background:transparent!important;
+  mix-blend-mode:multiply!important;
+  filter:
+    contrast(1.27)
+    brightness(1.08)
+    saturate(1.04)
+    drop-shadow(0 17px 15px rgba(0,0,0,.48))
+    drop-shadow(0 0 12px rgba(210,158,57,.12))!important;
+}
+
+/* Leggero riflesso editoriale sopra la foto */
+.pixel-products .product-image:after,
+.atelier-products .product-image:after,
+.featured-photo:after,
+.cart-item-photo:after{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  z-index:2!important;
+  pointer-events:none!important;
+  background:
+    linear-gradient(145deg,
+      rgba(255,238,190,.055),
+      transparent 32%,
+      transparent 70%,
+      rgba(199,145,39,.045))!important;
+}
+
+/* Badge e cuore devono restare sopra la nuova resa fotografica */
+.pixel-products .new-label,
+.pixel-products .favorite-btn,
+.atelier-products .new-label,
+.atelier-products .favorite-btn,
+.featured-photo .favorite-btn{
+  z-index:5!important;
+}
+
+/* Scheda prodotto: stesso fondale senza alterare il layout */
+.product-detail>img{
+  border:1px solid rgba(204,158,59,.30)!important;
+}
+
+/* Carrello: mantiene esattamente le dimensioni già approvate */
+.cart-item-photo{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+}
+.cart-item-photo img{
+  padding:8px!important;
+  object-fit:contain!important;
+}
+
+/* Anteprima grande coerente con catalogo e dettaglio */
+.image-modal img{
+  border:1px solid rgba(204,158,59,.30)!important;
+}
+
+/* Interazione minima, solo fotografica */
+@media(hover:hover){
+  .pixel-products .shop-product:hover .product-image img,
+  .atelier-products .shop-product:hover .product-image img,
+  .featured-card:hover .featured-photo img{
+    filter:
+      contrast(1.31)
+      brightness(1.13)
+      saturate(1.07)
+      drop-shadow(0 20px 17px rgba(0,0,0,.54))
+      drop-shadow(0 0 15px rgba(210,158,57,.16))!important;
   }
 }
 
