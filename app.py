@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.3.1 DEV · CONTRASTI E NOTIFICHE SEPARATE"
+APP_VERSION = "v47.3.2 DEV · PREZZO SCONTO DB DEFINITIVO"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -682,7 +682,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4731',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4732',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6545,7 +6545,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.3.1';
+const SW_VERSION='v47.3.2';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6717,7 +6717,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.3.1"
+            "X-TBS-Service-Worker-Version":"v47.3.2"
         }
     )
 
@@ -8499,21 +8499,69 @@ def _find_product_by_scan(db, value):
 @app.get("/pos")
 @login_required
 def pos():
-    raw=session.get("cart",{}); ids=[]
+    raw=dict(session.get("cart",{}))
+    ids=[]
     for key in raw:
-        try: ids.append(int(key))
-        except: pass
-    rows=[]; total=0.0; total_qty=0
+        try:
+            ids.append(int(key))
+        except (TypeError,ValueError):
+            pass
+
+    effective_prices={}
+    if session.get("role")=="seller" and ids:
+        placeholders=",".join("?" for _ in ids)
+        with connect() as db:
+            decisions=db.execute(f"""
+                SELECT dr.*
+                FROM discount_requests dr
+                INNER JOIN (
+                    SELECT product_id,MAX(id) AS max_id
+                    FROM discount_requests
+                    WHERE requester_user_id=? AND product_id IN ({placeholders})
+                    GROUP BY product_id
+                ) latest ON latest.max_id=dr.id
+            """,[session.get("user_id"),*ids]).fetchall()
+
+        for req in decisions:
+            if req["status"] in ("Approvata","Applicata"):
+                effective_prices[str(req["product_id"])]={
+                    "price":float(req["requested_price"]),
+                    "reason":req["reason"],
+                    "authorized_by_username":req["approver_username"]
+                }
+
+    rows=[]
+    total=0.0
+    total_qty=0
     if ids:
         with connect() as db:
-            products=db.execute(f"SELECT * FROM products WHERE id IN ({','.join('?' for _ in ids)})",ids).fetchall()
-        by_id={x['id']:x for x in products}
+            products=db.execute(
+                f"SELECT * FROM products WHERE id IN ({','.join('?' for _ in ids)})",
+                ids
+            ).fetchall()
+        by_id={x["id"]:x for x in products}
         for pid in ids:
             p=by_id.get(pid)
-            if not p: continue
-            qty=max(1,int(raw.get(str(pid),1))); pd=_cart_price_data(pid,p['price']); subtotal=qty*pd['price']
-            rows.append({'product':p,'quantity':qty,'unit_price':pd['price'],'original_price':p['price'],'reason':pd['reason'],'authorized_by':pd['authorized_by_username'],'subtotal':subtotal})
-            total+=subtotal; total_qty+=qty
+            if not p:
+                continue
+            qty=max(1,int(raw.get(str(pid),1)))
+            pd=effective_prices.get(str(pid)) or {
+                "price":float(p["price"]),
+                "reason":None,
+                "authorized_by_username":None
+            }
+            subtotal=qty*float(pd["price"])
+            rows.append({
+                "product":p,
+                "quantity":qty,
+                "unit_price":float(pd["price"]),
+                "original_price":float(p["price"]),
+                "reason":pd.get("reason"),
+                "authorized_by":pd.get("authorized_by_username"),
+                "subtotal":subtotal
+            })
+            total+=subtotal
+            total_qty+=qty
     return page("Cassa Smart POS",'''<style>
 body{background:radial-gradient(circle at 15% 10%,#30271b 0,#121315 34%,#08090a 100%);color:#f7f2e8}.pos{max-width:1450px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center}.brand{font-size:29px;letter-spacing:.08em}.gold{color:#d7b36a}.layout{display:grid;grid-template-columns:1.55fr .75fr;gap:18px}.panel{background:rgba(25,25,27,.9);border:1px solid rgba(215,179,106,.3);border-radius:22px;padding:18px;box-shadow:0 24px 70px #0008}.scan{display:grid;grid-template-columns:1fr auto;gap:10px}.scan input,.modal input,.modal select{background:#0d0e10;color:#fff;border:1px solid #5d5038;padding:15px;font-size:18px}.goldbtn{background:linear-gradient(135deg,#efd28f,#b88a38);color:#17120a;border:0;border-radius:14px;padding:15px;font-weight:900}.add-product-launch{width:100%;display:flex;align-items:center;justify-content:center;gap:12px;min-height:72px;margin-bottom:20px;background:linear-gradient(135deg,#f0d795,#b98a39);color:#17120a;border:1px solid #f6e5b8;border-radius:18px;font-size:20px;font-weight:950;letter-spacing:.4px;box-shadow:0 14px 34px rgba(185,138,57,.22);cursor:pointer}.add-product-launch:hover{transform:translateY(-1px);filter:brightness(1.04)}.add-product-launch .plus{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:#17120a;color:#efd28f;font-size:27px;line-height:1}.add-modal-title{text-align:center;margin-bottom:5px}.add-modal-sub{text-align:center;color:#aaa;margin-top:0}.scan-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.scan-choice button{min-height:56px}.scan-divider{display:flex;align-items:center;gap:10px;color:#8e8e94;margin:18px 0}.scan-divider:before,.scan-divider:after{content:"";height:1px;background:#3a3a3f;flex:1}.row{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #343438}.row img,.ph{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff}.ph{display:grid;place-items:center;color:#777}.actions{display:flex;gap:8px;flex-wrap:wrap}.mini{padding:8px 12px;border-radius:10px;border:1px solid #66583f;background:#191a1d;color:#fff}.price{color:#d7b36a}.notice{padding:9px;border-radius:10px;background:#2e281d;color:#f3dca6;margin-top:8px}.total{text-align:center;background:#0d0d0e;border:1px solid #5e4c2d;border-radius:18px;padding:16px}.amount{font-size:48px;font-weight:900;color:#efd28f}.display{background:#090a0b;border:1px solid #50452f;border-radius:13px;padding:13px;text-align:right;font-size:25px;margin-top:12px}.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}.key{min-height:64px;background:#222327;color:#fff;border:1px solid #444;border-radius:14px;font-size:24px}.payments{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pay{padding:18px 6px;border:1px solid transparent!important;border-radius:14px;color:#fff!important;font-weight:950;width:100%;box-shadow:0 9px 22px rgba(0,0,0,.28)}.cash{background:linear-gradient(145deg,#29965f,#12613b)!important;border-color:#67d49a!important}.cardpay{background:linear-gradient(145deg,#3577ca,#194a89)!important;border-color:#78adf0!important}.suspend{background:linear-gradient(145deg,#d0a437,#8c6713)!important;border-color:#f0cf78!important;color:#17120a!important}.cancel{background:linear-gradient(145deg,#c74a4a,#7d2020)!important;border-color:#f18484!important}.modalwrap{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:1000}.modalwrap.open{display:flex}.modal{width:min(480px,92vw);background:#17181b;border:1px solid #806a42;border-radius:22px;padding:22px}.camera{display:none;margin-top:12px}.camera video{width:100%;max-height:280px;background:#000;border-radius:15px}@media(max-width:900px){.layout{grid-template-columns:1fr}.brand{font-size:22px}.amount{font-size:40px}}
 
@@ -9076,65 +9124,58 @@ def return_discount_to_cart(request_id):
 @app.get("/cart")
 @login_required
 def cart():
-    raw=session.get("cart",{})
+    raw=dict(session.get("cart",{}))
     discount_feedback=[]
     has_pending_discount=False
+    effective_discount_prices={}
+
     if session.get("role") == "seller":
         with connect() as db:
-            discount_rows=db.execute("""SELECT * FROM discount_requests
-                WHERE requester_user_id=? AND status IN ('In attesa','Approvata','Applicata','Controproposta','Rifiutata')
-                ORDER BY id DESC LIMIT 12""",(session.get("user_id"),)).fetchall()
-            for req in discount_rows:
+            latest_rows=db.execute("""
+                SELECT dr.*
+                FROM discount_requests dr
+                INNER JOIN (
+                    SELECT product_id,MAX(id) AS max_id
+                    FROM discount_requests
+                    WHERE requester_user_id=?
+                    GROUP BY product_id
+                ) latest ON latest.max_id=dr.id
+                ORDER BY dr.id DESC
+            """,(session.get("user_id"),)).fetchall()
+
+            for req in latest_rows:
                 status=req["status"]
-                if status == "In attesa":
+                key=str(req["product_id"])
+                product=db.execute(
+                    "SELECT id,quantity,price FROM products WHERE id=?",
+                    (req["product_id"],)
+                ).fetchone()
+
+                if status=="In attesa":
                     has_pending_discount=True
 
-                if status == "Rifiutata":
-                    key=str(req["product_id"])
-                    product=db.execute(
-                        "SELECT id,quantity FROM products WHERE id=?",
-                        (req["product_id"],)
-                    ).fetchone()
-                    if product and int(product["quantity"] or 0)>0:
-                        if key not in raw:
-                            raw[key]=1
-                            session["cart"]=raw
-                        cp=dict(session.get("cart_prices",{}))
-                        cp.pop(key,None)
-                        session["cart_prices"]=cp
-                        session.pop("pending_discount_token",None)
-                        session.modified=True
+                if product and int(product["quantity"] or 0)>0 and status in (
+                    "In attesa","Approvata","Applicata","Rifiutata","Controproposta"
+                ):
+                    raw.setdefault(key,1)
 
-                if status == "Approvata":
-                    key=str(req["product_id"])
-                    product=db.execute(
-                        "SELECT id,quantity FROM products WHERE id=?",
-                        (req["product_id"],)
-                    ).fetchone()
-
-                    # L'approvazione deve avere effetto reale anche se il carrello
-                    # della sessione è stato perso o svuotato durante il cambio account.
-                    if product and int(product["quantity"] or 0)>0:
-                        if key not in raw:
-                            raw[key]=1
-                            session["cart"]=raw
-
-                        cp=dict(session.get("cart_prices",{}))
-                        cp[key]={
-                            "price":float(req["requested_price"]),
-                            "reason":req["reason"],
-                            "authorized_by_user_id":req["approver_user_id"],
-                            "authorized_by_username":req["approver_username"]
-                        }
-                        session["cart_prices"]=cp
-                        session.pop("pending_discount_token",None)
-                        session.modified=True
-
+                if status in ("Approvata","Applicata"):
+                    effective_discount_prices[key]={
+                        "price":float(req["requested_price"]),
+                        "reason":req["reason"],
+                        "authorized_by_user_id":req["approver_user_id"],
+                        "authorized_by_username":req["approver_username"]
+                    }
+                    if status=="Approvata":
                         db.execute(
-                            "UPDATE discount_requests SET status='Applicata',applied_at=CURRENT_TIMESTAMP WHERE id=? AND status='Approvata'",
+                            """UPDATE discount_requests
+                               SET status='Applicata',
+                                   applied_at=COALESCE(applied_at,CURRENT_TIMESTAMP)
+                               WHERE id=? AND status='Approvata'""",
                             (req["id"],)
                         )
                         status="Applicata"
+
                 discount_feedback.append({
                     "id":req["id"],
                     "product_id":req["product_id"],
@@ -9147,28 +9188,69 @@ def cart():
                     "approver_username":req["approver_username"],
                     "created_at":req["created_at"],
                     "decided_at":req["decided_at"],
-                    "in_cart":str(req["product_id"]) in raw
+                    "in_cart":key in raw
                 })
             db.commit()
+
+        session["cart"]=raw
+        session["cart_prices"]=effective_discount_prices
+        if not has_pending_discount:
+            session.pop("pending_discount_token",None)
+        session.modified=True
+
     ids=[]
     for key in raw:
-        try: ids.append(int(key))
-        except (TypeError,ValueError): pass
-    rows=[]; total=0.0; total_qty=0
+        try:
+            ids.append(int(key))
+        except (TypeError,ValueError):
+            pass
+
+    rows=[]
+    total=0.0
+    total_qty=0
     if ids:
         placeholders=",".join("?" for _ in ids)
         with connect() as db:
-            products=db.execute(f"SELECT * FROM products WHERE id IN ({placeholders})",ids).fetchall()
+            products=db.execute(
+                f"SELECT * FROM products WHERE id IN ({placeholders})",
+                ids
+            ).fetchall()
+
         by_id={x["id"]:x for x in products}
         for product_id in ids:
             p=by_id.get(product_id)
-            if not p: continue
+            if not p:
+                continue
             qty=max(1,int(raw.get(str(product_id),1)))
-            pd=_cart_price_data(product_id,p["price"])
-            subtotal=qty*pd["price"]
-            rows.append({"product":p,"quantity":qty,"unit_price":pd["price"],"original_price":p["price"],"reason":pd["reason"],"authorized_by":pd["authorized_by_username"],"subtotal":subtotal})
-            total+=subtotal; total_qty+=qty
-    all_discounted_authorized=bool(rows) and all((x["unit_price"] != x["original_price"] and x["authorized_by"]) for x in rows)
+            key=str(product_id)
+
+            if key in effective_discount_prices:
+                pd=effective_discount_prices[key]
+            else:
+                pd={
+                    "price":float(p["price"]),
+                    "reason":None,
+                    "authorized_by_user_id":None,
+                    "authorized_by_username":None
+                }
+
+            subtotal=qty*float(pd["price"])
+            rows.append({
+                "product":p,
+                "quantity":qty,
+                "unit_price":float(pd["price"]),
+                "original_price":float(p["price"]),
+                "reason":pd.get("reason"),
+                "authorized_by":pd.get("authorized_by_username"),
+                "subtotal":subtotal
+            })
+            total+=subtotal
+            total_qty+=qty
+
+    all_discounted_authorized=bool(rows) and all(
+        x["unit_price"] != x["original_price"] and x["authorized_by"]
+        for x in rows
+    )
     return page("Carrello",'''<style>
 .discount-status-list{display:grid;gap:12px;margin:14px 0 18px}.discount-result{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:center;border-radius:16px;padding:16px;border:2px solid}.discount-return{width:100%;text-align:left;font:inherit;cursor:pointer;background:inherit;color:inherit}.discount-return:active{transform:scale(.99)}.discount-result .result-icon{font-size:34px;text-align:center}.discount-result b{font-size:20px}.discount-result.approved{background:#eafaf2;border-color:#10a36d;color:#07583d}.discount-result.rejected{background:#fff0f0;border-color:#d52b2b;color:#8b1515}.discount-result.pending{background:#fff8df;border-color:#d6a72c;color:#654b07}.discount-result small{font-weight:700}.cart-price-box{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.edit-price-btn{background:linear-gradient(135deg,#d6b15f,#a97927);color:#17120a;border:0;border-radius:10px;padding:10px 14px;font-weight:900}.approved-price-badge{display:inline-flex;align-items:center;gap:6px;background:#eafaf2;border:1px solid #10a36d;color:#07583d;border-radius:10px;padding:10px 12px;font-weight:900}.approved-price-note{background:#eafaf2;border:1px solid #10a36d;border-radius:10px;padding:10px;margin:8px 0;color:#07583d}.discount-note{background:#fff4d7;border:1px solid #d7b15f;border-radius:10px;padding:10px;margin:8px 0;color:#503a0d}.price-modal-wrap{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:2000}.price-modal-wrap.open{display:flex}.price-modal{width:min(480px,92vw);background:#fff;border-radius:20px;padding:24px;box-shadow:0 30px 90px #0008}.price-modal label{display:block;font-weight:800;margin-top:12px}.price-modal input,.price-modal select{width:100%;margin-top:6px}.price-modal-actions{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-top:18px}.payment-buttons{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}.payment-buttons label{display:block}.payment-buttons input{position:absolute;opacity:0}.payment-buttons span{display:block;text-align:center;padding:15px;border:2px solid #d8dde5;border-radius:12px;font-weight:900;cursor:pointer}.payment-buttons input:checked+span{border-color:#b88a2a;background:#fff4d7;color:#4a350b}@media(max-width:650px){.payment-buttons{grid-template-columns:1fr}.price-modal-actions{grid-template-columns:1fr}}
 </style><h1>Carrello vendita</h1>{% if session.get('role') == 'seller' and discount_feedback %}<div class="discount-status-list">{% for d in discount_feedback %}{% if d.status in ('Applicata','Approvata') and not d.in_cart %}<form method="post" action="{{url_for('return_discount_to_cart',request_id=d.id)}}" style="margin:0"><button type="submit" class="discount-result approved discount-return"><div class="result-icon">✅</div><div><b>SCONTO AUTORIZZATO</b><br><strong>{{d.product_code}}</strong> · € {{'%.2f'|format(d.original_price)}} → <strong>€ {{'%.2f'|format(d.requested_price)}}</strong><br><span>Autorizzato da {{d.approver_username or 'Admin/Gestore'}}{% if d.decided_at %} · {{d.decided_at|rome_time}}{% endif %}</span><br><small>TOCCA QUI PER TORNARE AL CARRELLO</small></div></button></form>{% elif d.status == 'Controproposta' %}<div class="discount-result pending"><div class="result-icon">↔</div><div><b>CONTROPROPOSTA RICEVUTA</b><br><strong>{{d.product_code}}</strong> · proposta <strong>€ {{'%.2f'|format(d.counter_price)}}</strong><br><small>Apri la campanella o la schermata di attesa per accettare o rifiutare.</small></div></div>{% elif d.status == 'Rifiutata' %}<div class="discount-result rejected"><div class="result-icon">❌</div><div><b>SCONTO RIFIUTATO</b><br><strong>{{d.product_code}}</strong> · richiesto € {{'%.2f'|format(d.requested_price)}}<br><span>{% if d.approver_username %}Decisione di {{d.approver_username}}{% else %}Richiesta non approvata{% endif %}{% if d.decided_at %} · {{d.decided_at|rome_time}}{% endif %}</span><br><small>Rimane valido il prezzo di listino.</small></div></div>{% elif d.status == 'In attesa' %}<div class="discount-result pending"><div class="result-icon">⏳</div><div><b>AUTORIZZAZIONE IN ATTESA</b><br><strong>{{d.product_code}}</strong> · € {{'%.2f'|format(d.original_price)}} → € {{'%.2f'|format(d.requested_price)}}<br><small>La pagina si aggiorna automaticamente quando Admin o Gestore decide.</small></div></div>{% endif %}{% endfor %}</div>{% endif %}{% if rows %}<div class="card">{% for x in rows %}<div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:center;margin-bottom:18px">{% if x.product.photo_data %}<img src="{{x.product.photo_data}}" style="width:80px;height:80px;object-fit:contain;border-radius:10px">{% endif %}<div><b>{{x.product.brand_code}}</b><br><span class="muted">Codice interno: {{x.product.brand_code}}{% if session.get('role') in ('admin','manager') %} · Codice fornitore: {{x.product.supplier_code}}{% endif %} · disponibili {{x.product.quantity}}</span><div class="cart-price-box"><span>{% if x.unit_price != x.original_price %}<s>€ {{'%.2f'|format(x.original_price)}}</s> <b>€ {{'%.2f'|format(x.unit_price)}} cad.</b>{% else %}<b>€ {{'%.2f'|format(x.original_price)}} cad.</b>{% endif %}</span>{% if session.get('role') == 'seller' %}{% if x.authorized_by and x.unit_price != x.original_price %}{% else %}<button type="button" class="edit-price-btn" onclick='openCartPrice({{x.product.id}}, {{x.product.brand_code|tojson}}, {{x.original_price}}, {{x.unit_price}})'>💸 Richiedi sconto</button>{% endif %}{% else %}<button type="button" class="edit-price-btn" onclick='openCartPrice({{x.product.id}}, {{x.product.brand_code|tojson}}, {{x.original_price}}, {{x.unit_price}})'>✏️ Modifica prezzo</button>{% endif %}</div>{% if x.unit_price != x.original_price %}{% if x.authorized_by %}<div class="approved-price-note"><b>✅ Sconto autorizzato</b><br>Listino € {{'%.2f'|format(x.original_price)}} → vendita <b>€ {{'%.2f'|format(x.unit_price)}}</b><br>{{x.reason or 'Altro'}} · autorizzato da {{x.authorized_by}}</div>{% else %}<div class="discount-note"><b>Prezzo personalizzato</b><br>Listino € {{'%.2f'|format(x.original_price)}} → vendita € {{'%.2f'|format(x.unit_price)}}<br>{{x.reason or 'Altro'}}</div>{% endif %}{% endif %}<form class="inline" method="post" action="{{url_for('update_cart',product_id=x.product.id)}}"><input style="max-width:100px" name="quantity" type="number" min="1" max="{{x.product.quantity}}" value="{{x.quantity}}"><button class="secondary">Aggiorna</button></form><form method="post" action="{{url_for('remove_from_cart',product_id=x.product.id)}}"><button class="danger">Rimuovi</button></form><b>Subtotale: € {{'%.2f'|format(x.subtotal)}}</b></div></div><hr>{% endfor %}</div><div class="card"><div class="muted">Articoli</div><div class="metric">{{total_qty}}</div><div class="muted">Totale vendita</div><div class="metric">€ {{'%.2f'|format(total)}}</div>{% if session.get('role') == 'seller' and not all_discounted_authorized %}<div class="discount-note" style="margin:14px 0"><b>Devi applicare uno sconto?</b><br>Premi <b>💸 Richiedi sconto</b> accanto all'articolo interessato. Admin o Gestore riceveranno la richiesta sul proprio telefono.</div>{% endif %}<form method="post" action="{{url_for('checkout_cart')}}" onsubmit="return confirm('Confermi la vendita?')"><div class="payment-buttons"><label><input type="radio" name="payment_method" value="Contanti" checked><span>💶 CONTANTI</span></label><label><input type="radio" name="payment_method" value="Bancomat"><span>💳 BANCOMAT</span></label><label><input type="radio" name="payment_method" value="Bonifico"><span>🏦 BONIFICO</span></label><label><input type="radio" name="payment_method" value="Altro"><span>••• ALTRO</span></label></div><input type="hidden" name="channel" value="Negozio"><button>Conferma vendita</button></form><form method="post" action="{{url_for('suspend_cart')}}"><button class="secondary">Sospendi vendita</button></form><form method="post" action="{{url_for('clear_cart')}}"><button class="secondary">Svuota carrello</button></form></div><div id="cartPriceModal" class="price-modal-wrap"><div class="price-modal"><h2>Modifica prezzo</h2><p id="cartPriceTitle"></p><form method="post" action="{{url_for('pos_set_price')}}"><input type="hidden" id="cartPricePid" name="product_id"><input type="hidden" name="return_to" value="cart"><label>Prezzo di listino<input id="cartPriceOriginal" readonly></label><label>Nuovo prezzo<input id="cartPriceNew" name="new_price" type="number" min="0" step="0.01" required></label><label>Motivo<select name="reason"><option>Cliente abituale</option><option>Amico</option><option>Promozione</option><option>Altro</option></select></label>{% if session.get('role') == 'seller' %}<div class="discount-note"><b>Autorizzazione remota</b><br>La richiesta verrà inviata ad Admin e Gestore. Potrai restare nel flusso del carrello mentre attendi la risposta.</div>{% endif %}<div class="price-modal-actions"><button class="edit-price-btn">{% if session.get('role') == 'seller' %}RICHIEDI AUTORIZZAZIONE{% else %}CONFERMA PREZZO{% endif %}</button><button type="button" class="secondary" onclick="closeCartPrice()">ANNULLA</button></div></form></div></div><script>function openCartPrice(id,name,original,current){cartPricePid.value=id;cartPriceTitle.textContent=name;cartPriceOriginal.value='€ '+Number(original).toFixed(2);cartPriceNew.value=Number(current).toFixed(2);cartPriceModal.classList.add('open');cartPriceNew.focus()}function closeCartPrice(){cartPriceModal.classList.remove('open')}cartPriceModal.addEventListener('click',function(e){if(e.target===this)closeCartPrice()}){% if has_pending_discount %}setTimeout(function(){location.reload()},4000);{% endif %}</script>{% else %}<div class="card"><p>Il carrello è vuoto.</p><a class="view" href="{{url_for('products')}}" style="padding:11px 16px;border-radius:9px;text-decoration:none;color:white;display:inline-block">Vai ai prodotti</a></div>{% endif %}''',rows=rows,total=total,total_qty=total_qty,discount_feedback=discount_feedback,has_pending_discount=has_pending_discount,all_discounted_authorized=all_discounted_authorized)
