@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.4.2 DEV · PAYPAL REDIRECT FIX"
+APP_VERSION = "v45.4.3 DEV · CART LAYOUT FIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3769,6 +3769,225 @@ body{background:#020202}
   text-align:center;
 }
 
+
+/* =========================================================
+   v45.4.3 · CART LAYOUT FIX
+   Solo layout degli articoli nel riepilogo carrello.
+   ========================================================= */
+
+.cart-item-luxury{
+  display:grid!important;
+  grid-template-columns:118px minmax(0,1fr)!important;
+  gap:16px!important;
+  align-items:start!important;
+  width:100%!important;
+  padding:16px 0!important;
+  margin:0!important;
+  border-bottom:1px solid rgba(207,158,55,.18)!important;
+  background:transparent!important;
+  box-sizing:border-box!important;
+}
+
+.cart-item-photo{
+  width:118px!important;
+  height:118px!important;
+  min-width:118px!important;
+  overflow:hidden!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid rgba(207,158,55,.30)!important;
+  background:radial-gradient(circle at 50% 44%,#fffdf7,#eee5d4 58%,#c7b68c 100%)!important;
+  box-sizing:border-box!important;
+}
+
+.cart-item-photo img{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  padding:10px!important;
+  margin:0!important;
+  object-fit:contain!important;
+  object-position:center!important;
+  box-sizing:border-box!important;
+  transform:none!important;
+  position:static!important;
+}
+
+.cart-item-photo span{
+  color:#c89d40!important;
+  font-size:30px!important;
+}
+
+.cart-item-content{
+  min-width:0!important;
+  width:100%!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:14px!important;
+  position:static!important;
+}
+
+.cart-item-head{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  gap:12px!important;
+  align-items:start!important;
+}
+
+.cart-item-head h3{
+  margin:0 0 5px!important;
+  color:#f2eadf!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:18px!important;
+  line-height:1.15!important;
+  font-weight:400!important;
+  position:static!important;
+}
+
+.cart-item-head p{
+  margin:0!important;
+  color:#aaa090!important;
+  font-size:11px!important;
+  line-height:1.4!important;
+}
+
+.cart-item-head strong{
+  color:#e2b551!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:20px!important;
+  font-weight:400!important;
+  white-space:nowrap!important;
+}
+
+.cart-item-controls{
+  display:flex!important;
+  align-items:end!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  flex-wrap:wrap!important;
+}
+
+.cart-qty-form{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:6px!important;
+  margin:0!important;
+}
+
+.cart-qty-form label{
+  color:#8f8679!important;
+  font-size:9px!important;
+  letter-spacing:.08em!important;
+  text-transform:uppercase!important;
+}
+
+.cart-qty-group{
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+}
+
+.cart-qty-group input{
+  width:64px!important;
+  height:38px!important;
+  min-height:38px!important;
+  padding:0 8px!important;
+  margin:0!important;
+  border:1px solid rgba(207,158,55,.34)!important;
+  border-radius:4px!important;
+  background:#050504!important;
+  color:#f5eee3!important;
+  font-size:14px!important;
+  text-align:center!important;
+  box-sizing:border-box!important;
+}
+
+.cart-qty-group button,
+.cart-remove-form button{
+  min-height:38px!important;
+  padding:0 13px!important;
+  margin:0!important;
+  border:1px solid rgba(207,158,55,.40)!important;
+  border-radius:4px!important;
+  background:#0a0907!important;
+  color:#d8ab4c!important;
+  font-size:9px!important;
+  font-weight:800!important;
+  letter-spacing:.05em!important;
+  text-transform:uppercase!important;
+  box-sizing:border-box!important;
+}
+
+.cart-remove-form{
+  margin:0!important;
+}
+
+.cart-remove-form button{
+  color:#c7b59a!important;
+  border-color:rgba(207,158,55,.24)!important;
+}
+
+@media(max-width:620px){
+  .cart-item-luxury{
+    grid-template-columns:96px minmax(0,1fr)!important;
+    gap:12px!important;
+    padding:14px 0!important;
+  }
+
+  .cart-item-photo{
+    width:96px!important;
+    height:96px!important;
+    min-width:96px!important;
+  }
+
+  .cart-item-head{
+    grid-template-columns:1fr!important;
+    gap:7px!important;
+  }
+
+  .cart-item-head h3{
+    font-size:16px!important;
+  }
+
+  .cart-item-head strong{
+    font-size:19px!important;
+  }
+
+  .cart-item-controls{
+    align-items:flex-end!important;
+  }
+}
+
+@media(max-width:390px){
+  .cart-item-luxury{
+    grid-template-columns:84px minmax(0,1fr)!important;
+    gap:10px!important;
+  }
+
+  .cart-item-photo{
+    width:84px!important;
+    height:84px!important;
+    min-width:84px!important;
+  }
+
+  .cart-qty-group{
+    gap:5px!important;
+  }
+
+  .cart-qty-group input{
+    width:54px!important;
+  }
+
+  .cart-qty-group button,
+  .cart-remove-form button{
+    padding:0 9px!important;
+    font-size:8px!important;
+  }
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4419,23 +4638,35 @@ def client_cart():
     <section class='checkout-panel'>
       <h2>Riepilogo gioielli</h2>
       {% for p,qty,row_total in rows %}
-      <div class='cart-summary-row'>
-        {% if p.photo_data %}<img src='{{p.photo_data}}' alt='{{p.category}}'>{% else %}<div></div>{% endif %}
-        <div>
-          <b>{{p.model_name or p.category}}</b><br>
-          <small>{{p.brand_code}} · quantità {{qty}}</small>
-          <form class='qty-form' method='post' action='{{url_for("client_update_cart",product_id=p.id)}}'>
-            <input name='quantity' type='number' min='1' max='{{p.quantity}}' value='{{qty}}'>
-            <button class='detail-link'>Aggiorna</button>
-          </form>
+      <article class='cart-item-luxury'>
+        <div class='cart-item-photo'>
+          {% if p.photo_data %}<img src='{{p.photo_data}}' alt='{{p.category}}'>{% else %}<span>◇</span>{% endif %}
         </div>
-        <div>
-          <b>€ {{'%.2f'|format(row_total)}}</b>
-          <form method='post' action='{{url_for("client_remove_cart",product_id=p.id)}}'>
-            <button class='detail-link'>Rimuovi</button>
-          </form>
+
+        <div class='cart-item-content'>
+          <div class='cart-item-head'>
+            <div>
+              <h3>{{p.model_name or p.category}}</h3>
+              <p>{{p.brand_code}} · quantità {{qty}}</p>
+            </div>
+            <strong>€ {{'%.2f'|format(row_total)}}</strong>
+          </div>
+
+          <div class='cart-item-controls'>
+            <form class='cart-qty-form' method='post' action='{{url_for("client_update_cart",product_id=p.id)}}'>
+              <label for='cart-qty-{{p.id}}'>Quantità</label>
+              <div class='cart-qty-group'>
+                <input id='cart-qty-{{p.id}}' name='quantity' type='number' min='1' max='{{p.quantity}}' value='{{qty}}'>
+                <button type='submit'>Aggiorna</button>
+              </div>
+            </form>
+
+            <form class='cart-remove-form' method='post' action='{{url_for("client_remove_cart",product_id=p.id)}}'>
+              <button type='submit'>Rimuovi</button>
+            </form>
+          </div>
         </div>
-      </div>
+      </article>
       {% endfor %}
 
       <div class='order-totals'>
