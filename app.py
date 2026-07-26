@@ -108,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.2.0 DEV · PIXEL ATELIER"
+APP_VERSION = "v45.3.0 DEV · HEADER WISHLIST FEATURED"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -2931,9 +2931,157 @@ body{background:#020202}
 .pixel-benefits{grid-template-columns:1fr 1fr;gap:18px;margin-inline:10px}.bottom-nav{height:82px}
 }
 
+
+/* v45.3.0 · HEADER / WISHLIST / FEATURED */
+.shop-nav{position:sticky;top:0;display:block;height:86px;padding:0;overflow:visible}
+.shop-nav .menu-mark{position:absolute;left:18px;top:50%;transform:translateY(-50%);z-index:3}
+.shop-nav .atelier-brand{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:146px;height:78px;z-index:2}
+.shop-nav .atelier-brand img{width:100%;height:100%;object-fit:contain}
+.shop-nav .nav-actions{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:10px;z-index:3}
+#favoritesTop.active,#favoritesBottom.active{color:#e4b44f}
+.favorite-btn.active{color:#e5b64f!important}
+.featured-piercings{padding:26px 14px 6px;background:#030303}
+.featured-heading{display:flex;align-items:end;justify-content:space-between;margin-bottom:13px}
+.featured-heading span{color:#b88b32;font-size:8px;letter-spacing:.18em}
+.featured-heading h2{margin:5px 0 0;color:#e2b75b;font-family:Georgia,"Times New Roman",serif;font-size:28px;font-weight:400}
+.featured-heading a{color:#d3a547;font-size:9px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none}
+.featured-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.featured-card{min-width:0;overflow:hidden;border:1px solid rgba(204,158,59,.40);background:#060605}
+.featured-photo{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:radial-gradient(circle at 50% 45%,rgba(115,74,15,.40),rgba(7,6,4,.98) 68%)}
+.featured-photo img{width:100%;height:100%;object-fit:contain;padding:7%;filter:contrast(1.12) saturate(1.05) drop-shadow(0 14px 12px rgba(0,0,0,.65))}
+.featured-photo .favorite-btn{position:absolute;top:7px;right:7px}
+.featured-info{display:flex;flex-direction:column;gap:5px;padding:11px 9px 8px}
+.featured-info small{color:#be9137;font-size:7px;letter-spacing:.08em;text-transform:uppercase}
+.featured-info h3{min-height:34px;margin:0;color:#f2ece0;font-family:Georgia,"Times New Roman",serif;font-size:13px;font-weight:400;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.featured-info strong{color:#e3b75b;font-family:Georgia,"Times New Roman",serif;font-size:18px}
+.featured-info span{font-size:8px}
+.featured-action{padding:0 8px 10px}
+.featured-action form,.featured-action a,.featured-action button{width:100%}
+.featured-action a,.featured-action button{min-height:40px;display:flex;align-items:center;justify-content:center;border:0;background:linear-gradient(180deg,#d4a643,#9f6b17);color:#080501;font-size:7px;font-weight:700;letter-spacing:.04em;text-align:center;text-decoration:none;text-transform:uppercase}
+.wishlist-empty{margin:18px 14px;padding:26px 18px;border:1px solid rgba(204,158,59,.35);color:#e2b75b;text-align:center}
+.wishlist-empty strong,.wishlist-empty span{display:block}
+.wishlist-empty span{margin-top:7px;color:#aaa195;font-size:11px}
+[hidden]{display:none!important}
+@media(max-width:700px){
+  .shop-nav{height:82px}
+  .shop-nav .menu-mark{left:16px}
+  .shop-nav .atelier-brand{width:122px;height:72px}
+  .shop-nav .nav-actions{right:11px;gap:8px}
+  .featured-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .featured-heading h2{font-size:25px}
+}
+
 """
 
-PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza'></a><div class='nav-actions'><a class='icon-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){e.preventDefault();modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});const KEY='tbs-jewelry-favorites';function favs(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}function syncFav(){const f=favs();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=f.includes(b.dataset.key);b.textContent=on?'♥':'♡';b.setAttribute('aria-pressed',on?'true':'false')});const n=f.length;document.querySelectorAll('#favoriteCount').forEach(x=>x.textContent=n)}document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(!b)return;e.preventDefault();let f=favs(),k=b.dataset.key;f=f.includes(k)?f.filter(x=>x!==k):[...f,k];localStorage.setItem(KEY,JSON.stringify(f));syncFav()});const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.style.display=(q&&!c.dataset.search.includes(q))?'none':'');const n=[...document.querySelectorAll('.shop-product')].filter(c=>c.style.display!=='none').length;const x=document.getElementById('liveResultCount');if(x)x.textContent=n+' proposte'});syncFav();</script></body></html>"""
+PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza'></a><div class='nav-actions'><a class='icon-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
+const KEY='tbs-jewelry-favorites';
+let wishlistMode=false;
+
+function favs(){
+  try{
+    const value=JSON.parse(localStorage.getItem(KEY)||'[]');
+    return Array.isArray(value)?value:[];
+  }catch(e){return[]}
+}
+function setFavs(value){
+  localStorage.setItem(KEY,JSON.stringify([...new Set(value.filter(Boolean))]));
+}
+function syncFav(){
+  const f=favs();
+  document.querySelectorAll('.favorite-btn').forEach(b=>{
+    const on=f.includes(b.dataset.key);
+    b.innerHTML=on?'&#9829;':'&#9825;';
+    b.setAttribute('aria-pressed',on?'true':'false');
+    b.classList.toggle('active',on);
+  });
+  document.querySelectorAll('#favoriteCount').forEach(x=>x.textContent=f.length);
+  applyWishlist();
+}
+function applyWishlist(){
+  const f=favs();
+  let shown=0;
+  document.querySelectorAll('[data-fav-key]').forEach(card=>{
+    const visible=!wishlistMode||f.includes(card.dataset.favKey);
+    card.hidden=!visible;
+    if(visible)shown++;
+  });
+  document.body.classList.toggle('wishlist-mode',wishlistMode);
+  document.querySelectorAll('#favoritesTop,#favoritesBottom').forEach(a=>{
+    a.classList.toggle('active',wishlistMode);
+    a.setAttribute('aria-pressed',wishlistMode?'true':'false');
+  });
+  const empty=document.getElementById('wishlistEmpty');
+  if(empty)empty.hidden=!(wishlistMode&&shown===0);
+  const title=document.querySelector('.pixel-arrivals-head h2');
+  if(title)title.textContent=wishlistMode?'LA TUA WISHLIST':'NUOVI ARRIVI';
+  const count=document.getElementById('liveResultCount');
+  if(count&&wishlistMode)count.textContent=shown+' salvati';
+}
+function toggleWishlist(){
+  wishlistMode=!wishlistMode;
+  if(wishlistMode)document.getElementById('collezione')?.scrollIntoView({behavior:'smooth'});
+  applyWishlist();
+}
+
+document.addEventListener('click',function(e){
+  const favButton=e.target.closest('.favorite-btn');
+  if(favButton){
+    e.preventDefault();
+    e.stopPropagation();
+    let f=favs(),k=favButton.dataset.key;
+    f=f.includes(k)?f.filter(x=>x!==k):[...f,k];
+    setFavs(f);
+    syncFav();
+    return;
+  }
+
+  const wishlistLink=e.target.closest('#favoritesTop,#favoritesBottom');
+  if(wishlistLink){
+    e.preventDefault();
+    toggleWishlist();
+    return;
+  }
+
+  if(e.target.closest('.filter-toggle')){
+    document.querySelector('.filters')?.classList.toggle('open');
+    return;
+  }
+
+  const box=e.target.closest('.product-image[data-image]');
+  const modal=document.getElementById('imageModal');
+  if(box&&box.dataset.image){
+    e.preventDefault();
+    modal.querySelector('img').src=box.dataset.image;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden','false');
+    return;
+  }
+  if(e.target===modal||e.target.closest('#imageModal button')){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden','true');
+    modal.querySelector('img').src='';
+  }
+});
+
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')
+});
+
+const live=document.getElementById('liveSearch');
+if(live)live.addEventListener('input',()=>{
+  wishlistMode=false;
+  const q=live.value.toLocaleLowerCase('it').trim();
+  document.querySelectorAll('.shop-product').forEach(c=>{
+    c.hidden=!!(q&&!c.dataset.search.includes(q));
+  });
+  const n=[...document.querySelectorAll('.shop-product')].filter(c=>!c.hidden).length;
+  const x=document.getElementById('liveResultCount');
+  if(x)x.textContent=n+' proposte';
+  document.querySelectorAll('#favoritesTop,#favoritesBottom').forEach(a=>a.classList.remove('active'));
+});
+
+syncFav();
+</script></body></html>"""
 def public_page(title, body, **ctx):
     count=sum(int(q) for q in session.get("client_cart",{}).values())
     return render_template_string(PUBLIC_BASE,title=title,css=PUBLIC_CSS,logo=BRAND_LOGO,atelier_logo=ATELIER_LOGO,cart_count=count,body=render_template_string(body,**ctx))
@@ -2995,6 +3143,18 @@ def boutique():
         image_rows=[r for r in rows if r.get("image")]
         banner_gold=image_rows[2] if len(image_rows)>2 else (image_rows[0] if image_rows else None)
         banner_black=image_rows[3] if len(image_rows)>3 else (image_rows[-1] if image_rows else None)
+
+        # Piercing reali in evidenza: disponibili, ultimo pezzo, poi ordinabili.
+        status_rank={"available":0,"last":1,"order":2,"unavailable":3}
+        home_piercings=sorted(
+            [r for r in rows if r.get("image")],
+            key=lambda r: (
+                status_rank.get(r.get("status"),9),
+                0 if r.get("kind")=="product" else 1,
+                str(r.get("display_category") or ""),
+                float(r.get("display_price") or 0)
+            )
+        )[:4]
     body="""
 <section class='pixel-hero'>
   <img src='{{pixel_hero}}' alt='Jewelry atelier d’eccellenza'>
@@ -3015,6 +3175,52 @@ def boutique():
   <a class='pixel-banner-link gold' href='#collezione' aria-label='Midnight Gold'></a>
   <a class='pixel-banner-link black' href='#collezione' aria-label='Black Diamond'></a>
 </section>
+
+<section class='featured-piercings'>
+  <div class='featured-heading'>
+    <div>
+      <span>SELEZIONE ATELIER</span>
+      <h2>Piercing in evidenza</h2>
+    </div>
+    <a href='#collezione'>Vedi tutti</a>
+  </div>
+  <div class='featured-grid'>
+  {% for p in home_piercings %}
+    <article class='featured-card' data-fav-key='{{p.variant_group or p.brand_code or p.supplier_code}}'>
+      <a class='featured-photo' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
+        {% if p.image %}<img src='{{p.image}}' alt='{{p.model_name or p.description or p.display_category}}'>{% endif %}
+        <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Aggiungi alla wishlist'>&#9825;</button>
+      </a>
+      <div class='featured-info'>
+        <small>{{p.material or 'Titanio ASTM F136'}}</small>
+        <h3>{{p.model_name or p.description or p.display_category}}</h3>
+        <strong>€ {{'%.2f'|format(p.display_price)}}</strong>
+        {% if p.status=='available' %}<span class='stock-ok'>● Disponibile</span>
+        {% elif p.status=='last' %}<span class='stock-low'>● Ultimo pezzo</span>
+        {% elif p.status=='order' %}<span class='stock-order'>● Ordinabile · 15–20 giorni</span>
+        {% else %}<span class='stock-unavailable'>● Non disponibile</span>{% endif %}
+      </div>
+      <div class='featured-action'>
+        {% if p.kind=='product' and p.quantity>0 and p.variant_count==1 %}
+        <form method='post' action='{{url_for("client_add_cart",product_id=p.id)}}'>
+          <input type='hidden' name='quantity' value='1'>
+          <button>Aggiungi al carrello</button>
+        </form>
+        {% elif p.kind=='product' %}
+        <a href='{{url_for("boutique_product",product_id=p.id)}}'>{{'Scegli variante' if p.variant_count>1 else 'Scopri'}}</a>
+        {% elif p.status=='order' %}
+        <a href='{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}'>Richiedi</a>
+        {% else %}<button disabled>Non disponibile</button>{% endif %}
+      </div>
+    </article>
+  {% endfor %}
+  </div>
+</section>
+
+<div class='wishlist-empty' id='wishlistEmpty' hidden>
+  <strong>La tua wishlist è vuota</strong>
+  <span>Tocca il cuore di un gioiello per salvarlo.</span>
+</div>
 
 <div class='pixel-arrivals-head' id='collezione'>
   <div>
@@ -3040,7 +3246,7 @@ def boutique():
 
 <div class='shop-grid pixel-products'>
 {% for p in rows %}
-<article class='shop-product' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'>
+<article class='shop-product' data-fav-key='{{p.variant_group or p.brand_code or p.supplier_code}}' data-search='{{((p.model_name or p.description or p.display_category) ~ " " ~ p.brand_code ~ " " ~ p.supplier_code ~ " " ~ (p.display_category or "") ~ " " ~ (p.display_color or "") ~ " " ~ (p.display_size or "") ~ " " ~ (p.display_stone or ""))|lower}}'>
   <a class='product-image' data-image='{{p.image}}' href='{% if p.kind=="product" %}{{url_for("boutique_product",product_id=p.id)}}{% else %}{{url_for("public_catalog_order",catalog_id=p.catalog_id)}}{% endif %}'>
     {% if loop.index<=12 %}<span class='new-label'>NEW</span>{% endif %}
     <button type='button' class='favorite-btn' data-key='{{p.variant_group or p.brand_code or p.supplier_code}}' aria-label='Wishlist'>&#9825;</button>
@@ -3072,7 +3278,7 @@ def boutique():
   <div class='benefit'><i>&#9645;</i><b>SPEDIZIONE VELOCE</b><small>Consegna rapida e sicura in 24/48 ore</small></div>
 </section>
 """
-    return public_page("TBS Jewelry · Luxury Piercing Jewelry",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured,hero_uri=TBS_HERO_EAR,category_cards=category_cards,banner_gold=banner_gold,banner_black=banner_black,pixel_hero=PIXEL_HERO,pixel_areas=PIXEL_AREAS,pixel_banners=PIXEL_BANNERS)
+    return public_page("TBS Jewelry · Luxury Piercing Jewelry",body,rows=rows,q=q,category=category,material=material,live_categories=live_categories,live_materials=live_materials,featured=featured,hero_uri=TBS_HERO_EAR,category_cards=category_cards,banner_gold=banner_gold,banner_black=banner_black,pixel_hero=PIXEL_HERO,pixel_areas=PIXEL_AREAS,pixel_banners=PIXEL_BANNERS,home_piercings=home_piercings)
 
 @app.get("/boutique/prodotto/<int:product_id>")
 def boutique_product(product_id):
