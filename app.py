@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.6.0 DEV · HQ ADAPTIVE LUXURY IMAGES"
+APP_VERSION = "v45.7.0 DEV · LUXURY STUDIO RENDER"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -4055,6 +4055,22 @@ body{background:#020202}
   object-fit:contain!important;
 }
 
+
+/* v45.7.0 · Luxury Studio Render — solo fotografie prodotto */
+.product-image img,
+.featured-photo img,
+.product-detail>img,
+.client-cart-row img,
+.cart-item-photo img,
+.image-modal img{
+  image-rendering:auto!important;
+  backface-visibility:hidden!important;
+  filter:
+    contrast(1.015)
+    saturate(1.005)
+    drop-shadow(0 13px 21px rgba(0,0,0,.50))!important;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4298,6 +4314,59 @@ if(live)live.addEventListener('input',()=>{
     return imageData;
   }
 
+
+  function cleanCutoutEdges(imageData,w,h,bg){
+    const src=imageData.data;
+    const out=new Uint8ClampedArray(src);
+
+    function alphaAt(x,y){
+      if(x<0||y<0||x>=w||y>=h) return 0;
+      return src[(y*w+x)*4+3];
+    }
+
+    // 1) Elimina solo pixel quasi isolati esterni.
+    for(let y=1;y<h-1;y++){
+      for(let x=1;x<w-1;x++){
+        const i=(y*w+x)*4;
+        const a=src[i+3];
+        if(a===0) continue;
+
+        let solid=0;
+        for(let oy=-1;oy<=1;oy++){
+          for(let ox=-1;ox<=1;ox++){
+            if(ox===0&&oy===0) continue;
+            if(alphaAt(x+ox,y+oy)>42) solid++;
+          }
+        }
+
+        if(a<110 && solid<=1){
+          out[i+3]=0;
+        }else if(a<180 && solid<=2){
+          out[i+3]=Math.round(a*.45);
+        }
+      }
+    }
+
+    // 2) Decontaminazione cromatica solo sui pixel semitrasparenti di bordo.
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=(y*w+x)*4;
+        const a=out[i+3];
+        if(a<=0||a>=245) continue;
+
+        const edgeFactor=1-(a/255);
+        const strength=Math.min(.82,edgeFactor*.92);
+
+        out[i]=Math.max(0,Math.min(255,Math.round((out[i]-bg.r*strength)/(1-strength||1))));
+        out[i+1]=Math.max(0,Math.min(255,Math.round((out[i+1]-bg.g*strength)/(1-strength||1))));
+        out[i+2]=Math.max(0,Math.min(255,Math.round((out[i+2]-bg.b*strength)/(1-strength||1))));
+      }
+    }
+
+    imageData.data.set(out);
+    return imageData;
+  }
+
   function alphaBounds(imageData,w,h){
     const d=imageData.data;
     let minX=w,minY=h,maxX=-1,maxY=-1;
@@ -4335,9 +4404,9 @@ if(live)live.addEventListener('input',()=>{
     }
     ctx.restore();
 
-    const halo=ctx.createRadialGradient(w*.50,h*.43,0,w*.50,h*.43,w*.31);
-    halo.addColorStop(0,'rgba(215,155,52,.18)');
-    halo.addColorStop(.48,'rgba(117,73,18,.07)');
+    const halo=ctx.createRadialGradient(w*.50,h*.43,0,w*.50,h*.43,w*.32);
+    halo.addColorStop(0,'rgba(217,157,54,.15)');
+    halo.addColorStop(.46,'rgba(117,73,18,.055)');
     halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo;ctx.fillRect(0,0,w,h);
 
@@ -4380,6 +4449,7 @@ if(live)live.addEventListener('input',()=>{
       const bg=sampleBackground(pixels,sw,sh);
       pixels=removeConnectedBackground(pixels,sw,sh,bg);
       pixels=removeLargeEnclosedBackground(pixels,sw,sh,bg);
+      pixels=cleanCutoutEdges(pixels,sw,sh,bg);
       const bounds=alphaBounds(pixels,sw,sh);
       if(!bounds) return;
 
@@ -4401,7 +4471,7 @@ if(live)live.addEventListener('input',()=>{
       ctx.imageSmoothingQuality='high';
       createLuxuryBackground(ctx,out.width,out.height);
 
-      const targetW=out.width*.78,targetH=out.height*.76;
+      const targetW=out.width*.80,targetH=out.height*.78;
       let fit=Math.min(targetW/crop.width,targetH/crop.height);
 
       // Evita ingrandimenti distruttivi delle immagini sorgente piccole.
@@ -4421,6 +4491,14 @@ if(live)live.addEventListener('input',()=>{
       contact.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=contact;ctx.fillRect(0,0,out.width,out.height);
 
+      const floorGlow=ctx.createRadialGradient(
+        out.width*.5,Math.min(out.height*.86,dy+dh*.93),0,
+        out.width*.5,Math.min(out.height*.86,dy+dh*.93),Math.max(dw,dh)*.22
+      );
+      floorGlow.addColorStop(0,'rgba(182,124,35,.11)');
+      floorGlow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=floorGlow;ctx.fillRect(0,0,out.width,out.height);
+
       ctx.save();
       ctx.shadowColor='rgba(0,0,0,.82)';
       ctx.shadowBlur=42;ctx.shadowOffsetY=28;
@@ -4430,7 +4508,7 @@ if(live)live.addEventListener('input',()=>{
 
       ctx.save();
       ctx.globalAlpha=.98;
-      ctx.filter='contrast(1.10) saturate(1.025) brightness(1.015)';
+      ctx.filter='contrast(1.075) saturate(1.015) brightness(1.008)';
       ctx.drawImage(crop,dx,dy,dw,dh);
       ctx.restore();
 
