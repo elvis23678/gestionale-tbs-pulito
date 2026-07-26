@@ -109,7 +109,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v45.4.1 DEV · CHECKOUT LUXURY UI"
+APP_VERSION = "v45.4.2 DEV · PAYPAL REDIRECT FIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -3721,6 +3721,54 @@ body{background:#020202}
   }
 }
 
+
+/* v45.4.2 · PayPal redirect server-side */
+.paypal-redirect-button{
+  width:100%;
+  min-height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  border:0;
+  border-radius:999px;
+  background:#ffc439;
+  color:#111;
+  box-shadow:0 10px 26px rgba(255,196,57,.22);
+  cursor:pointer;
+}
+.paypal-redirect-button:active{
+  transform:translateY(1px);
+}
+.paypal-redirect-button .paypal-word{
+  color:#003087;
+  font-family:Arial,sans-serif;
+  font-size:20px;
+  font-weight:900;
+  font-style:italic;
+}
+.paypal-redirect-button .paypal-pal{
+  color:#009cde;
+  font-family:Arial,sans-serif;
+  font-size:20px;
+  font-weight:900;
+  font-style:italic;
+}
+.paypal-redirect-button .paypal-action{
+  margin-left:8px;
+  color:#111;
+  font-family:Arial,sans-serif;
+  font-size:13px;
+  font-weight:800;
+}
+.paypal-help{
+  margin-top:9px;
+  color:#9e9588;
+  font-size:10px;
+  line-height:1.4;
+  text-align:center;
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><a class='atelier-brand' href='{{url_for("boutique")}}' aria-label='Jewelry atelier d’eccellenza' style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:112px;height:62px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:transparent;z-index:2'><img src='{{atelier_logo}}' alt='Jewelry atelier d’eccellenza' style='display:block;width:100%;height:100%;max-width:112px;max-height:62px;object-fit:contain;object-position:center;background:transparent'></a><div class='nav-actions'><a class='icon-link search-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'><span class='search-glyph' aria-hidden='true'></span></a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>
@@ -4436,10 +4484,31 @@ def client_cart():
       {% if paypal_enabled %}
       <div class='paypal-box' id='paypal-checkout'>
         <div class='paypal-title'>Paga subito con PayPal</div>
-        <div id='paypal-button-container'></div>
-        <div id='paypal-message' style='color:#9b1c1c;font:13px Arial,sans-serif;margin-top:8px'></div>
+        <form id='paypalRedirectForm' method='post' action='{{url_for("paypal_start_redirect")}}' onsubmit='return preparePaypalRedirect(this)'>
+          <input type='hidden' name='name'>
+          <input type='hidden' name='phone'>
+          <input type='hidden' name='email'>
+          <input type='hidden' name='notes'>
+          <input type='hidden' name='delivery_method'>
+          <input type='hidden' name='address'>
+          <input type='hidden' name='postcode'>
+          <input type='hidden' name='city'>
+          <input type='hidden' name='province'>
+          <button type='submit' class='paypal-redirect-button'>
+            <span class='paypal-word'>Pay</span><span class='paypal-pal'>Pal</span>
+            <span class='paypal-action'>Paga adesso</span>
+          </button>
+        </form>
+        <div class='paypal-help'>Verrai reindirizzato alla pagina sicura PayPal per completare il pagamento.</div>
       </div>
-      <script src='https://www.paypal.com/sdk/js?client-id={{paypal_client_id|urlencode}}&currency=EUR&intent=capture&components=buttons'></script>
+      {% else %}
+      <div class='paypal-disabled'>
+        <b>PayPal non è ancora configurato.</b><br>
+        Su Render devono essere presenti
+        <code>PAYPAL_CLIENT_ID</code> e <code>PAYPAL_CLIENT_SECRET</code>.
+      </div>
+      {% endif %}
+
       <script>
       const SUBTOTAL={{'%.2f'|format(subtotal)}};
       const SHIPPING_COST={{'%.2f'|format(shipping_cost)}};
@@ -4449,8 +4518,7 @@ def client_cart():
       }
 
       function updateDeliveryUI(){
-        const method=selectedDelivery();
-        const shipping=method==='shipping';
+        const shipping=selectedDelivery()==='shipping';
         document.getElementById('shippingFields').hidden=!shipping;
         document.getElementById('pickupOption').classList.toggle('selected',!shipping);
         document.getElementById('shippingOption').classList.toggle('selected',shipping);
@@ -4466,72 +4534,6 @@ def client_cart():
 
       function customerPayload(){
         const delivery_method=selectedDelivery();
-        const name=document.getElementById('checkout-name').value.trim();
-        const phone=document.getElementById('checkout-phone').value.trim();
-        const email=document.getElementById('checkout-email').value.trim();
-        const notes=document.getElementById('checkout-notes').value.trim();
-        const address=document.getElementById('checkout-address').value.trim();
-        const postcode=document.getElementById('checkout-postcode').value.trim();
-        const city=document.getElementById('checkout-city').value.trim();
-        const province=document.getElementById('checkout-province').value.trim().toUpperCase();
-
-        if(!name||!phone||!email){
-          throw new Error('Inserisci nome, telefono ed email.');
-        }
-        if(delivery_method==='shipping'&&(!address||!postcode||!city||!province)){
-          throw new Error('Compila tutti i dati per la spedizione.');
-        }
-        return {name,phone,email,notes,delivery_method,address,postcode,city,province};
-      }
-
-      paypal.Buttons({
-        style:{layout:'vertical',shape:'pill',label:'pay',height:48},
-        createOrder:async function(){
-          const data=customerPayload();
-          const response=await fetch('{{url_for("paypal_create_order")}}',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify(data)
-          });
-          const result=await response.json();
-          if(!response.ok) throw new Error(result.error||'Impossibile avviare PayPal');
-          return result.id;
-        },
-        onApprove:async function(data){
-          const response=await fetch('{{url_for("paypal_capture_order",order_id="PAYPAL_ORDER_ID")}}'.replace('PAYPAL_ORDER_ID',data.orderID),{
-            method:'POST',
-            headers:{'Content-Type':'application/json'}
-          });
-          const result=await response.json();
-          if(!response.ok) throw new Error(result.error||'Pagamento non completato');
-          window.location.href=result.redirect_url;
-        },
-        onCancel:function(){
-          document.getElementById('paypal-message').textContent='Pagamento annullato. Il carrello è rimasto invariato.';
-        },
-        onError:function(err){
-          document.getElementById('paypal-message').textContent=err.message||'Errore PayPal. Riprova.';
-        }
-      }).render('#paypal-button-container');
-      </script>
-      {% else %}
-      <script>
-      const SUBTOTAL={{'%.2f'|format(subtotal)}};
-      const SHIPPING_COST={{'%.2f'|format(shipping_cost)}};
-      function selectedDelivery(){return document.querySelector('input[name="delivery_method_ui"]:checked').value}
-      function updateDeliveryUI(){
-        const shipping=selectedDelivery()==='shipping';
-        document.getElementById('shippingFields').hidden=!shipping;
-        document.getElementById('pickupOption').classList.toggle('selected',!shipping);
-        document.getElementById('shippingOption').classList.toggle('selected',shipping);
-        document.getElementById('deliveryLabel').textContent=shipping?'Spedizione':'Ritiro in negozio';
-        document.getElementById('shippingAmount').textContent=shipping?'€ '+SHIPPING_COST.toFixed(2).replace('.',','):'Gratis';
-        document.getElementById('grandTotal').textContent='€ '+(SUBTOTAL+(shipping?SHIPPING_COST:0)).toFixed(2).replace('.',',');
-      }
-      document.querySelectorAll('input[name="delivery_method_ui"]').forEach(el=>el.addEventListener('change',updateDeliveryUI));
-      updateDeliveryUI();
-      function customerPayload(){
-        const delivery_method=selectedDelivery();
         const data={
           name:document.getElementById('checkout-name').value.trim(),
           phone:document.getElementById('checkout-phone').value.trim(),
@@ -4543,17 +4545,41 @@ def client_cart():
           city:document.getElementById('checkout-city').value.trim(),
           province:document.getElementById('checkout-province').value.trim().toUpperCase()
         };
-        if(!data.name||!data.phone||!data.email)throw new Error('Inserisci nome, telefono ed email.');
-        if(delivery_method==='shipping'&&(!data.address||!data.postcode||!data.city||!data.province))throw new Error('Compila tutti i dati per la spedizione.');
+        if(!data.name||!data.phone||!data.email){
+          throw new Error('Inserisci nome, telefono ed email.');
+        }
+        if(delivery_method==='shipping'&&(!data.address||!data.postcode||!data.city||!data.province)){
+          throw new Error('Compila tutti i dati per la spedizione.');
+        }
         return data;
       }
+
+      function fillHiddenCheckoutForm(form){
+        const data=customerPayload();
+        Object.keys(data).forEach(k=>{
+          if(form.elements[k]) form.elements[k].value=data[k];
+        });
+        return true;
+      }
+
+      function preparePaypalRedirect(form){
+        try{
+          return fillHiddenCheckoutForm(form);
+        }catch(err){
+          alert(err.message);
+          return false;
+        }
+      }
+
+      function copyCheckoutFields(form){
+        try{
+          return fillHiddenCheckoutForm(form);
+        }catch(err){
+          alert(err.message);
+          return false;
+        }
+      }
       </script>
-      <div class='paypal-disabled'>
-        <b>Pulsante PayPal pronto.</b><br>
-        Per attivarlo sulla DEV servono le variabili Render
-        <code>PAYPAL_CLIENT_ID</code> e <code>PAYPAL_CLIENT_SECRET</code>.
-      </div>
-      {% endif %}
 
       <div class='payment-divider'>oppure</div>
       <form method='post' action='{{url_for("client_checkout")}}' onsubmit='return copyCheckoutFields(this)'>
@@ -4568,18 +4594,6 @@ def client_cart():
         <input type='hidden' name='province'>
         <button class='gold-btn' style='width:100%'>Invia richiesta senza pagamento</button>
       </form>
-      <script>
-      function copyCheckoutFields(form){
-        try{
-          const data=customerPayload();
-          Object.keys(data).forEach(k=>form.elements[k].value=data[k]);
-          return true;
-        }catch(err){
-          alert(err.message);
-          return false;
-        }
-      }
-      </script>
     </section>
   </div>
   {% else %}
@@ -4616,6 +4630,163 @@ def client_update_cart(product_id):
 @app.post("/boutique/carrello/rimuovi/<int:product_id>")
 def client_remove_cart(product_id):
     cart=dict(session.get("client_cart",{})); cart.pop(str(product_id),None); session["client_cart"]=cart; session.modified=True; return redirect(url_for("client_cart"))
+
+
+
+@app.post("/boutique/paypal/start")
+def paypal_start_redirect():
+    if not PAYPAL_ENABLED:
+        flash("PayPal non è configurato.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    name=request.form.get("name","").strip()
+    phone=request.form.get("phone","").strip()
+    email=request.form.get("email","").strip()
+    notes=request.form.get("notes","").strip()
+    delivery_method=request.form.get("delivery_method","pickup").strip().lower()
+    address=request.form.get("address","").strip()
+    postcode=request.form.get("postcode","").strip()
+    city=request.form.get("city","").strip()
+    province=request.form.get("province","").strip().upper()
+
+    if not name or not phone or not email:
+        flash("Inserisci nome, telefono ed email.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+    if delivery_method not in ("pickup","shipping"):
+        flash("Metodo di consegna non valido.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+    if delivery_method=="shipping" and not all((address,postcode,city,province)):
+        flash("Compila tutti i dati per la spedizione.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    rows,subtotal=current_client_cart()
+    if not rows or subtotal<=0:
+        flash("Il carrello è vuoto o non più disponibile.")
+        return redirect(url_for("client_cart"))
+
+    shipping_cost=SHIPPING_COST_EUR if delivery_method=="shipping" else 0.0
+    total=round(subtotal+shipping_cost,2)
+
+    items=[]
+    for product,quantity,row_total in rows:
+        items.append({
+            "name": (product["model_name"] or product["category"] or product["brand_code"])[:127],
+            "sku": (product["brand_code"] or str(product["id"]))[:127],
+            "quantity": str(quantity),
+            "unit_amount":{
+                "currency_code":"EUR",
+                "value":f"{float(product['price']):.2f}",
+            },
+        })
+
+    breakdown={
+        "item_total":{"currency_code":"EUR","value":f"{subtotal:.2f}"}
+    }
+    if shipping_cost:
+        breakdown["shipping"]={"currency_code":"EUR","value":f"{shipping_cost:.2f}"}
+
+    purchase_unit={
+        "reference_id":"TBS-JEWELRY",
+        "description":"Jewelry Atelier · Premium Piercing Jewelry",
+        "amount":{
+            "currency_code":"EUR",
+            "value":f"{total:.2f}",
+            "breakdown":breakdown,
+        },
+        "items":items,
+    }
+
+    if delivery_method=="shipping":
+        purchase_unit["shipping"]={
+            "name":{"full_name":name[:300]},
+            "address":{
+                "address_line_1":address[:300],
+                "admin_area_2":city[:120],
+                "admin_area_1":province[:120],
+                "postal_code":postcode[:60],
+                "country_code":"IT",
+            },
+        }
+
+    payload={
+        "intent":"CAPTURE",
+        "purchase_units":[purchase_unit],
+        "application_context":{
+            "brand_name":"Jewelry Atelier",
+            "landing_page":"LOGIN",
+            "shipping_preference":"SET_PROVIDED_ADDRESS" if delivery_method=="shipping" else "NO_SHIPPING",
+            "user_action":"PAY_NOW",
+            "return_url":url_for("paypal_redirect_return",_external=True,_scheme="https"),
+            "cancel_url":url_for("paypal_redirect_cancel",_external=True,_scheme="https"),
+        },
+    }
+
+    try:
+        paypal_order=paypal_api_request("/v2/checkout/orders","POST",payload)
+    except RuntimeError as exc:
+        app.logger.exception("PayPal redirect order failed")
+        flash(f"Errore PayPal: {exc}")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    paypal_order_id=paypal_order.get("id")
+    approval_url=""
+    for link in paypal_order.get("links") or []:
+        if link.get("rel") in ("approve","payer-action"):
+            approval_url=link.get("href","")
+            break
+
+    if not paypal_order_id or not approval_url:
+        flash("PayPal non ha restituito il collegamento di pagamento.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    session["paypal_pending"]={
+        "paypal_order_id":paypal_order_id,
+        "name":name,
+        "phone":phone,
+        "email":email,
+        "notes":notes,
+        "delivery_method":delivery_method,
+        "address":address,
+        "postcode":postcode,
+        "city":city,
+        "province":province,
+        "shipping_cost":shipping_cost,
+        "subtotal":subtotal,
+        "total":total,
+    }
+    session.modified=True
+    return redirect(approval_url)
+
+
+@app.get("/boutique/paypal/return")
+def paypal_redirect_return():
+    order_id=request.args.get("token","").strip()
+    pending=session.get("paypal_pending") or {}
+    if not order_id or pending.get("paypal_order_id")!=order_id:
+        flash("Sessione PayPal non valida o scaduta.")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    try:
+        capture=paypal_api_request(f"/v2/checkout/orders/{order_id}/capture","POST",{})
+        if capture.get("status")!="COMPLETED":
+            flash("Il pagamento PayPal non risulta completato.")
+            return redirect(url_for("client_cart") + "#paypal-checkout")
+        payer=capture.get("payer") or {}
+        number=save_paid_paypal_order(order_id,payer)
+    except RuntimeError as exc:
+        app.logger.exception("PayPal redirect capture failed")
+        flash(f"Errore nella conferma PayPal: {exc}")
+        return redirect(url_for("client_cart") + "#paypal-checkout")
+
+    session["paypal_success"]={"order_number":number,"paypal_order_id":order_id}
+    session.modified=True
+    return redirect(url_for("paypal_payment_success"))
+
+
+@app.get("/boutique/paypal/cancel")
+def paypal_redirect_cancel():
+    flash("Pagamento PayPal annullato. Il carrello è rimasto invariato.")
+    return redirect(url_for("client_cart") + "#paypal-checkout")
 
 
 @app.post("/api/paypal/orders")
