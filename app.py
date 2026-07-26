@@ -126,7 +126,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.1.2 DEV · PUSH DELIVERY DIAGNOSTICS"
+APP_VERSION = "v46.1.3 DEV · PUSH SERVICE WORKER HOTFIX"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -571,7 +571,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4613',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6406,43 +6406,97 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-self.addEventListener('push',event=>{
-  let d={};
-  try{d=event.data?event.data.json():{}}catch(_){}
-  event.waitUntil(self.registration.showNotification(d.title||'TBS One',{
-    body:d.body||'',
-    icon:d.icon||'/push/icon',
-    badge:d.badge||'/push/icon',
-    tag:d.tag||'tbs-one',
-    renotify:true,
-    vibrate:[180,80,180],
-    data:{url:d.url||'/notifications'}
-  }));
+const SW_VERSION='v46.1.3';
+
+self.addEventListener('install',event=>{
+  self.skipWaiting();
 });
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(self.clients.claim());
+});
+
+function readPushPayload(event){
+  const fallback={
+    title:'TBS One',
+    body:'Hai una nuova notifica.',
+    url:'/notifications',
+    tag:'tbs-one-'+Date.now()
+  };
+  if(!event.data) return fallback;
+  try{
+    const parsed=event.data.json();
+    return Object.assign({},fallback,parsed||{});
+  }catch(jsonError){
+    try{
+      const text=event.data.text();
+      if(text) fallback.body=text;
+    }catch(textError){}
+    return fallback;
+  }
+}
+
+async function displayPushNotification(data){
+  const title=String(data.title||'TBS One');
+  const targetUrl=String(data.url||'/notifications');
+  const options={
+    body:String(data.body||data.message||'Hai una nuova notifica.'),
+    icon:data.icon||'/push/icon',
+    badge:data.badge||'/push/icon',
+    tag:String(data.tag||('tbs-one-'+Date.now())),
+    renotify:true,
+    vibrate:[220,100,220,100,320],
+    requireInteraction:false,
+    timestamp:Date.now(),
+    data:{url:targetUrl,swVersion:SW_VERSION}
+  };
+  try{
+    await self.registration.showNotification(title,options);
+  }catch(firstError){
+    // Alcuni dispositivi rifiutano icone o badge non compatibili:
+    // riprova con le sole opzioni essenziali, così la notifica appare comunque.
+    await self.registration.showNotification(title,{
+      body:options.body,
+      tag:options.tag+'-fallback',
+      renotify:true,
+      vibrate:[220,100,320],
+      timestamp:Date.now(),
+      data:options.data
+    });
+  }
+}
+
+self.addEventListener('push',event=>{
+  const data=readPushPayload(event);
+  event.waitUntil(displayPushNotification(data));
+});
+
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
-  const target=new URL(
-    event.notification.data?.url||'/notifications',
-    self.location.origin
-  ).href;
+  const notificationData=event.notification.data||{};
+  const target=new URL(notificationData.url||'/notifications',self.location.origin).href;
   event.waitUntil((async()=>{
-    const windows=await clients.matchAll({
-      type:'window',includeUncontrolled:true
-    });
+    const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
     for(const client of windows){
-      if('focus' in client){
-        await client.focus();
+      if(client.url.startsWith(self.location.origin)){
         if('navigate' in client) await client.navigate(target);
+        if('focus' in client) await client.focus();
         return;
       }
     }
-    if(clients.openWindow) return clients.openWindow(target);
+    if(self.clients.openWindow) await self.clients.openWindow(target);
   })());
 });
 """
     return app.response_class(
         js,mimetype="application/javascript",
-        headers={"Service-Worker-Allowed":"/","Cache-Control":"no-store"}
+        headers={
+            "Service-Worker-Allowed":"/",
+            "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma":"no-cache",
+            "Expires":"0",
+            "X-TBS-Service-Worker-Version":"v46.1.3"
+        }
     )
 
 
