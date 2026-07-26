@@ -108,7 +108,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v44.4.0 DEV · DEPLOY TEST"
+APP_VERSION = "v44.5.0 DEV · MAISON MOBILE"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -1669,6 +1669,310 @@ html{scroll-behavior:smooth;background:var(--maison-bg)}body{background:radial-g
  .checkout-luxury,.customer-product-page{padding:0 14px}.checkout-grid{grid-template-columns:1fr!important}.checkout-panel{padding:18px!important}.cart-summary-row{grid-template-columns:64px 1fr!important;gap:10px}.cart-summary-row>div:last-child{grid-column:2}.customer-product-shell{grid-template-columns:1fr!important}.customer-gallery,.customer-product-info{padding:14px!important}.customer-product-name{font-size:34px!important}.customer-buy-row{grid-template-columns:1fr!important}.qty-picker{width:100%}.customer-add{width:100%}
 }
 @media(max-width:390px){.shop-grid{gap:8px}.shop-title{font-size:12px}.shop-body{padding-left:8px;padding-right:8px}.shop-actions{padding-left:7px;padding-right:7px}.banner h2{font-size:31px}.hero h1{font-size:43px}}
+
+/* =========================================================
+   TBS JEWELRY · v44.5 MAISON MOBILE
+   Restyling esclusivamente front-end della boutique pubblica
+   ========================================================= */
+:root{
+  --maison-gold:#d9b45b;
+  --maison-gold-soft:#f0d98e;
+  --maison-black:#050505;
+  --maison-panel:#0b0907;
+  --maison-cream:#f7f1e7;
+}
+html{scroll-behavior:smooth}
+body{
+  background:
+    radial-gradient(circle at 50% -10%,rgba(217,180,91,.10),transparent 30%),
+    #050505;
+}
+.shop-nav{
+  height:74px;
+  padding:env(safe-area-inset-top) 17px 0;
+  background:rgba(3,3,3,.91);
+  border-bottom:1px solid rgba(217,180,91,.28);
+  box-shadow:0 10px 34px rgba(0,0,0,.42);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+}
+.brand-copy .name{
+  font-size:23px;
+  letter-spacing:.24em;
+  text-shadow:0 0 24px rgba(217,180,91,.22);
+}
+.brand-copy .tagline{letter-spacing:.42em}
+.icon-link{
+  border:1px solid transparent;
+  border-radius:999px;
+  transition:.2s ease;
+}
+.icon-link:active{
+  background:rgba(217,180,91,.10);
+  border-color:rgba(217,180,91,.30);
+  transform:scale(.94);
+}
+.shop-wrap{max-width:1180px}
+.hero{
+  position:relative;
+  min-height:min(760px,82svh);
+  overflow:hidden;
+  border-bottom:1px solid rgba(217,180,91,.28);
+  background:#030303;
+}
+.hero:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.04) 28%,rgba(0,0,0,.68) 67%,#070604 100%),
+    linear-gradient(90deg,rgba(0,0,0,.18),transparent 55%);
+}
+.hero>img{
+  width:100%;
+  height:100%;
+  min-height:min(760px,82svh);
+  object-fit:cover;
+  object-position:56% center;
+  filter:saturate(.92) contrast(1.06);
+  transform:scale(1.015);
+}
+.hero-copy{
+  z-index:2;
+  width:min(92%,670px);
+  padding:0 22px 38px;
+}
+.hero-kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  margin-bottom:13px;
+  font-size:9px;
+  letter-spacing:.34em;
+}
+.hero-kicker:before{
+  content:"";
+  width:26px;
+  height:1px;
+  background:var(--maison-gold);
+}
+.hero h1{
+  margin-bottom:13px;
+  font-size:clamp(48px,13vw,82px);
+  line-height:.84;
+  letter-spacing:-.045em;
+  text-wrap:balance;
+}
+.hero h1 em{
+  color:var(--maison-gold-soft);
+  text-shadow:0 5px 28px rgba(217,180,91,.12);
+}
+.hero p{
+  max-width:540px;
+  margin-bottom:22px;
+  color:rgba(255,255,255,.77);
+  font-size:13px;
+  line-height:1.58;
+}
+.hero-btn{
+  min-height:52px;
+  border-radius:999px;
+  box-shadow:0 12px 34px rgba(217,180,91,.16);
+}
+.hero-trust{
+  margin-top:25px;
+  padding-top:17px;
+  border-top:1px solid rgba(255,255,255,.13);
+}
+.trust{padding-right:8px}
+.trust i{color:var(--maison-gold-soft)}
+#categorie{padding-top:36px}
+.section-rule{padding-inline:16px}
+.section-rule h2,
+.section-title{
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.areas{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  padding:8px 16px 4px;
+  overflow:visible;
+}
+.area{
+  min-width:0;
+  padding:0;
+}
+.area-photo{
+  width:100%;
+  aspect-ratio:1/1;
+  height:auto;
+  border:1px solid rgba(217,180,91,.26);
+  box-shadow:0 12px 28px rgba(0,0,0,.28);
+}
+.area-photo img{transition:transform .45s ease}
+.area:active .area-photo img{transform:scale(1.06)}
+.area b{
+  margin-top:9px;
+  font-size:8px;
+  letter-spacing:.12em;
+}
+.banners{
+  gap:14px;
+  padding:28px 16px 0;
+}
+.banner{
+  min-height:280px;
+  border-color:rgba(217,180,91,.34);
+  box-shadow:0 18px 46px rgba(0,0,0,.34);
+}
+.banner:after{
+  background:
+    linear-gradient(90deg,rgba(0,0,0,.90) 0%,rgba(0,0,0,.52) 50%,rgba(0,0,0,.12) 100%),
+    linear-gradient(180deg,transparent 55%,rgba(0,0,0,.38));
+}
+.banner-copy{padding:27px 24px}
+.banner h2{
+  font-size:clamp(38px,9vw,60px);
+  line-height:.88;
+}
+.banner span{
+  display:inline-block;
+  padding-bottom:5px;
+  border-bottom:1px solid var(--maison-gold);
+}
+.collection-head{
+  align-items:end;
+  padding:42px 16px 13px;
+}
+.section-title{
+  font-size:clamp(32px,9vw,52px);
+  line-height:.93;
+}
+.filter-toggle{
+  min-height:42px;
+  padding:0 17px;
+  border:1px solid rgba(217,180,91,.34);
+  border-radius:999px;
+  background:#0a0907;
+}
+.filters{margin-inline:16px}
+.instant-search{
+  margin:10px 16px 18px;
+  min-height:52px;
+  border:1px solid rgba(217,180,91,.28);
+  background:#090807;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.015);
+}
+.shop-grid{
+  gap:12px;
+  padding:0 12px;
+}
+.shop-product{
+  overflow:hidden;
+  border:1px solid rgba(217,180,91,.22);
+  background:linear-gradient(180deg,#0c0a08,#070706);
+  box-shadow:0 14px 34px rgba(0,0,0,.28);
+}
+.product-image{
+  background:
+    radial-gradient(circle at 50% 42%,#fff 0,#f4efe7 52%,#e6dfd5 100%);
+}
+.product-image img{
+  padding:10%;
+  filter:drop-shadow(0 12px 13px rgba(0,0,0,.13));
+  transition:transform .35s ease;
+}
+.shop-product:active .product-image img{transform:scale(1.035)}
+.new-label{
+  top:9px;
+  left:9px;
+  border-radius:999px;
+  letter-spacing:.14em;
+}
+.favorite-btn{
+  top:8px;
+  right:8px;
+  color:#d7b55e!important;
+  background:rgba(8,8,8,.78)!important;
+  border-color:rgba(217,180,91,.40)!important;
+  backdrop-filter:blur(8px);
+}
+.shop-body{padding-top:14px}
+.product-category{
+  color:#bd9a4b;
+  letter-spacing:.14em;
+}
+.shop-title{
+  color:#f8f4ec;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.shop-price{
+  color:#e8c86e;
+  font-family:Georgia,"Times New Roman",serif;
+}
+.shop-actions button,.shop-actions a{
+  border-radius:999px;
+  letter-spacing:.08em;
+}
+.stock-ok{color:#65d895}
+.stock-low{color:#f4bf5d}
+.stock-order{color:#d7b55e}
+.benefits{
+  margin-inline:16px;
+  border-top:1px solid rgba(217,180,91,.25);
+  border-bottom:1px solid rgba(217,180,91,.25);
+}
+.benefit{
+  background:linear-gradient(180deg,rgba(217,180,91,.04),transparent);
+}
+.footer{padding-bottom:112px}
+.bottom-nav{
+  left:10px;
+  right:10px;
+  bottom:10px;
+  width:auto;
+  height:67px;
+  border:1px solid rgba(217,180,91,.27);
+  border-radius:22px;
+  background:rgba(5,5,5,.93);
+  box-shadow:0 18px 45px rgba(0,0,0,.55);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.bottom-nav a{border-radius:16px}
+.bottom-nav a:active{background:rgba(217,180,91,.10)}
+
+@media(min-width:720px){
+  .hero{border-radius:0 0 28px 28px}
+  .areas{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .banners{grid-template-columns:1fr 1fr}
+  .shop-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .hero{min-height:78svh}
+  .hero>img{
+    min-height:78svh;
+    object-position:59% center;
+  }
+  .hero-copy{padding-bottom:30px}
+  .hero p{max-width:92%;font-size:12px}
+  .hero-trust{gap:4px}
+  .trust b{font-size:7px}
+  .trust small{font-size:6px}
+  .areas{gap:10px;padding-inline:12px}
+  .banners{padding-inline:12px}
+  .collection-head{padding-inline:12px}
+  .filters,.instant-search{margin-inline:12px}
+  .shop-grid{padding-inline:8px;gap:9px}
+  .shop-body{padding:11px 9px 5px}
+  .shop-title{font-size:13px}
+  .shop-price{font-size:18px}
+  .shop-actions{padding:6px 8px 10px}
+}
+
 """
 
 PUBLIC_BASE = """<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,viewport-fit=cover'><meta name='theme-color' content='#030303'><meta name='description' content='TBS Jewelry · Luxury piercing jewelry'><title>{{title}}</title><style>{{css}}</style></head><body><nav class='shop-nav'><a class='menu-mark' href='{{url_for("boutique")}}#categorie' aria-label='Menu'><span></span></a><div class='brand-copy'><span class='name'>TBS</span><span class='tagline'>JEWELRY</span></div><div class='nav-actions'><a class='icon-link' href='{{url_for("boutique")}}#ricerca-live' aria-label='Cerca'>⌕</a><a class='icon-link' href='{{url_for("boutique")}}#collezione' id='favoritesTop' aria-label='Wishlist'>♡<span class='cart-count' id='favoriteCount'>0</span></a><a class='icon-link' href='{{url_for("client_cart")}}' aria-label='Carrello'>▢<span class='cart-count'>{{cart_count}}</span></a></div></nav><main class='shop-wrap'>{% with messages=get_flashed_messages() %}{% for message in messages %}<div class='notice'>{{message}}</div>{% endfor %}{% endwith %}{{body|safe}}</main><div class='footer'><b>TBS JEWELRY</b><br><span>Luxury piercing jewelry selezionato con cura</span><br><a href='{{url_for("login")}}'>Accesso riservato allo staff</a></div><nav class='bottom-nav'><a href='{{url_for("boutique")}}'><span>⌂</span>HOME</a><a href='{{url_for("boutique")}}#collezione'><span>◇</span>COLLEZIONI</a><a href='{{url_for("boutique")}}#categorie'><span>▦</span>CATEGORIE</a><a href='{{url_for("boutique")}}#collezione' id='favoritesBottom'><span>♡</span>WISHLIST</a><a href='{{url_for("login")}}'><span>♙</span>ACCOUNT</a></nav><div class='image-modal' id='imageModal' aria-hidden='true'><button type='button' aria-label='Chiudi'>×</button><img alt='Anteprima gioiello'></div><script>document.addEventListener('click',function(e){if(e.target.closest('.filter-toggle'))document.querySelector('.filters')?.classList.toggle('open');const box=e.target.closest('.product-image[data-image]');const modal=document.getElementById('imageModal');if(box&&box.dataset.image){e.preventDefault();modal.querySelector('img').src=box.dataset.image;modal.classList.add('open');modal.setAttribute('aria-hidden','false')}if(e.target===modal||e.target.closest('#imageModal button')){modal.classList.remove('open');modal.setAttribute('aria-hidden','true');modal.querySelector('img').src=''}});document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('imageModal')?.classList.remove('open')});const KEY='tbs-jewelry-favorites';function favs(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}function syncFav(){const f=favs();document.querySelectorAll('.favorite-btn').forEach(b=>{const on=f.includes(b.dataset.key);b.textContent=on?'♥':'♡';b.setAttribute('aria-pressed',on?'true':'false')});const n=f.length;document.querySelectorAll('#favoriteCount').forEach(x=>x.textContent=n)}document.addEventListener('click',e=>{const b=e.target.closest('.favorite-btn');if(!b)return;e.preventDefault();let f=favs(),k=b.dataset.key;f=f.includes(k)?f.filter(x=>x!==k):[...f,k];localStorage.setItem(KEY,JSON.stringify(f));syncFav()});const live=document.getElementById('liveSearch');if(live)live.addEventListener('input',()=>{const q=live.value.toLocaleLowerCase('it').trim();document.querySelectorAll('.shop-product').forEach(c=>c.style.display=(q&&!c.dataset.search.includes(q))?'none':'');const n=[...document.querySelectorAll('.shop-product')].filter(c=>c.style.display!=='none').length;const x=document.getElementById('liveResultCount');if(x)x.textContent=n+' proposte'});syncFav();</script></body></html>"""
