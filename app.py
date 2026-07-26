@@ -126,7 +126,8 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.1.3 DEV · PUSH SERVICE WORKER HOTFIX"
+APP_VERSION = "v46.2.0 DEV · PUSH INTERATTIVE + BADGE HOTFIX"
+PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -571,7 +572,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4613',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4620',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6406,22 +6407,22 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v46.1.3';
+const SW_VERSION='v46.2.0';
 
-self.addEventListener('install',event=>{
-  self.skipWaiting();
-});
-
-self.addEventListener('activate',event=>{
-  event.waitUntil(self.clients.claim());
-});
+self.addEventListener('install',event=>{ self.skipWaiting(); });
+self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
 
 function readPushPayload(event){
   const fallback={
     title:'TBS One',
     body:'Hai una nuova notifica.',
     url:'/notifications',
-    tag:'tbs-one-'+Date.now()
+    tag:'tbs-one-'+Date.now(),
+    kind:'generic',
+    actions:[
+      {action:'open',title:'Apri'},
+      {action:'mark-read',title:'Segna letta'}
+    ]
   };
   if(!event.data) return fallback;
   try{
@@ -6436,55 +6437,97 @@ function readPushPayload(event){
   }
 }
 
+function normalizeActions(data){
+  if(Array.isArray(data.actions) && data.actions.length){
+    return data.actions.slice(0,2).map(x=>({
+      action:String(x.action||'open'),
+      title:String(x.title||'Apri')
+    }));
+  }
+  return [
+    {action:'open',title:'Apri'},
+    {action:'mark-read',title:'Segna letta'}
+  ];
+}
+
 async function displayPushNotification(data){
   const title=String(data.title||'TBS One');
   const targetUrl=String(data.url||'/notifications');
+  const notificationId=Number(data.notification_id||0);
   const options={
     body:String(data.body||data.message||'Hai una nuova notifica.'),
     icon:data.icon||'/push/icon',
-    badge:data.badge||'/push/icon',
+    badge:data.badge||'/push/badge',
     tag:String(data.tag||('tbs-one-'+Date.now())),
     renotify:true,
-    vibrate:[220,100,220,100,320],
-    requireInteraction:false,
+    vibrate:[250,90,250,90,380],
+    requireInteraction:Boolean(data.requireInteraction),
     timestamp:Date.now(),
-    data:{url:targetUrl,swVersion:SW_VERSION}
+    actions:normalizeActions(data),
+    data:{
+      url:targetUrl,
+      manageUrl:String(data.manage_url||targetUrl),
+      notificationId:notificationId,
+      kind:String(data.kind||'generic'),
+      swVersion:SW_VERSION
+    }
   };
   try{
     await self.registration.showNotification(title,options);
   }catch(firstError){
-    // Alcuni dispositivi rifiutano icone o badge non compatibili:
-    // riprova con le sole opzioni essenziali, così la notifica appare comunque.
     await self.registration.showNotification(title,{
       body:options.body,
+      badge:'/push/badge',
       tag:options.tag+'-fallback',
       renotify:true,
-      vibrate:[220,100,320],
+      vibrate:[250,90,380],
       timestamp:Date.now(),
+      actions:options.actions,
       data:options.data
     });
   }
 }
 
 self.addEventListener('push',event=>{
-  const data=readPushPayload(event);
-  event.waitUntil(displayPushNotification(data));
+  event.waitUntil(displayPushNotification(readPushPayload(event)));
 });
 
-self.addEventListener('notificationclick',event=>{
-  event.notification.close();
-  const notificationData=event.notification.data||{};
-  const target=new URL(notificationData.url||'/notifications',self.location.origin).href;
-  event.waitUntil((async()=>{
-    const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-    for(const client of windows){
-      if(client.url.startsWith(self.location.origin)){
-        if('navigate' in client) await client.navigate(target);
-        if('focus' in client) await client.focus();
-        return;
-      }
+async function openOrFocus(target){
+  const absolute=new URL(target||'/notifications',self.location.origin).href;
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  for(const client of windows){
+    if(client.url.startsWith(self.location.origin)){
+      if('navigate' in client) await client.navigate(absolute);
+      if('focus' in client) await client.focus();
+      return;
     }
-    if(self.clients.openWindow) await self.clients.openWindow(target);
+  }
+  if(self.clients.openWindow) await self.clients.openWindow(absolute);
+}
+
+self.addEventListener('notificationclick',event=>{
+  const action=event.action||'open';
+  const data=event.notification.data||{};
+  event.notification.close();
+  event.waitUntil((async()=>{
+    if(action==='mark-read'){
+      if(data.notificationId){
+        try{
+          await fetch('/api/push/action',{
+            method:'POST',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'mark-read',notification_id:data.notificationId})
+          });
+        }catch(error){}
+      }
+      return;
+    }
+    if(action==='manage'){
+      await openOrFocus(data.manageUrl||data.url||'/discount-approvals');
+      return;
+    }
+    await openOrFocus(data.url||'/notifications');
   })());
 });
 """
@@ -6495,7 +6538,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v46.1.3"
+            "X-TBS-Service-Worker-Version":"v46.2.0"
         }
     )
 
@@ -6504,8 +6547,45 @@ self.addEventListener('notificationclick',event=>{
 def push_icon():
     return app.response_class(
         base64.b64decode(JEWELRY_BADGE_LOGO_B64),
-        mimetype="image/jpeg"
+        mimetype="image/jpeg",
+        headers={"Cache-Control":"public, max-age=86400"}
     )
+
+
+@app.get("/push/badge")
+def push_badge():
+    """Icona monocromatica trasparente per la barra di stato Android."""
+    return app.response_class(
+        base64.b64decode(PUSH_BADGE_PNG_B64),
+        mimetype="image/png",
+        headers={"Cache-Control":"public, max-age=86400"}
+    )
+
+
+@app.post("/api/push/action")
+@login_required
+def push_action():
+    data=request.get_json(silent=True) or {}
+    action=(data.get("action") or "").strip()
+    try:
+        notification_id=int(data.get("notification_id") or 0)
+    except (TypeError,ValueError):
+        notification_id=0
+    if action!="mark-read" or notification_id<=0:
+        return jsonify({"ok":False,"error":"Azione non valida"}),400
+    with connect() as db:
+        row=db.execute(
+            "SELECT id FROM notifications WHERE id=? AND recipient_user_id=?",
+            (notification_id,session.get("user_id"))
+        ).fetchone()
+        if not row:
+            return jsonify({"ok":False,"error":"Notifica non trovata"}),404
+        db.execute(
+            "UPDATE notifications SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE id=?",
+            (notification_id,)
+        )
+        db.commit()
+    return jsonify({"ok":True,"action":"mark-read","notification_id":notification_id})
 
 
 @app.get("/api/push/config")
@@ -6857,13 +6937,24 @@ def _send_push(db, user_id, notification_id, title, message, kind):
         (user_id,)
     ).fetchall()
 
+    is_discount_request=(kind=="discount_request")
+    actions=(
+        [{"action":"manage","title":"Gestisci"},{"action":"mark-read","title":"Segna letta"}]
+        if is_discount_request else
+        [{"action":"open","title":"Apri"},{"action":"mark-read","title":"Segna letta"}]
+    )
     payload=json.dumps({
+        "notification_id":notification_id,
         "title":title or "TBS One",
         "body":message or "",
+        "kind":kind or "generic",
         "tag":f"tbs-{kind}-{notification_id}",
         "url":f"/push/open/{notification_id}",
+        "manage_url":"/discount-approvals" if is_discount_request else f"/push/open/{notification_id}",
         "icon":"/push/icon",
-        "badge":"/push/icon"
+        "badge":"/push/badge",
+        "actions":actions,
+        "requireInteraction":bool(is_discount_request)
     },ensure_ascii=False)
 
     sent=failed=0
