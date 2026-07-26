@@ -126,7 +126,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v46.1.1 DEV · PUSH LOG HOTFIX"
+APP_VERSION = "v46.1.2 DEV · PUSH DELIVERY DIAGNOSTICS"
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
 def choose_db_path():
@@ -697,7 +697,11 @@ async function tbsTestPush(){
       );
     }
 
-    tbsPushMessage('Notifica di prova inviata. Chiudi Chrome e attendi qualche secondo.');
+    const sent=response.result?.sent||0;
+    const failed=response.result?.failed||0;
+    const delivery=response.result?.deliveries?.[0];
+    const http=delivery?.http_status ? ` · HTTP ${delivery.http_status}` : '';
+    tbsPushMessage(`Prova accettata dal servizio push: ${sent} inviata, ${failed} fallita${http}. Chiudi Chrome e attendi qualche secondo.`);
   }catch(error){
     tbsPushMessage(error.message,true);
   }
@@ -6772,18 +6776,27 @@ def _current_user_for_identity(db, user_id=None, username=None):
 
 
 
+def _mask_push_endpoint(endpoint):
+    endpoint=(endpoint or "").strip()
+    if len(endpoint)<=28:
+        return endpoint
+    return f"{endpoint[:18]}…{endpoint[-10:]}"
+
+
+def _response_text(response, limit=700):
+    if response is None:
+        return ""
+    try:
+        text=response.text or ""
+    except Exception:
+        text=""
+    return str(text).replace("\n"," ").replace("\r"," ")[:limit]
+
+
 def _send_push(db, user_id, notification_id, title, message, kind):
     if not PUSH_SERVER_READY:
-        return {"sent":0, "failed":0, "reason":"server_not_configured"}
-
-    # Guardia aggiuntiva: corregge automaticamente lo schema anche su database
-    # persistenti provenienti da versioni precedenti.
-    ensure_column(db,'push_delivery_log','user_id','INTEGER')
-    ensure_column(db,'push_delivery_log','device_id','INTEGER')
-    ensure_column(db,'push_delivery_log','notification_id','INTEGER')
-    ensure_column(db,'push_delivery_log','status','TEXT NOT NULL DEFAULT "unknown"')
-    ensure_column(db,'push_delivery_log','detail','TEXT')
-    ensure_column(db,'push_delivery_log','created_at','TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP')
+        print("[TBS PUSH] BLOCCATO: server_not_configured", flush=True)
+        return {"sent":0, "failed":0, "reason":"server_not_configured", "deliveries":[]}
 
     devices=db.execute(
         "SELECT * FROM push_devices WHERE user_id=? AND enabled=1",
@@ -6800,16 +6813,29 @@ def _send_push(db, user_id, notification_id, title, message, kind):
     },ensure_ascii=False)
 
     sent=failed=0
+    deliveries=[]
+    print(f"[TBS PUSH] START user_id={user_id} notification_id={notification_id} devices={len(devices)}", flush=True)
+
     for device in devices:
+        endpoint=_mask_push_endpoint(device["endpoint"])
         try:
-            webpush(
+            response=webpush(
                 subscription_info=json.loads(device["subscription_json"]),
                 data=payload,
                 vapid_private_key=PUSH_VAPID_PRIVATE_KEY,
                 vapid_claims={"sub":PUSH_VAPID_SUBJECT},
                 ttl=120
             )
+            status=getattr(response,"status_code",None)
+            response_body=_response_text(response)
+            detail=f"HTTP {status or 'n/d'} endpoint={endpoint}"
+            if response_body:
+                detail+=f" body={response_body}"
+            detail=detail[:900]
+            print(f"[TBS PUSH] SUCCESS device_id={device['id']} {detail}", flush=True)
+
             sent+=1
+            deliveries.append({"device_id":device["id"],"status":"sent","http_status":status,"detail":detail})
             db.execute(
                 """UPDATE push_devices
                    SET last_success_at=CURRENT_TIMESTAMP,last_error=NULL,
@@ -6820,12 +6846,20 @@ def _send_push(db, user_id, notification_id, title, message, kind):
                 """INSERT INTO push_delivery_log
                    (user_id,device_id,notification_id,status,detail)
                    VALUES(?,?,?,?,?)""",
-                (user_id,device["id"],notification_id,"sent","ok")
+                (user_id,device["id"],notification_id,"sent",detail)
             )
         except Exception as exc:
             failed+=1
-            status=getattr(getattr(exc,"response",None),"status_code",None)
-            detail=f"{type(exc).__name__}: {exc}"[:500]
+            exc_response=getattr(exc,"response",None)
+            status=getattr(exc_response,"status_code",None)
+            response_body=_response_text(exc_response)
+            detail=f"{type(exc).__name__}: {exc}; HTTP={status or 'n/d'}; endpoint={endpoint}"
+            if response_body:
+                detail+=f"; body={response_body}"
+            detail=detail[:900]
+            print(f"[TBS PUSH] FAILED device_id={device['id']} {detail}", flush=True)
+
+            deliveries.append({"device_id":device["id"],"status":"failed","http_status":status,"detail":detail})
             db.execute(
                 """UPDATE push_devices SET
                    enabled=CASE WHEN ? IN (404,410) THEN 0 ELSE enabled END,
@@ -6839,8 +6873,10 @@ def _send_push(db, user_id, notification_id, title, message, kind):
                    VALUES(?,?,?,?,?)""",
                 (user_id,device["id"],notification_id,"failed",detail)
             )
-    return {"sent":sent,"failed":failed,"reason":None}
 
+    print(f"[TBS PUSH] END sent={sent} failed={failed}", flush=True)
+    reason=None if devices else "no_active_devices"
+    return {"sent":sent,"failed":failed,"reason":reason,"deliveries":deliveries}
 
 def _notify_user(db,user_id,kind,title,message,reference_type=None,reference_id=None,event_key=None,recipient_username=None):
     _ensure_notifications(db)
@@ -10061,14 +10097,12 @@ def _v36_init():
             detail TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )''')
-        # Migrazione compatibile con database già esistenti: CREATE TABLE IF NOT EXISTS
-        # non aggiunge le nuove colonne a una tabella creata da versioni precedenti.
-        ensure_column(db,'push_delivery_log','user_id','INTEGER')
-        ensure_column(db,'push_delivery_log','device_id','INTEGER')
-        ensure_column(db,'push_delivery_log','notification_id','INTEGER')
-        ensure_column(db,'push_delivery_log','status','TEXT NOT NULL DEFAULT "unknown"')
-        ensure_column(db,'push_delivery_log','detail','TEXT')
-        ensure_column(db,'push_delivery_log','created_at','TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP')
+        ensure_column(db,"push_delivery_log","user_id","INTEGER")
+        ensure_column(db,"push_delivery_log","device_id","INTEGER")
+        ensure_column(db,"push_delivery_log","notification_id","INTEGER")
+        ensure_column(db,"push_delivery_log","status","TEXT")
+        ensure_column(db,"push_delivery_log","detail","TEXT")
+        ensure_column(db,"push_delivery_log","created_at","TEXT")
         db.execute('''CREATE TABLE IF NOT EXISTS internal_messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sender_user_id INTEGER,
