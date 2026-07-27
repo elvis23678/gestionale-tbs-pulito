@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.3.2 DEV · PREZZO SCONTO DB DEFINITIVO"
+APP_VERSION = "v47.3.3 DEV · FIX RECUPERO RICHIESTA VENDITORE"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -682,7 +682,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4732',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4733',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6545,7 +6545,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.3.2';
+const SW_VERSION='v47.3.3';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6717,7 +6717,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.3.2"
+            "X-TBS-Service-Worker-Version":"v47.3.3"
         }
     )
 
@@ -8782,14 +8782,85 @@ def pos_set_price():
     flash("Sconto superiore al limite personale: operazione bloccata e richiesta registrata.")
     return redirect(url_for('discount_request_wait',token=token))
 
+
+def _find_seller_discount_request(db, token, allowed_statuses=None):
+    """
+    Recupera una richiesta sconto senza dipendere esclusivamente dall'ID utente
+    della sessione. L'username è usato come identità di recupero quando l'account
+    è stato ricreato o la sessione contiene un ID differente.
+    """
+    current_user_id=session.get("user_id")
+    current_username=(session.get("user") or "").strip()
+
+    req=db.execute(
+        "SELECT * FROM discount_requests WHERE request_token=?",
+        (token,)
+    ).fetchone()
+
+    if req:
+        same_id=(
+            current_user_id is not None
+            and req["requester_user_id"] is not None
+            and int(req["requester_user_id"])==int(current_user_id)
+        )
+        same_username=(
+            current_username
+            and (req["requester_username"] or "").strip().casefold()
+                == current_username.casefold()
+        )
+        if not (same_id or same_username):
+            return None
+
+        # Ripara automaticamente l'ID storico se l'username coincide.
+        if same_username and not same_id and current_user_id is not None:
+            db.execute(
+                """UPDATE discount_requests
+                   SET requester_user_id=?
+                   WHERE id=?""",
+                (current_user_id,req["id"])
+            )
+            req=db.execute(
+                "SELECT * FROM discount_requests WHERE id=?",
+                (req["id"],)
+            ).fetchone()
+
+    # Fallback: il token può essere diventato obsoleto dopo login/logout.
+    # Recupera l'ultima richiesta dello stesso venditore.
+    if not req and current_username:
+        sql="""
+            SELECT *
+            FROM discount_requests
+            WHERE (
+                requester_user_id=?
+                OR LOWER(TRIM(requester_username))=LOWER(TRIM(?))
+            )
+        """
+        params=[current_user_id,current_username]
+        if allowed_statuses:
+            placeholders=",".join("?" for _ in allowed_statuses)
+            sql+=f" AND status IN ({placeholders})"
+            params.extend(allowed_statuses)
+        sql+=" ORDER BY id DESC LIMIT 1"
+        req=db.execute(sql,params).fetchone()
+
+    if req and allowed_statuses and req["status"] not in allowed_statuses:
+        return None
+    return req
+
 @app.get("/discount-request/<token>")
 @login_required
 def discount_request_wait(token):
     with connect() as db:
-        req=db.execute("SELECT * FROM discount_requests WHERE request_token=? AND requester_user_id=?",(token,session.get('user_id'))).fetchone()
+        req=_find_seller_discount_request(
+            db,token,
+            ("In attesa","Approvata","Applicata","Rifiutata",
+             "Superata","Annullata","Controproposta")
+        )
+        if req:
+            db.commit()
     if not req:
-        flash("Richiesta non trovata.")
-        return redirect(url_for("pos"))
+        flash("Non trovo una richiesta sconto associata a questo venditore.")
+        return redirect(url_for("cart"))
     if req["status"]=="Approvata":
         with connect() as db:
             p=db.execute("SELECT * FROM products WHERE id=?",(req["product_id"],)).fetchone()
@@ -8863,11 +8934,21 @@ setTimeout(()=>{
 @login_required
 def cancel_discount_request(token):
     with connect() as db:
-        db.execute("UPDATE discount_requests SET status='Annullata',decided_at=CURRENT_TIMESTAMP WHERE request_token=? AND requester_user_id=? AND status='In attesa'",(token,session.get('user_id')))
+        req=_find_seller_discount_request(db,token,("In attesa",))
+        if not req:
+            flash("Richiesta non disponibile o già gestita.")
+            return redirect(url_for("cart"))
+        db.execute(
+            """UPDATE discount_requests
+               SET status='Annullata',decided_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status='In attesa'""",
+            (req["id"],)
+        )
         db.commit()
-    session.pop("pending_discount_token",None);session.modified=True
+    session.pop("pending_discount_token",None)
+    session.modified=True
     flash("Richiesta annullata.")
-    return redirect(url_for("pos"))
+    return redirect(url_for("cart"))
 
 @app.get("/api/discount-requests/pending-count")
 @role_required("admin","manager")
@@ -9058,7 +9139,7 @@ def pos_authorize_price():
 @login_required
 def accept_counter_offer(token):
     with connect() as db:
-        req=db.execute("SELECT * FROM discount_requests WHERE request_token=? AND requester_user_id=? AND status='Controproposta'",(token,session.get('user_id'))).fetchone()
+        req=_find_seller_discount_request(db,token,("Controproposta",))
         if not req or req['counter_price'] is None:
             flash("Controproposta non disponibile.")
             return redirect(url_for('cart'))
@@ -9077,7 +9158,16 @@ def accept_counter_offer(token):
 @login_required
 def decline_counter_offer(token):
     with connect() as db:
-        db.execute("UPDATE discount_requests SET status='Rifiutata',decided_at=CURRENT_TIMESTAMP WHERE request_token=? AND requester_user_id=? AND status='Controproposta'",(token,session.get('user_id')))
+        req=_find_seller_discount_request(db,token,("Controproposta",))
+        if not req:
+            flash("Controproposta non disponibile.")
+            return redirect(url_for("cart"))
+        db.execute(
+            """UPDATE discount_requests
+               SET status='Rifiutata',decided_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status='Controproposta'""",
+            (req["id"],)
+        )
         db.commit()
     session.pop('pending_discount_token',None);session.modified=True
     flash("Controproposta rifiutata. Resta valido il prezzo di listino.")
