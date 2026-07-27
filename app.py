@@ -127,7 +127,7 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.4.0 DEV · FIX CATALOGO POSIZIONE REALE"
+APP_VERSION = "v47.4.1 DEV · FIX STATO RIFIUTO SINCRONIZZATO"
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -682,7 +682,7 @@ async function tbsPushRegistration(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){
     throw new Error('Chrome non supporta le notifiche su questo dispositivo.');
   }
-  return navigator.serviceWorker.register('/push-sw.js?v=4740',{scope:'/'});
+  return navigator.serviceWorker.register('/push-sw.js?v=4741',{scope:'/'});
 }
 
 async function tbsCurrentSubscription(){
@@ -6545,7 +6545,7 @@ def treasury_count():
 @app.get("/push-sw.js")
 def push_service_worker():
     js=r"""
-const SW_VERSION='v47.4.0';
+const SW_VERSION='v47.4.1';
 
 self.addEventListener('install',event=>{ self.skipWaiting(); });
 self.addEventListener('activate',event=>{ event.waitUntil(self.clients.claim()); });
@@ -6717,7 +6717,7 @@ self.addEventListener('notificationclick',event=>{
             "Cache-Control":"no-store, no-cache, must-revalidate, max-age=0",
             "Pragma":"no-cache",
             "Expires":"0",
-            "X-TBS-Service-Worker-Version":"v47.4.0"
+            "X-TBS-Service-Worker-Version":"v47.4.1"
         }
     )
 
@@ -9076,6 +9076,33 @@ def decide_discount_request(request_id):
             flash("La richiesta è stata gestita contemporaneamente.")
             return redirect(url_for("discount_approvals"))
 
+        # Chiude eventuali richieste duplicate rimaste In attesa per lo stesso
+        # venditore e lo stesso prodotto. La decisione corrente diventa l'unico
+        # stato valido mostrato nel carrello.
+        db.execute(
+            """UPDATE discount_requests
+               SET status='Superata',
+                   decision_note=CASE
+                       WHEN COALESCE(decision_note,'')=''
+                       THEN 'Chiusa automaticamente dopo decisione su richiesta duplicata'
+                       ELSE decision_note
+                   END,
+                   decided_at=COALESCE(decided_at,CURRENT_TIMESTAMP)
+               WHERE id<>?
+                 AND product_id=?
+                 AND status='In attesa'
+                 AND (
+                    requester_user_id=?
+                    OR LOWER(TRIM(requester_username))=LOWER(TRIM(?))
+                 )""",
+            (
+                request_id,
+                req["product_id"],
+                req["requester_user_id"],
+                req["requester_username"] or ""
+            )
+        )
+
         # Chiude definitivamente tutte le notifiche operative della richiesta.
         db.execute(
             """UPDATE notifications
@@ -9244,11 +9271,14 @@ def cart():
                 INNER JOIN (
                     SELECT product_id,MAX(id) AS max_id
                     FROM discount_requests
-                    WHERE requester_user_id=?
+                    WHERE (
+                        requester_user_id=?
+                        OR LOWER(TRIM(requester_username))=LOWER(TRIM(?))
+                    )
                     GROUP BY product_id
                 ) latest ON latest.max_id=dr.id
                 ORDER BY dr.id DESC
-            """,(session.get("user_id"),)).fetchall()
+            """,(session.get("user_id"),session.get("user") or "")).fetchall()
 
             for req in latest_rows:
                 status=req["status"]
