@@ -127,7 +127,46 @@ def format_rome(value, fmt="%d/%m/%Y %H:%M"):
 
 app.jinja_env.filters["rome_time"] = format_rome
 
-APP_VERSION = "v47.4.1 DEV · FIX STATO RIFIUTO SINCRONIZZATO"
+APP_VERSION = "v47.4.2 · FIX ACCESSO ADMIN RENDER"
+
+def get_tbs_admin_password():
+    """
+    Recupera la password Admin dalle variabili d'ambiente Render.
+    Usa prima la chiave ufficiale e, come protezione, riconosce anche
+    eventuali varianti accidentali di maiuscole/minuscole/separatori.
+    Non espone mai il valore.
+    """
+    exact = os.environ.get("TBS_ADMIN_PASSWORD")
+    if exact is not None and str(exact).strip():
+        return str(exact).strip()
+
+    wanted = "TBSADMINPASSWORD"
+    for key, value in os.environ.items():
+        normalized = "".join(ch for ch in str(key).upper() if ch.isalnum())
+        if normalized == wanted and value is not None and str(value).strip():
+            return str(value).strip()
+
+    # Alias di emergenza compatibili con vecchie configurazioni.
+    for key in ("TBS_ADMIN_PASS", "ADMIN_PASSWORD"):
+        value = os.environ.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+
+    return ""
+
+def tbs_admin_password_env_status():
+    """Diagnostica sicura: restituisce solo se la variabile è presente, mai il valore."""
+    if os.environ.get("TBS_ADMIN_PASSWORD") is not None:
+        return "TBS_ADMIN_PASSWORD"
+    wanted = "TBSADMINPASSWORD"
+    for key in os.environ:
+        if "".join(ch for ch in str(key).upper() if ch.isalnum()) == wanted:
+            return str(key)
+    for key in ("TBS_ADMIN_PASS", "ADMIN_PASSWORD"):
+        if os.environ.get(key) is not None:
+            return key
+    return None
+
 PUSH_BADGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACnklEQVR42u2dwXKDMBBDQf//z/TamU4Jwd6VZGtvmUwJvIcNtb3r40gkEonE07iu6xr5Xi3gCP8/yJ++j4CJd/63nyOgoNt52iKU43Tv8x9d5HmeaQEk+OotAavDV5eAHeArS8Au8FUlYCf4ihKwG3w1CXCHP/KKqSABK8B3loBV7nxXCVgBvrMErALfVQJWgu8oAavBd5OAFeE7ScCq8F0kYGX4DhKwOnx1CdgBvrIE7AJfVcKpBN8lZt4kCHzudSLwudeLwOdeNwKfe/0IfK4EBD5XAgKfKwGBz5WAwOdKQAd85dXJVef9lBe64LtJ6Frygs4730VC55KX06XbeXMuCufw6VyQPp/7TEDgcyUg8LkSEPhcCQh8rgSMHmxX+LO4DbWA3eGPcPjTAgKf0xIyH0D+Jw0zmlHgv+++h9+CMic8xm34LWhnCTNe3VE91hH49w9sVI91BP49X1SPdQT+PVdUj3UE/j1PVI91BP49R4z88S4SKgcqMeMgK0uoHiXGzIOtJqFjiB4VB11BQtf8CCoP7iqhc3IKHT/iJKF7ZpAyH6AqgTEtO5SgsZIE1pz4cIrSChKYCxKmJOl1SKgqV8NeDTItTVVJggv8qQJUJDjBP46i8vXqi7yUzq+kWIfyg1nt5igrV6MoQbFllhZsUpKg2i2WlyxTkKD8TGop2seUoP5C0Fa2kiHBYcl9a+HWTgku+Q7tpYs7JDglm1CKd1dKcMv0oZWvr5DgmGZF3cBhpgTXHDf6FiYzJDgnGMqkGTEmZxTSrGS2seqGoZLjJrWRWxcUpQRDua0MlWtHbyGgEpJiaq3sdrZK+wdsKWAmtOyoTYSnntEvL2AEokM5BQsBb2C61LKwEfANVKdCItYVT34PX6R6S+JV/AD/WZSTh9Of2gAAAABJRU5ErkJggg=="
 SEED_DB_PATH = os.path.join(APP_DIR, "gestionale_tbs_seed.db")
 
@@ -7209,6 +7248,8 @@ def health():
         "users":user_count,
         "active_admins_or_managers":active_admins,
         "database_error":db_error,
+        "admin_password_configured":bool(get_tbs_admin_password()),
+        "admin_password_env_key":tbs_admin_password_env_status(),
         "push_server_ready":PUSH_SERVER_READY,
         "push_module_available":WEBPUSH_AVAILABLE,
         "push_public_key_configured":bool(PUSH_VAPID_PUBLIC_KEY),
@@ -7722,10 +7763,10 @@ def login():
                 # L'account tecnico Admin usa sempre la password configurata su Render.
                 # Non dipende dall'hash eventualmente presente nel database.
                 if username.lower()=="admin":
-                    admin_password=os.environ.get("TBS_ADMIN_PASSWORD","").strip()
+                    admin_password=get_tbs_admin_password()
                     admin_user=db.execute("SELECT * FROM users WHERE role='admin' AND active=1 ORDER BY is_system_admin DESC,id LIMIT 1").fetchone()
                     if not admin_password:
-                        flash("Accesso Admin non configurato: manca TBS_ADMIN_PASSWORD su Render.","error")
+                        flash("Accesso Admin non configurato: la password Admin non risulta disponibile al processo Render.","error")
                     elif admin_user and secrets.compare_digest(password,admin_password):
                         start_user_session(db,admin_user,"Login Admin tecnico")
                         return redirect(session.pop("after_login_url",None) or url_for("home"))
@@ -7762,7 +7803,7 @@ def unlock_register():
             if badge_payload:
                 valid=bool(user)
             elif unlock_username.lower()=="admin":
-                admin_password=os.environ.get("TBS_ADMIN_PASSWORD","").strip()
+                admin_password=get_tbs_admin_password()
                 user=db.execute("SELECT * FROM users WHERE role='admin' AND active=1 ORDER BY is_system_admin DESC,id LIMIT 1").fetchone()
                 valid=bool(user and admin_password and secrets.compare_digest(unlock_password,admin_password))
             else:
@@ -10424,6 +10465,10 @@ def v20_page_context():
 @app.after_request
 def v20_ui_headers(response):
     response.headers.setdefault('X-TBS-Version', APP_VERSION)
+    if request.path in ('/login','/logout') or request.path.startswith('/login'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     return response
 
 
@@ -11055,7 +11100,7 @@ def _v36_init():
         admin=db.execute("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1").fetchone()
         if admin:
             db.execute("UPDATE users SET is_system_admin=1,active=1,badge_token_hash=NULL,badge_created_at=NULL WHERE id=?",(admin['id'],))
-            fixed=os.environ.get('TBS_ADMIN_PASSWORD','').strip()
+            fixed=get_tbs_admin_password()
             if fixed:
                 db.execute("UPDATE users SET password_hash=? WHERE id=?",(generate_password_hash(fixed),admin['id']))
         db.execute("UPDATE users SET discount_limit_percent=COALESCE(NULLIF(discount_limit_percent,0),seller_discount_limit,0) WHERE role!='admin'")
